@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.spec.bak
+.pytest_cache/
+.mypy_cache/
+.DS_Store
+# Datos y resultados de trabajo: nunca en git
+/datos/
+/trabajo/
+*.tvppk.bak
+# Binarios compilados de RTKLIB (los arma scripts/ y la CI)
+third_party/rtklib/bin/
