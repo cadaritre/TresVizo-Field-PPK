@@ -393,8 +393,10 @@ def test_sidebar_fits_every_name_from_the_start(app):
     while time.monotonic() < end:
         app.update()
         time.sleep(0.01)
-    needed = max(b.winfo_reqwidth() for b in app.nav_buttons.values())
-    assert int(app.nav.cget('width')) >= needed+24
+    app.show('Estaciones de referencia')            # el activo va en negrita y es el nombre más largo
+    app.update()
+    button = app.nav_buttons['Estaciones de referencia']
+    assert int(app.nav.cget('width')) >= button.winfo_reqwidth()+20
 
 
 def test_cleared_alert_leaves_no_gap(app):

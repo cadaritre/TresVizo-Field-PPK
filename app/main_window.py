@@ -172,7 +172,13 @@ class Application(TkinterDnD.Tk):
         if mode != 'icons':
             for button in self.nav_buttons.values():
                 button.set_compact(False)
-        needed = max((b.winfo_reqwidth() for b in self.nav_buttons.values()), default=0)+24
+        # El botón activo va en negrita: se mide también con ella para que el nombre elegido no se corte.
+        from tkinter import font as tkfont
+        style = ttk.Style(self)
+        normal = tkfont.Font(root=self, font=style.lookup('Nav.TButton', 'font') or 'TkDefaultFont')
+        bold = tkfont.Font(root=self, font=style.lookup('Active.Nav.TButton', 'font') or 'TkDefaultFont')
+        needed = max((b.winfo_reqwidth()+max(0, bold.measure(b.cget('text'))-normal.measure(b.cget('text')))
+                      for b in self.nav_buttons.values()), default=0)+24
         widths = {'full': max(258, needed), 'narrow': max(214, needed), 'icons': 64}
         target = int(widths[mode]*(1 if mode != 'icons' else self.ui_scale*self.theme.text_scale()))
         if getattr(self, 'nav_mode', None) == mode and event is not None and int(self.nav.cget('width')) == target:
