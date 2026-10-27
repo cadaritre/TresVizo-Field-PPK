@@ -143,6 +143,33 @@ class Solution(str, Enum):
 
 
 @dataclass
+class AmbiguityResolution:
+    """Resolución de ambigüedades del procesador propio de líneas largas (ancho y estrecho de carril con LAMBDA)."""
+    fixed: bool                                # se aceptó la solución fija
+    reason: str = ""                           # por qué quedó flotante (vacío si fijó)
+    double_differences: int = 0                # ambigüedades de doble diferencia (arcos sin salto, fuera de las de
+                                               # referencia de cada grupo)
+    widelane_fixed: int = 0                    # con el ancho de carril fijo
+    narrowlane_candidates: int = 0             # las que entran a LAMBDA (ancho de carril fijo)
+    narrowlane_fixed: int = 0                  # combinaciones enteras fijadas (resolución parcial)
+    ratio: float | None = None                 # prueba de razón del subconjunto fijado
+    min_ratio: float = 0.0
+    success_rate: float | None = None          # tasa de éxito del bootstrapping del subconjunto fijado
+    min_success_rate: float = 0.0
+    min_session_h: float = 0.0                 # duración mínima para fijar a esta distancia (validación)
+    sigma0: float = 0.0                        # σ0 a posteriori del ajuste (fijo, o flotante si no fijó)
+    rms_phase_m: float = 0.0                   # RMS de los residuos de fase (libre de ionosfera, diferencia simple)
+    troposphere_interval_h: float = 0.0        # tramo del retardo húmedo cenital estimado
+    gradient_interval_h: float = 0.0           # tramo de los gradientes troposféricos
+    signal_groups: list[str] = field(default_factory=list)    # «GPS L1/L2 (C/A, P(Y)): G01, G03…»
+    excluded: list[str] = field(default_factory=list)         # sistemas o satélites fuera y por qué
+    float_position: Ecef | None = None         # la flotante, para comparar
+    float_sigma_enu: Enu | None = None
+    observations: int = 0
+    rejected: int = 0
+
+
+@dataclass
 class BaselineSolution:
     base: Station
     rover_marker: str
@@ -170,6 +197,9 @@ class BaselineSolution:
     config_file: Path | None = None            # configuración de RTKLIB usada
     formal_sigma_enu: Enu | None = None        # σ formal de RTKLIB (antes del modelo de error)
     antenna_notes: list[str] = field(default_factory=list)   # qué calibración de antena se usó en cada extremo
+    # Añadido por el motor (procesador propio de líneas largas):
+    engine: str = "RTKLIB"                     # «RTKLIB» o «TresVizo» (procesador propio, líneas largas)
+    ambiguity: AmbiguityResolution | None = None   # resolución de ambigüedades del procesador propio
 
 
 @dataclass
