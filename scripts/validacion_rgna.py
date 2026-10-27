@@ -14,7 +14,7 @@ procesa con `process_static` como lo haría el usuario y se compara:
 Uso:
     python scripts/validacion_rgna.py --datos DIR_RGNA --precisas DIR_SP3_CLK --salida DIR
         [--rover UGTO] [--bases UQRO,ISLP,INEG] [--sesiones 1,2,4,24] [--ventanas 4] [--fecha 2026-10-20]
-    python scripts/validacion_rgna.py --resumen DIR/validacion.json [otro.json …]
+    python scripts/validacion_rgna.py --resumen DIR/validacion.json [otro.json …] [--por-dia [--excluir IZAC]]
 
 Verificación fuera de muestra (docs/validacion.md, «Verificación fuera de muestra»): con las opciones de abajo se
 corre otro día y se ataca el motor sin cambiarlo; sin ellas el resultado es el mismo de antes.
@@ -112,6 +112,11 @@ def main() -> int:
     parser.add_argument("--salida", type=Path)
     parser.add_argument("--ventanas", type=int, default=4, help="sesiones por duración repartidas en el día")
     parser.add_argument("--resumen", type=Path, nargs="+", help="imprime las tablas de uno o varios validacion.json")
+    parser.add_argument("--por-dia", action="store_true",
+                        help="con --resumen: una fila por día (fijas, flotantes, fijas a más de 3σ, RMS y máximo de "
+                             "error/σ) en vez de la tabla por línea")
+    parser.add_argument("--excluir", default="",
+                        help="con --por-dia: estaciones cuyas líneas no cuentan (p. ej. IZAC, por su referencia)")
     parser.add_argument("--rover", default="UGTO")
     parser.add_argument("--bases", default="UQRO,ISLP,INEG")
     parser.add_argument("--sesiones", default="1,2,4,24")
@@ -119,6 +124,8 @@ def main() -> int:
     parser.add_argument("--efemerides", default="broadcast,precise")
     args = parser.parse_args()
     if args.resumen:
+        if args.por_dia:
+            return summary_by_day(args.resumen, [s for s in args.excluir.split(",") if s])
         return summary(args.resumen)
     if not (args.datos and args.precisas and args.salida):
         parser.error("hacen falta --datos, --precisas y --salida (o --resumen)")
@@ -300,6 +307,51 @@ def summary(paths: list[Path]) -> int:
                 print(f"| {rover}–{base} | {km:.1f} | {hours:g} h | {'precisas' if eph == 'precise' else 'difundidas'}"
                       f" | {sum(fixed)}/{len(group)} | {rms[0]:.1f} | {rms[1]:.1f} | {rms[2]:.1f} | {mh:.1f} | "
                       f"{mv:.1f} | {wrong} |")
+    return 0
+
+
+def summary_by_day(paths: list[Path], exclude: list[str]) -> int:
+    """Una fila por día y por solución: líneas base, fijas, flotantes, fijas con algún componente a más de 3σ, y RMS y
+    máximo de error/σ por componente (E, N, U) de las fijas y de las flotantes. Las sesiones que fallaron (--seguir)
+    se cuentan aparte; las líneas de RTKLIB (menos de 20 km) no entran."""
+    days: dict[str, dict] = {}
+    for path in paths:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        day = days.setdefault(data["fecha"], {"fixed": [], "float": [], "failed": 0, "bad": []})
+        for ses in data["sesiones"]:
+            if ses.get("error"):
+                day["failed"] += 1
+            for line in ses["lineas"]:
+                if line.get("motor") != "TresVizo" or line["base"] in exclude or data["rover"] in exclude:
+                    continue
+                z = np.array(line["error_vector_mm"]) / np.maximum(np.array(line["sigma_mm"]), 1e-3)
+                kind = "fixed" if line["solucion"] == "fixed" else "float"
+                day[kind].append(z)
+                if kind == "fixed" and np.any(np.abs(z) > 3):
+                    day["bad"].append(f"{data['rover']}–{line['base']} {ses['sesion']} "
+                                      f"({', '.join(f'{v:.1f}' for v in z)}σ)")
+
+    def stats(rows):
+        if not rows:
+            return "—", "—"
+        z = np.array(rows)
+        rms = np.sqrt(np.mean(z ** 2, axis=0))
+        mx = np.max(np.abs(z), axis=0)
+        return " / ".join(f"{v:.2f}" for v in rms), " / ".join(f"{v:.1f}" for v in mx)
+
+    print("| Día | Líneas base | Fijas | Flotantes | Fijas > 3σ | Flotantes > 3σ | RMS error/σ fijas (E/N/U) | "
+          "Máx. fijas | RMS flotantes | Máx. flotantes | Sesiones fallidas |")
+    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    for date in sorted(days):
+        d = days[date]
+        f_rms, f_max = stats(d["fixed"])
+        l_rms, l_max = stats(d["float"])
+        n_float_bad = sum(1 for z in d["float"] if np.any(np.abs(z) > 3))
+        print(f"| {date} | {len(d['fixed']) + len(d['float'])} | {len(d['fixed'])} | {len(d['float'])} | "
+              f"{len(d['bad'])} | {n_float_bad} | {f_rms} | {f_max} | {l_rms} | {l_max} | {d['failed']} |")
+    for date in sorted(days):
+        for item in days[date]["bad"]:
+            print(f"- {date}: {item}")
     return 0
 
 
