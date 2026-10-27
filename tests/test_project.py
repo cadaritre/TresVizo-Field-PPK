@@ -26,7 +26,8 @@ def make(tmp_path):
     p = Project(kind='static', point_name='PV-01', pole_height_m=1.8,
                 options=ProcessingOptions(elevation_mask_deg=10, ephemeris=Ephemeris.PRECISE, precise_files=[sp3]),
                 coordinates=CoordinateChoice('mexico-itrf2008-utm', '13N', 'ggm25', 'UTM 13N'),
-                bases=[station()], created=datetime(2026, 10, 26, 18, tzinfo=timezone.utc))
+                bases=[station()], created=datetime(2026, 10, 26, 18, tzinfo=timezone.utc),
+                position=Ecef(-1_010_000.5, -5_490_000.25, 3_010_000.125), sigma_enu=Enu(0.004, 0.005, 0.011))
     return p, rover, base, sp3
 
 
@@ -47,6 +48,7 @@ def test_roundtrip_relative_paths_and_hashes(tmp_path):
     assert loaded.bases[0].radome == 'SCIS' and loaded.bases[0].official is False
     assert loaded.bases[0].position.x == pytest.approx(-1_000_000.123, abs=1e-9)
     assert loaded.created == p.created
+    assert loaded.position == p.position and loaded.sigma_enu == p.sigma_enu
     assert proj.resolve_inputs(loaded)['base:CHIH'] == [base.resolve()]
     assert proj.check_inputs(loaded) == []
 

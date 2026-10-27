@@ -136,22 +136,34 @@ def _parse_time(value) -> datetime | None:
     return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
+def _ecef(p: Ecef) -> dict:
+    return {"x": p.x, "y": p.y, "z": p.z, "frame": p.frame, "epoch": p.epoch}
+
+
+def _enu(v: Enu) -> dict:
+    return {"e": v.e, "n": v.n, "u": v.u}
+
+
+def _parse_ecef(p: dict) -> Ecef:
+    return Ecef(float(p["x"]), float(p["y"]), float(p["z"]), str(p.get("frame", "ITRF2008")),
+                float(p.get("epoch", 2010.0)))
+
+
+def _parse_enu(v: dict) -> Enu:
+    return Enu(float(v["e"]), float(v["n"]), float(v["u"]))
+
+
 def _station(s: Station) -> dict:
-    return {"id": s.id, "name": s.name,
-            "position": {"x": s.position.x, "y": s.position.y, "z": s.position.z,
-                         "frame": s.position.frame, "epoch": s.position.epoch},
-            "sigma_enu": None if s.sigma_enu is None else {"e": s.sigma_enu.e, "n": s.sigma_enu.n, "u": s.sigma_enu.u},
+    return {"id": s.id, "name": s.name, "position": _ecef(s.position),
+            "sigma_enu": None if s.sigma_enu is None else _enu(s.sigma_enu),
             "antenna_type": s.antenna_type, "radome": s.radome, "antenna_height_m": s.antenna_height_m,
             "receiver": s.receiver, "source": s.source, "official": s.official}
 
 
 def _parse_station(d: dict) -> Station:
-    p = d["position"]
     sigma = d.get("sigma_enu")
-    return Station(id=str(d["id"]), name=str(d.get("name", d["id"])),
-                   position=Ecef(float(p["x"]), float(p["y"]), float(p["z"]), str(p.get("frame", "ITRF2008")),
-                                 float(p.get("epoch", 2010.0))),
-                   sigma_enu=None if sigma is None else Enu(float(sigma["e"]), float(sigma["n"]), float(sigma["u"])),
+    return Station(id=str(d["id"]), name=str(d.get("name", d["id"])), position=_parse_ecef(d["position"]),
+                   sigma_enu=None if sigma is None else _parse_enu(sigma),
                    antenna_type=str(d.get("antenna_type", "")), radome=str(d.get("radome", "NONE")),
                    antenna_height_m=float(d.get("antenna_height_m", 0.0)), receiver=str(d.get("receiver", "")),
                    source=str(d.get("source", "")), official=bool(d.get("official", True)))
@@ -187,6 +199,8 @@ def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
                             "geoid_id": project.coordinates.geoid_id, "label": project.coordinates.label},
             "bases": [_station(s) for s in project.bases], "base_kind": project.base_kind,
             "source_project": project.source_project,
+            "position": None if project.position is None else _ecef(project.position),
+            "sigma_enu": None if project.sigma_enu is None else _enu(project.sigma_enu),
             "created": _time(project.created), "processed": _time(project.processed)}
 
 
@@ -215,7 +229,9 @@ def from_dict(data: dict, folder: Path) -> Project:
                        created=_parse_time(data.get("created")), processed=_parse_time(data.get("processed")),
                        bases=[_parse_station(s) for s in data.get("bases", [])],
                        base_kind=str(data.get("base_kind", "rgna")),
-                       source_project=str(data.get("source_project", "")))
+                       source_project=str(data.get("source_project", "")),
+                       position=_parse_ecef(data["position"]) if data.get("position") else None,
+                       sigma_enu=_parse_enu(data["sigma_enu"]) if data.get("sigma_enu") else None)
     except (KeyError, TypeError, ValueError) as exc:
         raise ProjectError("El proyecto está dañado o incompleto; no se pudo leer.") from exc
 
