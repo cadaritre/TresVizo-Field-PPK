@@ -131,3 +131,44 @@ def densified(src: Path, dst: Path, step_s: float) -> Path:
             t += step_s
     out.sort(key=lambda e: e[0])
     return _write(dst, header, out)
+
+
+def retyped(src: Path, dst: Path, system: str, columns: list[tuple[str, str]]) -> Path:
+    """Copia con los tipos de observación de un sistema cambiados: `columns` = [(tipo nuevo, tipo de origen)].
+    Sirve para simular otro receptor (p. ej. uno que solo registra L2 P(Y): [("C2W", "C2X"), ("L2W", "L2X")])."""
+    header, types, epochs = _parse(src)
+    old = types[system]
+    new_types = [n for n, _ in columns]
+    out_header = []
+    skipping = False
+    for line in header:
+        is_types = line[60:].strip() == "SYS / # / OBS TYPES"
+        if is_types and line[0] == system:
+            for k in range(0, len(new_types), 13):
+                lead = f"{system}  {len(new_types):3d}" if k == 0 else "      "
+                out_header.append((lead + "".join(f" {t}" for t in new_types[k:k + 13])).ljust(60) +
+                                  "SYS / # / OBS TYPES")
+            skipping = True
+            continue
+        if skipping and is_types and line[0] == " ":
+            continue
+        skipping = False
+        out_header.append(line)
+    out = []
+    for when, head, recs in epochs:
+        new = []
+        for rec in recs:
+            if rec[0] != system:
+                new.append(rec)
+                continue
+            fields = _fields(rec, len(old))
+            new.append((rec[:3] + "".join(fields[old.index(o)] for _, o in columns)).rstrip())
+        out.append((when, head, new))
+    return _write(dst, out_header, out)
+
+
+def only_sats(src: Path, dst: Path, predicate) -> Path:
+    """Copia con solo los satélites con predicate(«G05») verdadero."""
+    header, _, epochs = _parse(src)
+    out = [(when, head, [r for r in recs if predicate(r[:3].replace(" ", "0"))]) for when, head, recs in epochs]
+    return _write(dst, header, out)

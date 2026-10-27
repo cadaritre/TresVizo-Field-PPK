@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ..errors import UserError
+from ..errors import Cancelled, UserError
 from ..model import (Ecef, Enu, Ephemeris, ObservationSet, ProcessingOptions, StaticResult, Station)
 from . import adjust, antex, networks, precise, quality, tools
 from .baseline import process_baseline
@@ -51,6 +51,8 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
     rover_quality = quality.assess(rover, cancel=cancel)
     warnings.extend(f"Rover: {w}" for w in rover_quality.warnings)
     baselines = []
+    used: list[tuple[Station, ObservationSet]] = []
+    failed: list[tuple[Station, UserError]] = []
     base_quality = {}
     n = len(bases)
     for k, (station, base_obs) in enumerate(bases):
@@ -68,9 +70,19 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
         base_quality[sid] = q
         warnings.extend(f"Base {sid}: {w}" for w in q.warnings)
         warnings.extend(f"Base {sid}: {w}" for w in base_obs.warnings if w not in warnings)
-        solution, run = process_baseline(rover, station, base_trim, options, workdir / sid,
-                                         progress=lambda f, m: step(frac0 + 0.05 * span + 0.95 * span * f, m),
-                                         cancel=cancel, log=log, label=sid)
+        try:
+            solution, run = process_baseline(rover, station, base_trim, options, workdir / sid,
+                                             progress=lambda f, m: step(frac0 + 0.05 * span + 0.95 * span * f, m),
+                                             cancel=cancel, log=log, label=sid)
+        except Cancelled:
+            raise
+        except UserError as error:
+            # una base cuyos datos no dan solución (p. ej. pocos satélites comunes) no tumba a las demás: se deja
+            # fuera con su porqué; si ninguna da solución, el error es el de la primera
+            failed.append((station, error))
+            log.append(f"  {sid}: sin solución ({error}).")
+            continue
+        used.append((station, base_obs))
         baselines.append(solution)
         log.extend(f"  {note}" for note in solution.antenna_notes)
         log.append(f"  {sid}: {solution.solution.value}, {solution.length_m:.3f} m, cociente "
@@ -78,6 +90,11 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
                    f"{(solution.rms_m or 0) * 1000:.1f} mm, {solution.epochs_used} épocas, "
                    f"{len(solution.satellites)} satélites.")
         warnings.extend(solution.warnings)
+    if not baselines:
+        raise failed[0][1]
+    for station, error in failed:
+        warnings.append(f"Base {_station_label(station)}: se dejó fuera del cálculo. {error}")
+    bases = used
     step(0.96, "Ajuste…")
     frame = bases[0][0].position.frame
     epoch = bases[0][0].position.epoch

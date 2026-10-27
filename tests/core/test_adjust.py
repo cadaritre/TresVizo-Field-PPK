@@ -134,3 +134,46 @@ def test_static_excludes_bad_line_when_the_rest_agree_by_w(monkeypatch, tmp_path
     assert any("tampoco pasan la prueba χ²" in w and "movimiento de las estaciones" in w for w in result.warnings)
     # sin INEG: la media de UQRO e ISLP, lejos de los 0.7 m de INEG
     assert np.linalg.norm(np.array([a.position.x, a.position.y, a.position.z]) - np.array(P)) < 0.01
+
+
+def test_static_leaves_out_a_base_without_solution(monkeypatch, tmp_path):
+    """Una base cuyos datos no dan solución (p. ej. pocos satélites comunes) se deja fuera con su porqué y las demás
+    se ajustan; si ninguna da solución, el error es el de la primera; cancelar no se confunde con eso."""
+    from tresvizo_ppk.core import static
+    from tresvizo_ppk.errors import Cancelled, UserError
+    from tresvizo_ppk.model import (BaselineSolution, DataQuality, Ecef, Enu, ObservationSet, ProcessingOptions,
+                                    Solution, Station)
+    from datetime import datetime, timezone
+    offsets = {"UQRO": (0.004, -0.003, 0.010), "ISLP": (-0.005, 0.002, -0.008), "IMIE": None}
+    t0 = datetime(2026, 10, 20, 14, tzinfo=timezone.utc)
+    failure = {"kind": UserError("Línea base IMIE (137.4 km): no hay solución con estos datos. Solo hay 3 "
+                                 "satélites comunes útiles.")}
+
+    def fake_baseline(rover, station, base, options, workdir, **kw):
+        if offsets[station.id] is None:
+            raise failure["kind"]
+        obs = line(station.id, offsets[station.id], (0.01, 0.01, 0.02))
+        pos = Ecef(*obs.position)
+        return BaselineSolution(base=station, rover_marker="UGTO", start=t0, end=t0, epochs_used=10, satellites=[],
+                                solution=Solution.FIXED, ratio=5.0, rms_m=0.01, vector_ecef=pos,
+                                vector_enu=Enu(0, 0, 0), length_m=1e5, azimuth_deg=0, zenith_deg=90,
+                                covariance_ecef=tuple(map(tuple, obs.covariance)), rover_position=pos,
+                                ephemeris=options.ephemeris), None
+
+    monkeypatch.setattr(static, "process_baseline", fake_baseline)
+    monkeypatch.setattr(static, "trim", lambda obs, *a, **k: obs)
+    monkeypatch.setattr(static.quality, "assess", lambda obs, cancel=None: DataQuality())
+    rover = ObservationSet(obs=[], marker="UGTO", start=t0, end=t0)
+
+    def bases(ids):
+        return [(Station(id=s, name=s, position=Ecef(*P)), ObservationSet(obs=[], start=t0, end=t0)) for s in ids]
+
+    result = static.process_static(rover, bases(offsets), ProcessingOptions(), tmp_path)
+    assert [b.id for b in result.bases] == ["UQRO", "ISLP"] and len(result.baselines) == 2
+    assert result.adjustment is not None and result.adjustment.degrees_of_freedom == 3
+    assert any(w.startswith("Base IMIE: se dejó fuera") and "Solo hay 3 satélites" in w for w in result.warnings)
+    with pytest.raises(UserError, match="Solo hay 3"):
+        static.process_static(rover, bases(["IMIE"]), ProcessingOptions(), tmp_path)
+    failure["kind"] = Cancelled()
+    with pytest.raises(Cancelled):
+        static.process_static(rover, bases(offsets), ProcessingOptions(), tmp_path)

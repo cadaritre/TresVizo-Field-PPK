@@ -12,8 +12,13 @@ satélite, la primera que los **dos** receptores observan en fase y en código c
 y «X», o E1 «B», «C» y «X») tienen sesgos de satélite iguales a nivel de milímetros; entre clases distintas (C1C
 contra C1W, L2C contra L2 P(Y)) el sesgo de código del satélite (DCB, hasta ±1–2 ns) no se cancela en la diferencia
 entre receptores. Por eso la pareja tiene que ser de la misma clase en los dos receptores para formar la doble
-diferencia del ancho de carril (que usa el código); si en una banda solo coincide la banda pero no la clase, el
-satélite entra con su libre de ionosfera flotante y sin resolver ambigüedades (`ar_ok` falso), y el informe lo dice.
+diferencia del ancho de carril (que usa el código); si en una banda solo coincide la banda pero no la clase (p. ej.
+L2C en el rover y L2 P(Y) en la base, como un Trimble Alloy o un Meridian contra un NetR9 en RINEX 2), el satélite
+entra en un grupo aparte con su libre de ionosfera flotante, sin resolver ambigüedades, y su código con el sesgo como
+incertidumbre (`procesador.DCB_SIGMA_M`); el informe lo dice. La fase sí sirve: el desfase de cada clase (el cuarto de
+ciclo de L2C respecto de P(Y), que RINEX 3 declara en «SYS / PHASE SHIFT») es el mismo en todos los satélites de un
+receptor y se cancela en las dobles diferencias dentro del grupo. Con sesgos de código publicados por satélite (DCB u
+OSB del CODE o del CAS) esos satélites podrían fijarse; no se usan todavía (docs/estado.md).
 
 **Grupos.** Las dobles diferencias se forman dentro de cada grupo: mismo sistema, misma pareja de frecuencias y,
 en BeiDou, misma generación (entre BeiDou-2 y BeiDou-3 los receptores pueden tener sesgos distintos). GLONASS

@@ -8,12 +8,17 @@ Estrategia (`ProcessingOptions.ionosphere`), ajustada con las pruebas sobre la R
     estimada con gradientes, ambigüedades de ancho y estrecho de carril con LAMBDA, solución fija solo si pasa la
     tasa de éxito, la prueba de razón, la prueba χ² de la distancia entera y la duración mínima validada (30 min hasta
     60 km, 1 h desde ahí). En la validación fijó todas las sesiones de 1 h o más a 30 y a 100–141 km, con error de
-    centímetro, y su flotante es mejor que la libre de ionosfera de RTKLIB. RTKLIB corre además la libre de ionosfera
-    como comprobación independiente (y sus gráficas de cielo, satélites y residuos van al informe); si las dos no
-    concuerdan, se avisa. La fija de RTKLIB con la ionosfera del mensaje (la «media» de antes, entre 20 y 60 km) ya no
+    centímetro, y su flotante es mejor que la libre de ionosfera de RTKLIB. RTKLIB corre además la
+    libre de ionosfera como comprobación independiente (y sus gráficas de cielo, satélites y residuos van al informe);
+    si las dos no concuerdan, se avisa (es una comprobación gruesa: con su tolerancia no avisó en ninguno de los fijos
+    a más de 3σ de la §7). La fija de RTKLIB con la ionosfera del mensaje (la «media» de antes, entre 20 y 60 km) ya no
     se usa: en la validación, con 15 min a 30 km, dio un fijo con 12.5 cm de error en la vertical (3.3σ) donde el
-    propio, con buena razón, quedó flotante. Si el procesador propio no puede con los datos (sin señales comunes, muy
-    pocas épocas), se usa RTKLIB como antes (media + libre de ionosfera entre 20 y 60 km; libre de ionosfera desde ahí).
+    propio, con buena razón, quedó flotante. Si el procesador propio no puede con los datos por otra razón (p. ej. sin
+    órbitas de sus sistemas), se usa RTKLIB como antes (media + libre de ionosfera entre 20 y 60 km; libre de
+    ionosfera desde ahí), salvo que los datos no alcancen para ninguna solución con fundamento
+    (`larga.procesador.InsufficientData`: pocos satélites comunes, sin dos frecuencias en común, fases incoherentes
+    con el código): entonces la línea base no tiene solución y el error dice por qué (con varias bases, esa se deja
+    fuera y las demás se ajustan).
 - «iono-free»: siempre libre de ionosfera de RTKLIB (flotante). «broadcast»: siempre con la ionosfera del mensaje y
   ambigüedades enteras. «estimated»: ionosfera estimada por satélite (opción de RTKLIB; en las pruebas no fijó).
 - RTKLIB: ambigüedades enteras solo de GPS, Galileo y QZSS: las de GLONASS (sesgos entre canales) y BeiDou impidieron
@@ -224,10 +229,17 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
     own = None
     if use_own:
         tools.check(cancel)
+        from .larga.procesador import InsufficientData
         try:
             own = _process_own(rover, station, base, options, base_xyz, approx, rover_choice, base_choice, rover_h,
                                base_h, start_g, end_g, workdir, log,
                                progress=lambda f, m: step(0.6 * f, m), cancel=cancel)
+        except InsufficientData as error:
+            # los datos no alcanzan (pocos satélites comunes, sin dos frecuencias en común, fases incoherentes):
+            # RTKLIB tendría los mismos datos y daría una solución sin fundamento, así que no se entrega ninguna
+            log.append(f"  procesador propio: {error}")
+            raise UserError(f"Línea base {station.id} ({length / 1000:.1f} km): no hay solución con estos datos. "
+                            f"{error}") from error
         except UserError as error:
             warnings.append(f"Línea base {station.id} ({length / 1000:.1f} km): el procesador de líneas largas no pudo "
                             f"con estos datos ({error}); se usa RTKLIB.")

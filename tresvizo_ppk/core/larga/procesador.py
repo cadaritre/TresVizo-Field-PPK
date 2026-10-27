@@ -57,6 +57,21 @@ NL_MIN_FIXED = 4
 # más de 3σ en la vertical y con 1 h ninguno. Con menos, la línea queda flotante y el informe lo dice.
 MIN_FIX_HOURS = (0.5, 1.0)
 MIN_FIX_LONG_KM = 60.0
+# Datos mínimos para entregar una solución (si no, InsufficientData y no hay solución): dobles diferencias por época
+# (posición + troposfera con redundancia) en al menos la mitad de las épocas; σ formal de la flotante; coherencia de
+# la solución de las fases con la de código.
+MIN_DD_PER_EPOCH = 4
+MAX_FLOAT_SIGMA_M = 1.0
+MAX_CODE_SIGMA_M = 5.0
+MAX_CODE_PHASE_M = 5.0
+# Satélite con clases de señal distintas en los dos receptores en una banda (p. ej. L2C en uno y L2 P(Y) en el
+# otro): el sesgo de código del satélite entre clases (DCB, del orden de ±1 ns) no se cancela. Su código entra con
+# esta σ adicional por banda (m) y su ancho de carril no se fija (ver `senales`).
+DCB_SIGMA_M = 0.3
+# Flotante con satélites de clases mezcladas: el sesgo de código entre clases y lo que no se fija dejan la σ corta;
+# con las 16 sesiones de 1 h de MEXI–IMIE (137 km, Trimble Alloy con L2C contra NetR9 con P(Y) en RINEX 2.10, el
+# único par mixto de la RGNA, 15-07 y 18-02) el RMS de error/σ era 1.7–1.8: la σ se multiplica por este factor.
+MIXED_FLOAT_FACTOR = 1.8
 OUTLIER_SIGMAS = 4.0
 # Error que la covarianza formal no ve (troposfera, órbitas, multitrayectoria), 1σ por componente en metros:
 #     σ = a + b·(L/100 km)/√T + c·(L/100 km) [solo con efemérides difundidas]   (T en horas)
@@ -72,6 +87,11 @@ MAX_ITER = 6
 # geometría se calcula en la etiqueta real de cada receptor, así que el desfase no entra en la solución; el límite lo
 # pone la extrapolación de la órbita (`geometria.SatTrack`, |Δτ| < 30 ms).
 EPOCH_TOL_S = 0.02
+
+
+class InsufficientData(UserError):
+    """Los datos de la línea base no alcanzan para una solución con fundamento: no se entrega ninguna (ni la de
+    RTKLIB, que tendría los mismos datos) y el mensaje dice por qué."""
 
 
 @dataclass
@@ -92,6 +112,7 @@ class GroupInfo:
     satellites: list[str] = field(default_factory=list)
     ar: bool = True
     note: str = ""
+    mix: str = ""                    # clases distintas en los dos receptores («L2C en el rover y P(Y) en la base»)
 
 
 @dataclass
@@ -171,12 +192,19 @@ class _Sat:
     rov: preproceso.Combos
     bas: preproceso.Combos
     arc: np.ndarray                  # arco de la diferencia simple por época (−1 fuera)
+    code_extra_var: float = 0.0      # m², libre de ionosfera: DCB entre clases de señal distintas (mezcla)
 
 
 def _pick_pair(sat: str, rov: observaciones.Observations, bas: observaciones.Observations, ir: np.ndarray,
                ib: np.ndarray) -> tuple | None:
     """La pareja de frecuencias y los tipos de cada receptor para un satélite, o None. `ir`, `ib`: filas de cada
-    receptor en las épocas comunes (las dos series no tienen por qué tener las mismas épocas)."""
+    receptor en las épocas comunes (las dos series no tienen por qué tener las mismas épocas).
+
+    En cada banda se toma la misma clase de señal en los dos receptores; si no la hay, la de clases distintas (p. ej.
+    L2C en el rover y L2 P(Y) en la base), marcada como mezcla. Entre parejas de frecuencias gana la que no mezcla
+    clases (con ella se pueden fijar las ambigüedades) y luego la de más épocas. Devuelve (épocas, bandas, elección
+    por banda, mezcla); la elección de cada banda es (épocas, código y fase del rover, código y fase de la base, clase
+    del rover, clase de la base)."""
     system = sat[0]
     jr, jb = rov.column(sat), bas.column(sat)
     best = None
@@ -185,30 +213,68 @@ def _pick_pair(sat: str, rov: observaciones.Observations, bas: observaciones.Obs
         for band in (b1, b2):
             cand_r = senales.candidates(system, band, rov.types.get(system, []))
             cand_b = senales.candidates(system, band, bas.types.get(system, []))
-            pick = None
+            same = cross = None
             for cr, pr in cand_r:
-                cls = senales.signal_class(system, band, cr[2])
+                cls_r = senales.signal_class(system, band, cr[2])
                 for cb, pb in cand_b:
-                    if senales.signal_class(system, band, cb[2]) != cls:
+                    cls_b = senales.signal_class(system, band, cb[2])
+                    if cls_r is None or cls_b is None:
                         continue
                     n = int(np.sum(np.isfinite(rov.values[cr][ir, jr]) & np.isfinite(rov.values[pr][ir, jr]) &
                                    np.isfinite(bas.values[cb][ib, jb]) & np.isfinite(bas.values[pb][ib, jb])))
-                    if n > 0 and (pick is None or n > pick[0]):
-                        pick = (n, cr, pr, cb, pb, cls)
+                    if n <= 0:
+                        continue
+                    pick = (n, cr, pr, cb, pb, cls_r, cls_b)
+                    if cls_r == cls_b:
+                        if same is None or n > same[0]:
+                            same = pick
+                    elif cross is None or n > cross[0]:
+                        cross = pick
+            pick = same or cross
             if pick is None:
                 break
             choice.append(pick)
         if len(choice) == 2:
             n = min(choice[0][0], choice[1][0])
-            if best is None or n > best[0]:
-                best = (n, (b1, b2), choice)
+            mixed = any(c[5] != c[6] for c in choice)
+            if best is None or (not mixed, n) > (not best[3], best[0]):
+                best = (n, (b1, b2), choice, mixed)
     return best
 
 
 def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: list[Path], *, mask_deg: float,
             start: float, end: float, interval_s: float | None = None, systems: str = "GEC",
             progress: tools.Progress | None = None, cancel: threading.Event | None = None) -> LongResult:
-    """Procesa la línea base rover–base (tiempos en segundos GPS) y devuelve la solución fija o flotante."""
+    """Procesa la línea base rover–base (tiempos en segundos GPS) y devuelve la solución fija o flotante.
+
+    Si los datos no alcanzan para una solución con fundamento, `InsufficientData` con el porqué."""
+    result = _process(rover, base, nav, precise_files, mask_deg=mask_deg, start=start, end=end,
+                      interval_s=interval_s, systems=systems, progress=progress, cancel=cancel)
+    mixed = [g for g in result.groups if "~" in g.key]
+    if mixed and not result.fixed:
+        k2 = MIXED_FLOAT_FACTOR ** 2
+        result.covariance = result.covariance * k2
+        result.float_covariance = result.float_covariance * k2
+        names = sorted({s for g in mixed for s in g.satellites})
+        detail = "; ".join(dict.fromkeys(f"{g.label}, {g.mix}" for g in mixed))
+        if not any(g.ar for g in result.groups if g not in mixed and len(g.satellites) > 1):
+            result.reason = (f"los receptores no comparten la misma clase de señal ({detail}): sin dobles "
+                             "diferencias fijables, la solución queda flotante")
+        elif result.reason.startswith("solo ") and "ancho de carril" in result.reason:
+            result.reason = (f"los receptores no comparten la misma clase de señal ({detail}): {len(names)} "
+                             "satélites entran sin fijar y los demás no bastan para fijar; la solución queda "
+                             "flotante")
+        else:
+            result.reason += (f"; {len(names)} satélites entran sin fijar por clases de señal distintas en los dos "
+                              f"receptores ({detail})")
+        result.notes.append(f"Flotante con clases de señal mezcladas: σ ×{MIXED_FLOAT_FACTOR:g} (validación con "
+                            "receptores mixtos de la RGNA).")
+    return result
+
+
+def _process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: list[Path], *, mask_deg: float,
+             start: float, end: float, interval_s: float | None = None, systems: str = "GEC",
+             progress: tools.Progress | None = None, cancel: threading.Event | None = None) -> LongResult:
     step = progress or (lambda f, m: None)
     log: list[str] = []
     notes: list[str] = []
@@ -222,7 +288,7 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     tools.check(cancel)
     times, ir, ib, proc = align_epochs(rov.times, bas.times, interval_s, rov.interval, bas.interval)
     if len(times) < 20:
-        raise UserError(_few_epochs_text(rov, bas, len(times), proc))
+        raise InsufficientData(_few_epochs_text(rov, bas, len(times), proc))
     t_rov, t_bas = rov.times[ir], bas.times[ib]           # etiquetas de tiempo reales de cada receptor
     log.append(f"Épocas comunes: {len(times)} cada {proc:g} s, de {gps_datetime(times[0]):%H:%M:%S} a "
                f"{gps_datetime(times[-1]):%H:%M:%S} GPS (rover cada {rov.interval:g} s, base cada "
@@ -264,9 +330,11 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
         if got is None:
             skipped.setdefault("sin pareja de frecuencias común (misma señal en los dos receptores)", []).append(s)
             continue
-        _, (b1, b2), choice = got
+        _, (b1, b2), choice, mixed = got
         pair = senales.make_pair(s[0], b1, b2)
-        classes = "/".join(c[5] for c in choice)
+        # clases de cada banda (rover~base si no coinciden): las dobles diferencias se forman dentro de cada grupo,
+        # así que el desfase constante de cada clase en cada receptor (el cuarto de ciclo de L2C) se cancela
+        classes = "/".join(c[5] if c[5] == c[6] else f"{c[5]}~{c[6]}" for c in choice)
         gkey = senales.group_key(s, pair) + ":" + classes
         if s[0] == "C":
             gen = _bds_generation(s, when)
@@ -275,23 +343,34 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
                 continue
             gkey = f"C{gen}-{b1}{b2}:{classes}"
         jr, jb = rov.column(s), bas.column(s)
-        (_, cr1, pr1, cb1, pb1, _), (_, cr2, pr2, cb2, pb2, _) = choice
+        (_, cr1, pr1, cb1, pb1, _, _), (_, cr2, pr2, cb2, pb2, _, _) = choice
         rc = preproceso.combos(pair, rov.values[cr1][ir, jr], rov.values[pr1][ir, jr], rov.values[cr2][ir, jr],
                                rov.values[pr2][ir, jr], rov.lli[pr1][ir, jr], rov.lli[pr2][ir, jr])
         bc = preproceso.combos(pair, bas.values[cb1][ib, jb], bas.values[pb1][ib, jb], bas.values[cb2][ib, jb],
                                bas.values[pb2][ib, jb], bas.lli[pb1][ib, jb], bas.lli[pb2][ib, jb])
         g = groups.setdefault(gkey, GroupInfo(gkey, _group_text(gkey, pair), pair))
         g.satellites.append(s)
-        sats.append(_Sat(s, pair, gkey, rc, bc, np.full(len(times), -1)))
+        extra = 0.0
+        if mixed:
+            g.ar = False
+            g.mix = _mixed_bands(choice)
+            g.note = (f"clases de señal distintas ({g.mix}): el sesgo de código de cada satélite entre clases no se "
+                      "cancela y el ancho de carril no se puede fijar; ambigüedades flotantes")
+            coef = (pair.alpha, pair.beta)
+            extra = sum((coef[k] * DCB_SIGMA_M) ** 2 for k, c in enumerate(choice) if c[5] != c[6])
+        sats.append(_Sat(s, pair, gkey, rc, bc, np.full(len(times), -1), extra))
     for why, names in skipped.items():
         notes.append(f"Fuera de la línea larga ({why}): {', '.join(names)}.")
     if not sats:
-        raise UserError("Ningún satélite de GPS, Galileo o BeiDou tiene la misma pareja de señales en los dos "
-                        "receptores.")
+        raise InsufficientData("Ningún satélite de GPS, Galileo o BeiDou tiene una pareja de frecuencias que observen "
+                               "los dos receptores" + _signals_text(rov, bas, systems) + ".")
     for g in groups.values():
         if len(g.satellites) < 2:
             g.ar = False
             g.note = "un solo satélite: sin dobles diferencias"
+    if any(not g.ar and "~" in g.key for g in groups.values()):
+        notes.append("Receptores con señales de clases distintas en alguna banda: esos satélites entran con "
+                     "ambigüedades flotantes (ver los grupos de señal).")
 
     # Geometría de la base (fija) y primera del rover
     step(0.12, "Modelos: mareas, troposfera, antenas…")
@@ -334,7 +413,8 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
             arc_of[(k, a)] = len(arcs)
             arcs.append((k, a))
     if not arcs:
-        raise UserError("Ningún satélite tiene un arco limpio de 10 minutos o más en los dos receptores.")
+        raise InsufficientData("Ningún satélite tiene un arco limpio de 10 minutos o más en los dos receptores.")
+    _check_geometry(sats, groups, times, proc, skipped, rov, bas, systems)
     arc_epochs = [np.flatnonzero(sats[k].arc == a) for k, a in arcs]
     ref_arcs, amb_index = _datum(arcs, arc_epochs, sats, rover_geo, len(times))
     n_amb = int(max(amb_index.values()) + 1) if amb_index else 0
@@ -369,6 +449,12 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
             f_if = s.pair.alpha ** 2 + s.pair.beta ** 2
             gid = group_ids[s.group]
             amb = np.array([amb_index.get(arc_of[(k, a)], -1) for a in s.arc[ep]])
+            # sesgo de código constante por arco (DCB entre clases): para que la media del arco no lo promedie como
+            # ruido blanco, su varianza por época se multiplica por las épocas del arco (la media queda con σ_DCB)
+            code_extra = 0.0
+            if s.code_extra_var:
+                arc_ids, arc_len = np.unique(s.arc[ep], return_counts=True)
+                code_extra = s.code_extra_var * arc_len[np.searchsorted(arc_ids, s.arc[ep])]
             zs, zf, gs, gf = zwd_seg[ep], zwd_frac[ep], grad_seg[ep], grad_frac[ep]
             ti_cols, tc_cols = [], []
             for key, geo, sign in (("zr", rg, 1.0), ("zb", bg, -1.0)):
@@ -387,7 +473,7 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
             for is_phase, value, sig in ((False, code, SIGMA_CODE_M), (True, phase, SIGMA_PHASE_M)):
                 cols["cell"].append((ep * len(groups) + gid) * 2 + int(is_phase))
                 cols["value"].append(value)
-                cols["var"].append(var_zd * f_if * sig ** 2)
+                cols["var"].append(var_zd * f_if * sig ** 2 + (0.0 if is_phase else code_extra))
                 cols["los"].append(rg.los[ep])
                 cols["ti"].append(ti)
                 cols["tc"].append(tc)
@@ -412,6 +498,8 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
         if np.linalg.norm(dx) < 0.05:
             break
     log.append(f"Solución de código: corrección {np.linalg.norm(dx):.2f} m en la última iteración.")
+    pos_code = rover_xyz.copy()
+    sigma_code = float(np.sqrt(np.max(np.diag(sol.n_inv[:3, :3])) * max(sol.sigma0, 1.0) ** 2))
 
     # Ajuste flotante con depuración
     step(0.35, "Ajuste flotante (libre de ionosfera)…")
@@ -455,6 +543,7 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     log.append(f"Flotante: σ0 = {s0:.2f}, factor de correlación temporal {corr:.1f}, RMS fase {rms_phase * 1000:.1f} "
                f"mm, código {rms_code:.2f} m, {int(mask.sum())} observaciones, {rejected} descartadas.")
 
+    _check_float(pos_float, q_float[:3, :3], pos_code, sigma_code)
     length_km = float(np.linalg.norm(rover_xyz - base.xyz)) / 1000.0
     hours = max((times[-1] - times[0] + proc) / 3600.0, 0.05)
     cov_float = realistic_covariance(q_float[:3, :3], pos_float, length_km, hours, precise, fixed=False)
@@ -634,6 +723,94 @@ def realistic_covariance(formal_ecef: np.ndarray, xyz: np.ndarray, length_km: fl
     """Covarianza formal (escalada por σ0² y la correlación temporal) más el error que no ve (`ERROR_FLOOR`)."""
     floor = error_floor_enu(length_km, hours, precise, fixed)
     return formal_ecef + covariance_enu_to_ecef(xyz, np.diag(floor ** 2))
+
+
+def _check_float(pos_float: np.ndarray, q_pos: np.ndarray, pos_code: np.ndarray, sigma_code: float) -> None:
+    """Rechazo de una flotante sin fundamento (con muy pocos satélites el ajuste da kilómetros con σ del mismo orden):
+    geometría de la solución de código, σ formal de la flotante y coherencia de la fase con el código."""
+    if not np.all(np.isfinite(pos_float)) or not np.all(np.isfinite(q_pos)):
+        raise InsufficientData("El ajuste de la línea base no tiene solución con estos datos (la geometría de los "
+                               "satélites comunes no alcanza).")
+    if sigma_code > MAX_CODE_SIGMA_M:
+        raise InsufficientData(f"La geometría de los satélites comunes no alcanza: la solución de código tiene una σ "
+                               f"de {sigma_code:.0f} m (máximo {MAX_CODE_SIGMA_M:g} m).")
+    sig = float(np.sqrt(max(0.0, float(np.max(np.diag(q_pos))))))
+    if sig > MAX_FLOAT_SIGMA_M:
+        raise InsufficientData(f"La geometría de los satélites comunes no alcanza: la solución tiene una σ de "
+                               f"{_length_text(sig)} (máximo {MAX_FLOAT_SIGMA_M:g} m).")
+    gap = float(np.linalg.norm(pos_float - pos_code))
+    if gap > MAX_CODE_PHASE_M:
+        raise InsufficientData(f"La solución de las fases se aleja {_length_text(gap)} de la de código (máximo "
+                               f"{MAX_CODE_PHASE_M:g} m): los datos de los dos receptores no son coherentes.")
+
+
+def _length_text(m: float) -> str:
+    return f"{m / 1000:,.0f} km".replace(",", " ") if m >= 10_000 else f"{m:.1f} m"
+
+
+def _check_geometry(sats, groups, times, proc, skipped, rov, bas, systems) -> None:
+    """Dobles diferencias por época: hacen falta `MIN_DD_PER_EPOCH` (cinco satélites de un sistema, o 3 + 3 de dos)
+    en al menos la mitad de las épocas y en 20 o más; si no, `InsufficientData` con el porqué."""
+    n_dd = np.zeros(len(times), dtype=int)
+    present: dict[str, np.ndarray] = {}
+    for s in sats:
+        present.setdefault(s.group, np.zeros(len(times), dtype=int))
+        present[s.group] += (s.arc >= 0)
+    for count in present.values():
+        n_dd += np.maximum(count - 1, 0)
+    good = int(np.sum(n_dd >= MIN_DD_PER_EPOCH))
+    if good >= max(20, 0.5 * len(times)):
+        return
+    used = sorted({s.name for s in sats if np.any(s.arc >= 0)})
+    per_epoch = int(np.median(sum(present.values()))) if present else 0
+    text = (f"Solo hay {len(used)} satélites comunes útiles entre el rover y la base ({per_epoch} a la vez, mediana "
+            f"por época) y la línea base necesita al menos {MIN_DD_PER_EPOCH + 1} a la vez en la mitad de la sesión")
+    why = _signals_text(rov, bas, systems)
+    if why:
+        text += why
+    elif skipped:
+        lost = sum(len(v) for v in skipped.values())
+        text += f" ({lost} satélites quedan fuera: " + "; ".join(skipped) + ")"
+    raise InsufficientData(text + ".")
+
+
+def _band_names(system: str, types: list[str]) -> list[str]:
+    bands = sorted({t[1] for t in types if t[0] == "L"} & {b for p in senales.PAIRS.get(system, []) for b in p})
+    return [senales._band_text(system, b) for b in bands]
+
+
+def _signals_text(rov, bas, systems: str) -> str:
+    """Por qué los receptores no comparten parejas de frecuencias, dicho por sistema («el rover registra L1 y L2 y la
+    base solo L1»); vacío si las comparten."""
+    parts = []
+    for system in "GEC":
+        if system not in systems:
+            continue
+        r, b = rov.types.get(system, []), bas.types.get(system, [])
+        name = senales.SYSTEM_NAMES[system]
+        if not r and not b:
+            continue
+        if not r or not b:
+            who = "el rover" if not r else "la base"
+            parts.append(f"{who} no registra {name}")
+            continue
+        ok = any(senales.candidates(system, b1, r) and senales.candidates(system, b1, b) and
+                 senales.candidates(system, b2, r) and senales.candidates(system, b2, b)
+                 for b1, b2 in senales.PAIRS.get(system, []))
+        if not ok:
+            parts.append(f"en {name} el rover registra {', '.join(_band_names(system, r)) or 'nada útil'} y la base "
+                         f"{', '.join(_band_names(system, b)) or 'nada útil'}: no comparten dos frecuencias")
+    return (": " + "; ".join(parts)) if parts else ""
+
+
+CLASS_NAMES = {"P": "P(Y)", "CA": "C/A"}
+
+
+def _mixed_bands(choice) -> str:
+    """«L2C en el rover y P(Y) en la base» (las bandas con clases distintas)."""
+    def name(c):
+        return CLASS_NAMES.get(c, c)
+    return "; ".join(f"{name(c[5])} en el rover y {name(c[6])} en la base" for c in choice if c[5] != c[6])
 
 
 def _nodes(times: np.ndarray, step_s: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
