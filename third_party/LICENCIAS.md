@@ -9,6 +9,9 @@ Los avisos completos van en cada carpeta y en el instalador.
 | --- | --- | --- | --- | --- |
 | RTKLIB-EX (ex demo5), T. Takasu y rtklibexplorer | 2.5.1 | BSD 2 cláusulas | `rtklib/` | `rnx2rtkp` (proceso) y `convbin` |
 | RNXCMP (crx2rnx), Y. Hatanaka / GSI | 4.2.0 | Términos de uso de la GSI (≈ CC BY 4.0), con cita | `rnxcmp/` | Hatanaka `.crx`/`.d` |
+| ANTEX igs20 de la IGS (subconjunto) | igs20_2437 | Acceso libre de la IGS, con cita | `tresvizo_ppk/core/data/antex/` | PCO/PCV de satélites y de las antenas de la RGNA |
+| Catálogo de estaciones de la RGNA del INEGI | corte del 15-10-2024 | Términos de Libre Uso del INEGI, con atribución | `tresvizo_ppk/core/data/rgna.json` | coordenadas oficiales ITRF2008 2010.0 |
+| Convertidor de grabaciones del MeridianV | commit 48e80e6 | del propietario (mismo autor) | `tresvizo_ppk/core/meridian_rinex/` | `.bin`/`.part` → RINEX |
 | Geoide Gravimétrico Mexicano GGM10 y GGM25, INEGI | 2010 y 2025 | Términos de Libre Uso de la Información del INEGI: se redistribuye con el crédito «Fuente: INEGI…» y el aviso de la transformación (redondeo al centímetro; recorte en GGM25), que salen en el informe y en la exportación | `tresvizo_ppk/crs/datos/ggm10.mvgeoid`, `ggm25.mvgeoid` | cota ortométrica (los mismos archivos de las apps TresVizo Field, byte a byte) |
 | Definiciones de WGS 84 y Mexico ITRF2008 / UTM 11N–16N, registro EPSG de IOGP | v12.029 | Términos de uso del registro EPSG (uso libre citando la fuente) | `tresvizo_ppk/crs/datos/fabrica.json` | sistemas de fábrica (los de las apps) |
 | Índice firmado de datos de TresVizo (`cadaritre/GNSS-TresVizo`) | secuencia 3, 21-10-2026 | del propietario; cada entrada dice su licencia y atribución | `tresvizo_ppk/crs/datos/datos-index.json` | la lista de sistemas y geoides descargables sin conexión |
