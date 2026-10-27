@@ -25,7 +25,9 @@ ENVELOPE_FORMAT = "tresvizo-signed-index"
 PAYLOAD_FORMAT = "tresvizo-data-index"
 FORMAT_VERSION = 1
 SIGNING_CONTEXT = b"TresVizo datos-index v1\n"
-KINDS = ("geoid", "crs-package", "datum-grid")
+# Las clases que entiende esta versión. Una entrada de otra clase (de una versión posterior) se salta al leer, como en
+# las apps; una clase nueva se añade aquí y se registra en `biblioteca.register_kind`.
+KINDS = ("geoid", "crs-package", "datum-grid", "cors-network")
 
 # La base de las direcciones, en un solo sitio (como `DataRepository.baseURL` de las apps).
 BASE_URL = "https://github.com/cadaritre/GNSS-TresVizo/releases/"

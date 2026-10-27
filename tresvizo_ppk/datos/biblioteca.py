@@ -1,17 +1,18 @@
-"""La biblioteca de datos de sistemas y geoides en este equipo: lo incluido, lo descargado y el índice firmado.
+"""La biblioteca de datos descargables en este equipo: el índice firmado, lo instalado y su descarga comprobada.
 
-Como la `DataLibrary` de las apps: lo incluido de fábrica viene en `tresvizo_ppk/crs/datos/` (WGS 84, Mexico ITRF2008 y
-sus UTM 11N a 16N, GGM10, GGM25 y el índice firmado de la última publicación, para que la lista se vea sin conexión);
-lo descargado vive en la carpeta de datos del usuario:
+Es común a todo el programa (sistemas de coordenadas, geoides, rejillas de datum y redes CORS, especificación §1.3 y
+§3.0), como la `DataLibrary` de las apps TresVizo Field: **una sola** verificación de la firma Ed25519 del índice
+(`indice.py`), una sola descarga con reintentos y reanudación, y una sola comprobación de cada archivo (tamaño y
+SHA-256 del índice firmado) antes de instalarlo. Cada clase de datos (`kind`) se registra con su carpeta, su extensión
+y su comprobación propia (`register_kind`): los sistemas y geoides los registra `crs.api`; las redes CORS
+(`cors-network`) vienen registradas con una comprobación mínima (JSON legible con el mismo id) y el motor puede
+registrar la suya. Lo que no tiene clase registrada se lista pero no se instala.
 
     <datos>/indice/datos-index.json        el último índice aceptado (firmado)
-    <datos>/sistemas/<id>.json             paquetes de sistemas      + <id>.item.json (su entrada del índice)
-    <datos>/geoides/<id>.mvgeoid           geoides                   + <id>.item.json
-    <datos>/rejillas/<id>.gsb              rejillas NTv2             + <id>.item.json
+    <datos>/<carpeta de la clase>/<id><ext> lo instalado      + <id>.item.json (su entrada del índice)
 
 Lo instalado guarda su entrada del índice: sigue sirviendo, con su licencia y su atribución, aunque un índice posterior
-lo retire. **La red solo se usa cuando el usuario lo pide** (`download_index`, `install`), y cada archivo se comprueba
-(tamaño, SHA-256 del índice firmado y, en un geoide, la suma de sus datos) antes de instalarse.
+lo retire. **La red solo se usa cuando el usuario lo pide** (`fetch_index`, `install`).
 """
 from __future__ import annotations
 
@@ -24,6 +25,7 @@ import threading
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -31,12 +33,49 @@ from ..errors import Cancelled, UserError
 from ..version import __version__
 from . import indice
 
-PACKAGE_DATA = Path(__file__).resolve().parent / "datos"
-BUNDLED_INDEX = PACKAGE_DATA / "datos-index.json"
-BUNDLED_GEOIDS = ("ggm10", "ggm25")
-FACTORY_FILE = PACKAGE_DATA / "fabrica.json"
+BUNDLED_INDEX = Path(__file__).resolve().parent / "incluido" / "datos-index.json"
 
-KIND_DIRS = {"crs-package": ("sistemas", ".json"), "geoid": ("geoides", ".mvgeoid"), "datum-grid": ("rejillas", ".gsb")}
+
+@dataclass(frozen=True)
+class Kind:
+    kind: str
+    folder: str
+    extension: str
+    validate: Callable[[dict, bytes], None]     # (entrada del índice, bytes) → UserError si no sirve
+    label: str = ""
+
+
+def _validate_json(item: dict, data: bytes) -> None:
+    try:
+        doc = json.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise UserError(f"{item.get('title', item['id'])}: el archivo no es JSON legible; no se instala.") from None
+    if isinstance(doc, dict) and doc.get("id") not in (None, item["id"]):
+        raise UserError(f"{item.get('title', item['id'])}: el archivo trae otro id («{doc.get('id')}»); no se instala.")
+
+
+KINDS: dict[str, Kind] = {
+    "cors-network": Kind("cors-network", "redes", ".json", _validate_json, "Red de estaciones de referencia"),
+}
+_on_change: list[Callable[[], None]] = []
+
+
+def register_kind(kind: str, folder: str, extension: str, validate: Callable[[dict, bytes], None],
+                  label: str = "") -> None:
+    """Registra (o reemplaza) cómo se instala y se comprueba una clase de datos del índice."""
+    KINDS[kind] = Kind(kind, folder, extension, validate, label)
+
+
+def on_change(callback: Callable[[], None]) -> None:
+    """Para que un módulo vuelva a leer lo instalado tras instalar o borrar (los sistemas y geoides lo usan)."""
+    if callback not in _on_change:
+        _on_change.append(callback)
+
+
+def _changed() -> None:
+    for callback in list(_on_change):
+        callback()
+
 
 CHUNK = 64 * 1024
 TIMEOUT_S = 30
@@ -74,12 +113,12 @@ def set_data_dir(path: str | Path | None) -> None:
 
 
 def kind_dir(kind: str) -> Path:
-    return data_dir() / KIND_DIRS[kind][0]
+    return data_dir() / KINDS[kind].folder
 
 
 def installed_file(kind: str, item_id: str) -> Path:
-    folder, ext = KIND_DIRS[kind]
-    return data_dir() / folder / f"{item_id}{ext}"
+    k = KINDS[kind]
+    return data_dir() / k.folder / f"{item_id}{k.extension}"
 
 
 def _atomic_write(path: Path, data: bytes) -> None:
@@ -120,7 +159,8 @@ def accepted_index() -> dict | None:
 def installed_items() -> dict[str, dict]:
     """id → entrada del índice con que se instaló (lo descargado)."""
     out: dict[str, dict] = {}
-    for kind, (folder, ext) in KIND_DIRS.items():
+    for kind, k in KINDS.items():
+        folder, ext = k.folder, k.extension
         base = data_dir() / folder
         if not base.is_dir():
             continue
@@ -256,3 +296,86 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: handle.read(1 << 20), b""):
             h.update(block)
     return h.hexdigest()
+
+
+# --- Instalar y borrar ------------------------------------------------------------------------------------------------
+
+def items(kind: str | None = None) -> list[dict]:
+    """Las entradas del índice aceptado (todas, o las de una clase)."""
+    payload = accepted_index()
+    return [i for i in (payload or {}).get("items", []) if kind is None or i["kind"] == kind]
+
+
+def install(item_id: str, progress: Progress = None, cancel=None) -> dict:
+    """Baja e instala una entrada del índice aceptado y lo que pide (`requires`), comprobando cada archivo (tamaño,
+    SHA-256 del índice firmado y la comprobación de su clase) antes de dejarlo instalado. Devuelve su entrada."""
+    payload = accepted_index()
+    if payload is None:
+        raise UserError("No hay catálogo de datos: bájalo primero en Sistemas y geoides.")
+    by_id = {i["id"]: i for i in payload["items"]}
+    if item_id not in by_id:
+        raise UserError(f"«{item_id}» no está en el catálogo de datos.")
+    order: list[str] = []
+
+    def visit(i: str, depth: int = 0) -> None:
+        if depth > 8 or i in order or i not in by_id:
+            return
+        for r in by_id[i].get("requires", []) or []:
+            visit(r, depth + 1)
+        order.append(i)
+
+    visit(item_id)
+    have = installed_items()
+    pending = [i for i in order if i == item_id or i not in have]
+    for n, i in enumerate(pending):
+        def sub(fraction: float, message: str, n=n) -> None:
+            if progress:
+                progress((n + fraction) / len(pending), message)
+        _install_one(by_id[i], sub, cancel)
+    _changed()
+    return by_id[item_id]
+
+
+def _install_one(item: dict, progress, cancel) -> None:
+    kind = KINDS.get(item["kind"])
+    title = item.get("title", item["id"])
+    if kind is None:
+        raise UserError(f"{title} es de una clase de datos («{item['kind']}») que esta versión del programa no "
+                        "instala. Actualiza el programa.")
+    target = installed_file(item["kind"], item["id"])
+    tmp = target.with_name(target.name + ".nuevo")
+    download(indice.file_url(item), tmp, expected_bytes=int(item["file"]["bytes"]), label=title, progress=progress,
+             cancel=cancel)
+    try:
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
+        if sha256_file(tmp) != item["file"]["sha256"]:
+            raise UserError(f"{title}: el archivo bajado no es el del catálogo firmado (SHA-256 distinto); no se "
+                            "instala.")
+        kind.validate(item, tmp.read_bytes())
+        with _lock:
+            os.replace(tmp, target)
+            _atomic_write(target.with_name(f"{item['id']}.item.json"),
+                          (json.dumps(item, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def uninstall(item_id: str) -> None:
+    """Borra algo descargado. Lo incluido con el programa no está aquí y no se borra."""
+    found = False
+    for kind in KINDS:
+        path = installed_file(kind, item_id)
+        for p in (path, path.with_name(f"{item_id}.item.json")):
+            if p.exists():
+                p.unlink()
+                found = True
+    if not found:
+        raise UserError(f"«{item_id}» no está instalado.")
+    _changed()
+
+
+def read_installed(kind: str, item_id: str) -> bytes | None:
+    """Los bytes de algo instalado (ya comprobado al instalarse), o None."""
+    path = installed_file(kind, item_id)
+    return path.read_bytes() if path.is_file() else None

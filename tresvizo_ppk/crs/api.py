@@ -22,7 +22,8 @@ from pathlib import Path
 
 from ..errors import Cancelled, UserError
 from ..model import CoordinateChoice, Ecef, Enu, Matrix3, TransformedCoordinate
-from . import biblioteca, indice, motor, mvgeoid
+from ..datos import biblioteca, indice
+from . import motor, mvgeoid
 from .definicion import Definition, DefinitionError, epoch_text, merge, read_package
 
 # Familias de sistemas con zona automática (por la longitud del punto) o elegida en `CoordinateChoice.zone`.
@@ -31,6 +32,10 @@ FAMILIES = {
     "wgs84-utm": ("WGS 84 / UTM", "WGS 84 / UTM, zona según la longitud"),
 }
 ALIASES = {"mexico-itrf2008": "EPSG:6365", "wgs84": "EPSG:4326", "wgs-84": "EPSG:4326"}
+
+PACKAGE_DATA = Path(__file__).resolve().parent / "datos"
+FACTORY_FILE = PACKAGE_DATA / "fabrica.json"
+BUNDLED_GEOIDS = ("ggm10", "ggm25")
 
 _lock = threading.RLock()
 _registry: dict[str, Definition] | None = None
@@ -89,7 +94,7 @@ def _load_registry() -> dict[str, Definition]:
             return _registry
         reg: dict[str, Definition] = {}
         origin: dict[str, str] = {}
-        sources = [("fábrica", biblioteca.FACTORY_FILE)]
+        sources = [("fábrica", FACTORY_FILE)]
         for item_id in sorted(biblioteca.installed_items()):
             path = biblioteca.installed_file("crs-package", item_id)
             if path.is_file():
@@ -166,8 +171,8 @@ def systems() -> list[SystemInfo]:
 # --- Geoides ---------------------------------------------------------------------------------------------------------
 
 def _geoid_path(geoid_id: str) -> Path | None:
-    if geoid_id in biblioteca.BUNDLED_GEOIDS:
-        return biblioteca.PACKAGE_DATA / f"{geoid_id}.mvgeoid"
+    if geoid_id in BUNDLED_GEOIDS:
+        return PACKAGE_DATA / f"{geoid_id}.mvgeoid"
     path = biblioteca.installed_file("geoid", geoid_id)
     return path if path.is_file() else None
 
@@ -483,14 +488,14 @@ def _item_from_index(item: dict, *, installed: dict | None, bundled: bool = Fals
 def catalog() -> list[CatalogItem]:
     """Lo de fábrica, lo instalado y lo descargable del índice aceptado (el bajado o el incluido)."""
     out: list[CatalogItem] = []
-    factory = read_package(biblioteca.FACTORY_FILE.read_bytes())
+    factory = read_package(FACTORY_FILE.read_bytes())
     out.append(CatalogItem(id="fabrica", kind="factory", title="WGS 84 y Mexico ITRF2008 (de fábrica)",
                            region="México y mundial", countries=("MX",), authority="Registro EPSG (IOGP)",
                            license="Registro EPSG: uso libre con cita de la fuente",
                            license_url="https://epsg.org/terms-of-use.html",
                            attribution=f"Parámetros del registro EPSG de IOGP, {factory.epsg_database}",
                            version=factory.version, bundled=True, installed=True, systems=len(factory.systems)))
-    for gid in biblioteca.BUNDLED_GEOIDS:
+    for gid in BUNDLED_GEOIDS:
         g = geoid(gid)
         m = g.metadata if g else {}
         out.append(CatalogItem(id=gid, kind="geoid", title=f"{gid.upper()} · {m.get('name', '')} {m.get('version', '')}",
@@ -499,14 +504,14 @@ def catalog() -> list[CatalogItem]:
                                "del INEGI", license_url="https://www.inegi.org.mx/inegi/terminos.html",
                                attribution=m.get("attribution", ""),
                                transformation_notice=m.get("transformationNotice", ""), version=str(m.get("version", "")),
-                               bytes=(biblioteca.PACKAGE_DATA / f"{gid}.mvgeoid").stat().st_size,
-                               size_text=biblioteca.size_text((biblioteca.PACKAGE_DATA / f"{gid}.mvgeoid").stat().st_size),
+                               bytes=(PACKAGE_DATA / f"{gid}.mvgeoid").stat().st_size,
+                               size_text=biblioteca.size_text((PACKAGE_DATA / f"{gid}.mvgeoid").stat().st_size),
                                bundled=True, installed=True))
     installed = biblioteca.installed_items()
     payload = biblioteca.accepted_index()
     seen = set()
     for item in (payload or {}).get("items", []):
-        if item["id"] in biblioteca.BUNDLED_GEOIDS:
+        if item["id"] in BUNDLED_GEOIDS:
             continue
         seen.add(item["id"])
         out.append(_item_from_index(item, installed=installed.get(item["id"])))
@@ -527,90 +532,51 @@ def download_index(progress=None, cancel=None) -> list[CatalogItem]:
 
 
 def install(item_id: str, progress=None, cancel=None) -> CatalogItem:
-    """Baja e instala una entrada del índice (y lo que pide), comprobándola antes de usarla."""
-    payload = biblioteca.accepted_index()
-    if payload is None:
-        raise UserError("No hay catálogo de datos: bájalo primero en Sistemas y geoides.")
-    items = {i["id"]: i for i in payload["items"]}
-    if item_id not in items:
-        raise UserError(f"«{item_id}» no está en el catálogo de datos.")
-    order: list[str] = []
-
-    def visit(i: str, depth: int = 0) -> None:
-        if depth > 8 or i in order:
-            return
-        for r in items[i].get("requires", []) or []:
-            visit(r, depth + 1)
-        order.append(i)
-
-    visit(item_id)
-    installed = biblioteca.installed_items()
-    pending = [i for i in order if i == item_id or i not in installed]
-    for n, i in enumerate(pending):
-        def sub(fraction: float, message: str, n=n) -> None:
-            if progress:
-                progress((n + fraction) / len(pending), message)
-        _install_one(items[i], sub, cancel)
+    """Baja e instala una entrada del índice (y lo que pide), comprobándola antes de usarla (`datos.biblioteca`)."""
+    biblioteca.install(item_id, progress=progress, cancel=cancel)
     reload()
     return next(c for c in catalog() if c.id == item_id)
 
 
-def _install_one(item: dict, progress, cancel) -> None:
-    kind = item["kind"]
-    if kind not in biblioteca.KIND_DIRS:
-        raise UserError(f"«{item['id']}» es de una clase de datos que este programa no instala.")
-    target = biblioteca.installed_file(kind, item["id"])
-    title = item.get("title", item["id"])
-    tmp = target.with_name(target.name + ".nuevo")
-    biblioteca.download(indice.file_url(item), tmp, expected_bytes=int(item["file"]["bytes"]), label=title,
-                        progress=progress, cancel=cancel)
-    try:
-        if cancel is not None and cancel.is_set():
-            raise Cancelled()
-        if biblioteca.sha256_file(tmp) != item["file"]["sha256"]:
-            raise UserError(f"{title}: el archivo bajado no es el del catálogo firmado (SHA-256 distinto); no se "
-                            "instala.")
-        data = tmp.read_bytes()
-        if kind == "geoid":
-            try:
-                grid = mvgeoid.decode(data)
-            except mvgeoid.FormatError as error:
-                raise UserError(f"{title}: {error}") from None
-            if grid.model_id != item["id"] or grid.checksum != item["geoid"]["dataChecksum"]:
-                raise UserError(f"{title}: los datos del geoide no son los del catálogo firmado; no se instala.")
-        elif kind == "crs-package":
-            try:
-                package = read_package(data)
-            except DefinitionError as error:
-                raise UserError(f"{title}: {error}") from None
-            if package.id and package.id != item["id"]:
-                raise UserError(f"{title}: el paquete trae otro id («{package.id}»); no se instala.")
-        elif kind == "datum-grid":
-            if b"NUM_OREC" not in data[:16]:
-                raise UserError(f"{title}: el archivo no es una rejilla NTv2; no se instala.")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        os.replace(tmp, target)
-        biblioteca._atomic_write(target.with_name(f"{item['id']}.item.json"),
-                                 (json.dumps(item, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
-    finally:
-        tmp.unlink(missing_ok=True)
-
-
 def uninstall(item_id: str) -> None:
     """Borra algo descargado (lo de fábrica no se borra). Los proyectos que lo usan dirán que falta."""
-    if item_id in biblioteca.BUNDLED_GEOIDS or item_id == "fabrica":
+    if item_id in BUNDLED_GEOIDS or item_id == "fabrica":
         raise UserError("Lo que viene de fábrica no se puede borrar.")
-    found = False
-    for kind in biblioteca.KIND_DIRS:
-        path = biblioteca.installed_file(kind, item_id)
-        meta = path.with_name(f"{item_id}.item.json")
-        for p in (path, meta):
-            if p.exists():
-                p.unlink()
-                found = True
-    if not found:
-        raise UserError(f"«{item_id}» no está instalado.")
+    biblioteca.uninstall(item_id)
     reload()
+
+
+# --- Las comprobaciones de cada clase al instalarse ---------------------------------------------------------------
+
+def _validate_geoid(item: dict, data: bytes) -> None:
+    title = item.get("title", item["id"])
+    try:
+        grid = mvgeoid.decode(data)
+    except mvgeoid.FormatError as error:
+        raise UserError(f"{title}: {error}") from None
+    if grid.model_id != item["id"] or grid.checksum != (item.get("geoid") or {}).get("dataChecksum"):
+        raise UserError(f"{title}: los datos del geoide no son los del catálogo firmado; no se instala.")
+
+
+def _validate_package(item: dict, data: bytes) -> None:
+    title = item.get("title", item["id"])
+    try:
+        package = read_package(data)
+    except DefinitionError as error:
+        raise UserError(f"{title}: {error}") from None
+    if package.id and package.id != item["id"]:
+        raise UserError(f"{title}: el paquete trae otro id («{package.id}»); no se instala.")
+
+
+def _validate_grid(item: dict, data: bytes) -> None:
+    if b"NUM_OREC" not in data[:16]:
+        raise UserError(f"{item.get('title', item['id'])}: el archivo no es una rejilla NTv2; no se instala.")
+
+
+biblioteca.register_kind("crs-package", "sistemas", ".json", _validate_package, "Sistemas de coordenadas")
+biblioteca.register_kind("geoid", "geoides", ".mvgeoid", _validate_geoid, "Geoide")
+biblioteca.register_kind("datum-grid", "rejillas", ".gsb", _validate_grid, "Transformación de datum")
+biblioteca.on_change(lambda: reload())
 
 
 def set_data_dir(path) -> None:

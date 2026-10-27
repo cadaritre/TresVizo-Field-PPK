@@ -80,7 +80,7 @@ def coordinate_fields(c: TransformedCoordinate | None, position: Ecef, choice: C
 
 def official_fields(position: Ecef) -> list[tuple[str, str]]:
     lat, lon, h = crs.motor.geodetic(position.x, position.y, position.z, crs.definition("EPSG:6365").ellipsoid)
-    frame = f"{position.frame}, época {position.epoch:.1f}"
+    frame = frame_text(position)
     return [("Marco", frame), ("Latitud", estilo.lat_text(lat)), ("Longitud", estilo.lon_text(lon)),
             ("Altura elipsoidal (GRS 1980)", num(h, 3, "m")), ("X", num(position.x, 3, "m")),
             ("Y", num(position.y, 3, "m")), ("Z", num(position.z, 3, "m"))]
@@ -105,9 +105,9 @@ def system_section(r: Report, c: TransformedCoordinate | None, choice: Coordinat
         else:
             pairs.append(("Geoide", "ninguno: las alturas son elipsoidales"))
     r.fields(pairs, columns=1, label_width=150)
-    r.para("El programa no transforma entre marcos ni épocas: con la estación de la RGNA fija en su coordenada oficial, "
-           "el resultado queda en el marco y la época de esa coordenada (ITRF2008, época 2010.0), que es lo que pide la "
-           "norma del INEGI para ligarse a la RGNA.", "small")
+    r.para(f"El programa no transforma entre marcos ni épocas: con la base fija en su coordenada, el resultado queda "
+           f"en el marco y la época de esa coordenada ({text(result_frame)}), los oficiales de la red de la base.",
+           "small")
     if problem:
         r.callout("error", "No se pudo expresar en el sistema elegido", [problem])
     if c is not None and c.attribution:
@@ -236,3 +236,9 @@ def annex(r: Report, log: list[str]) -> None:
 
 def ecef_sigma(cov) -> tuple[float, float, float]:
     return tuple(math.sqrt(max(cov[i][i], 0.0)) for i in range(3))   # type: ignore[return-value]
+
+
+def frame_text(position: Ecef) -> str:
+    """«ITRF2008, época 2010.0», «SIRGAS2000, época 2000.4»: el marco y la época de la red de la base."""
+    from ..crs.definicion import epoch_text
+    return f"{position.frame}, época {epoch_text(position.epoch)}"

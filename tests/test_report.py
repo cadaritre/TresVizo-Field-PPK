@@ -90,7 +90,7 @@ def test_informe_de_puntos_completo(points_pdf):
     assert len(reader.pages) >= 5
     for needle in ("Informe de PPK de la jornada", "Proyecto n.º 2026-118", "2 de 12 puntos sin solución fija",
                    "P08: flotante", "P12: sin solución", "se asume plomeado",
-                   "estación de la RGNA, coordenada oficial", "cinemático, combinado adelante y atrás",
+                   "estación de referencia, coordenada oficial de su red", "cinemático, combinado adelante y atrás",
                    "Calidad de cada punto", "Épocas fijas / total", "Trayectoria Épocas", "SIN SOLUCIÓN",
                    "FLOTANTE", "Anexo: bitácora del proceso"):
         assert needle in t, needle

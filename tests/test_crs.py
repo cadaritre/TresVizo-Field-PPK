@@ -15,12 +15,14 @@ from pathlib import Path
 
 import pytest
 
-from tresvizo_ppk.crs import api, biblioteca, definicion, ed25519, indice, motor, mvgeoid
+from tresvizo_ppk.crs import api, definicion, motor, mvgeoid
+from tresvizo_ppk.datos import biblioteca, ed25519, indice
 from tresvizo_ppk.errors import Cancelled, UserError
 from tresvizo_ppk.model import CoordinateChoice, Ecef, Enu
 
 APPS = Path(__file__).parent / "datos" / "apps"
-DATOS = Path(biblioteca.PACKAGE_DATA)
+DATOS = Path(api.PACKAGE_DATA)
+INDEX = biblioteca.BUNDLED_INDEX
 TEST_SECRET = hashlib.sha256(b"TresVizo llave de prueba, no publicar con ella").digest()
 
 
@@ -42,7 +44,7 @@ def fixtures():
 def registry():
     """Fábrica y los nueve paquetes publicados, unidos como en las apps."""
     reg: dict[str, definicion.Definition] = {}
-    files = [biblioteca.FACTORY_FILE.read_bytes()] + [gzip.decompress(p.read_bytes())
+    files = [api.FACTORY_FILE.read_bytes()] + [gzip.decompress(p.read_bytes())
                                                        for p in sorted((APPS / "paquetes").glob("*.json.gz"))]
     for data in files:
         for d in definicion.read_package(data).systems:
@@ -137,7 +139,7 @@ def test_ed25519_rfc8032():
 
 
 def test_indice_incluido_lo_firmo_la_llave_de_las_apps():
-    payload = indice.verify((DATOS / "datos-index.json").read_bytes())
+    payload = indice.verify(INDEX.read_bytes())
     assert payload["sequence"] >= 3
     ids = {i["id"] for i in payload["items"]}
     assert {"crs-mx", "crs-co", "crs-world", "egm2008", "qgeoidcol2023"} <= ids
@@ -145,7 +147,7 @@ def test_indice_incluido_lo_firmo_la_llave_de_las_apps():
 
 
 def test_paquetes_de_prueba_son_los_publicados():
-    payload = indice.verify((DATOS / "datos-index.json").read_bytes())
+    payload = indice.verify(INDEX.read_bytes())
     items = {i["id"]: i for i in payload["items"]}
     files = sorted((APPS / "paquetes").glob("*.json.gz"))
     assert len(files) == 9
@@ -161,7 +163,7 @@ def test_paquetes_de_prueba_son_los_publicados():
 def test_definiciones_de_fabrica_son_las_de_las_apps(reference, registry):
     builtin = [s for s in reference["systems"] if s["builtIn"]]
     assert [s["code"] for s in builtin] == [d.code for d in definicion.read_package(
-        biblioteca.FACTORY_FILE.read_bytes()).systems]
+        api.FACTORY_FILE.read_bytes()).systems]
     for s in builtin:
         assert registry[s["code"]].raw == s["definition"]
 
@@ -475,3 +477,25 @@ def test_indice_publicado_de_verdad(data_dir):
     payload_items = api.download_index()
     assert any(c.id == "crs-mx" for c in payload_items)
     assert api.install("crs-sv").installed
+
+
+def test_cualquier_clase_registrada_se_instala_con_la_misma_verificacion(data_dir, monkeypatch, fixtures):
+    """Las redes CORS (§3.0) van por el mismo índice firmado y la misma instalación comprobada."""
+    items, files = _items_for(fixtures)
+    red = json.dumps({"format": "tresvizo-cors-network", "formatVersion": 1, "id": "rgna",
+                      "frame": "ITRF2008", "epoch": 2010.0, "stations": []}).encode()
+    common = {k: v for k, v in items[0].items() if k in ("countries", "region", "authority", "license", "attribution",
+                                                          "bounds", "requires")}
+    items.append(dict(common, kind="cors-network", id="rgna", version="1", revision=1, title="RGNA — INEGI, México",
+                      file={"path": "download/datos-prueba/rgna-r1.json", "bytes": len(red),
+                            "sha256": hashlib.sha256(red).hexdigest()}))
+    files["download/datos-prueba/rgna-r1.json"] = red
+    _publish(monkeypatch, files, items)
+    api.download_index()
+    assert any(c.id == "rgna" and c.kind == "cors-network" for c in api.catalog())
+    entry = biblioteca.install("rgna")
+    assert entry["title"] == "RGNA — INEGI, México"
+    assert biblioteca.read_installed("cors-network", "rgna") == red
+    assert [i["id"] for i in biblioteca.items("cors-network")] == ["rgna"]
+    biblioteca.uninstall("rgna")
+    assert biblioteca.read_installed("cors-network", "rgna") is None

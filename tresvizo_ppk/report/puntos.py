@@ -117,8 +117,7 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     if note:
         r.para(note, "small")
     first = next((c for _, c, _ in coords if c is not None), base_c)
-    secciones.system_section(r, first, point_choice, base_problem, f"{result.base.position.frame}, época "
-                                                                    f"{result.base.position.epoch:.1f}")
+    secciones.system_section(r, first, point_choice, base_problem, secciones.frame_text(result.base.position))
     secciones.options_section(r, options, {options.ephemeris}, result.log, kinematic=True)
 
     # 4. Tabla de puntos ----------------------------------------------------------------------------------------------
@@ -218,5 +217,5 @@ def _base_origin(base, project: Project) -> str:
         if project.source_project:
             return f"base propia, coordenada del proyecto estático {project.source_project}"
         return "base propia" + (f", {base.source}" if base.source else "")
-    return ("estación de la RGNA, coordenada oficial" if base.official else
-            "estación de la RGNA, coordenada corregida por el usuario") + (f" ({base.source})" if base.source else "")
+    return ("estación de referencia, coordenada oficial de su red" if base.official else
+            "estación de referencia, coordenada corregida por el usuario") + (f" ({base.source})" if base.source else "")

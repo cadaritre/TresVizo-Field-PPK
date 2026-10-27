@@ -66,7 +66,7 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
                                                          "tolerancia."])
     r.h2("Coordenada final en el sistema elegido")
     r.fields(secciones.coordinate_fields(c, result.position, choice), columns=2, label_width=110)
-    r.h2(f"Coordenada final en el marco oficial ({result.position.frame}, época {result.position.epoch:.1f})")
+    r.h2(f"Coordenada final en el marco de la base ({secciones.frame_text(result.position)})")
     r.fields(secciones.official_fields(result.position), columns=2, label_width=110)
     r.h2("Precisión")
     s = result.sigma_enu
@@ -94,7 +94,7 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
                   ("Altura del bastón", num(project.pole_height_m, 3, "m")),
                   ("Carpeta", str(project.folder) if project.folder else "—")]
     r.fields(proj_pairs, columns=2, label_width=80)
-    secciones.system_section(r, c, choice, problem, f"{result.position.frame}, época {result.position.epoch:.1f}")
+    secciones.system_section(r, c, choice, problem, secciones.frame_text(result.position))
     secciones.options_section(r, options, {b.ephemeris for b in result.baselines}, result.log)
 
     # 3. Estaciones ---------------------------------------------------------------------------------------------------
