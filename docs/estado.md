@@ -22,21 +22,42 @@
 - Coordenada de la base sin pedirla a mano: la oficial de su red; base propia: encabezado RINEX o media autónoma
   de la sesión, marcadas aproximadas con su origen (`base_coordinate_candidates`).
 - ANTEX igs20 (satélites y antenas de la RGNA) y órbitas SP3 a petición (ESA o IGS en el BKG, sin cuenta).
+- **Procesador propio de líneas largas** (`tresvizo_ppk/core/larga`, desde 20 km en «auto»): libre de ionosfera de
+  GPS, Galileo y BeiDou con la misma clase de señal en los dos receptores, órbitas difundidas o SP3, PCO/PCV de
+  receptor y satélite, mareas sólidas y GMF del IERS 2010, troposfera estimada con gradientes, wind-up; saltos de ciclo
+  con Melbourne-Wübbena y libre de geometría; ancho de carril por arco y carril estrecho con LAMBDA, tasa de éxito,
+  prueba de razón, prueba χ² de la distancia entera y resolución parcial; duración mínima para fijar (30 min hasta
+  60 km, 1 h desde ahí); RTKLIB corre como comprobación independiente. **Validado con la RGNA**
+  (`docs/validacion.md`): fijó las 104 sesiones de 1 h a 24 h a 30–141 km sin ningún fijo erróneo, con 0.4–2 cm
+  de error con 1 h a 100–141 km (antes, flotante, 2–6 cm) y σ realista; modelos probados contra los casos del IERS,
+  de RTKLIB y de Teunissen. El informe dice la resolución de ambigüedades o por qué quedó flotante.
 - Estático: estrategia por longitud, modelo de error calibrado, ajuste por mínimos cuadrados con chi², prueba w y
-  exclusión automática de una línea que no cuadra con tres bases. PPK de puntos: trayectoria combinada, promedio por
+  exclusión automática de la línea que no cuadra con tres bases (lectura de datos de Baarda; aviso si las que quedan
+  no pasan la χ² por el movimiento de las bases desde la época de su coordenada).
+- RTKLIB corre en una carpeta de nombres ASCII con rutas relativas (rutas con acentos en Windows) y las órbitas
+  precisas comprimidas se descomprimen antes; probado con un proyecto en una carpeta con acentos y eñes. PPK de puntos: trayectoria combinada, promedio por
   ocupación, todo plomeado, σ con mínimos realistas. Línea de órdenes `python -m tresvizo_ppk estatico|puntos`.
-- **Validación con datos reales de la RGNA** (`docs/validacion.md`): líneas de 100–141 km, error del vector frente a
-  una referencia PPP del día de 2–3 cm (1 h), 1.5 cm (2 h), ≤ 1 cm (4 h) y ≤ 6 mm (24 h); 30 km fija dentro de 2 cm.
-  Detectó el hundimiento de INEG (0.74 m desde 2010.0).
-- Pruebas: 110 en `tests/core` (más las 43 del convertidor), con muestras reales pequeñas de la RGNA.
+- **Validación con datos reales de la RGNA** (`docs/validacion.md`): ver arriba; detectó el hundimiento de INEG
+  (0.74 m desde 2010.0) y la deja fuera del ajuste en todas las sesiones.
+- Pruebas: 110 en `tests/core` (38 del procesador de líneas largas) más las 45 del convertidor, con muestras reales
+  pequeñas de la RGNA y de la ESA; la suite completa: 275.
 
 **Pendiente o sin verificar:**
 - **Ninguna grabación real de MeridianV/MeridianVI** ni jornada real con el CSV de TresVizo Field: falta una muestra
   del propietario (base + rover + CSV) para validar el PPK de puntos y la resolución de ambigüedades en cinemático.
   Con una estación de la RGNA como rover a 30 km y 20 min, los puntos salen flotantes (0.1–0.5 m).
-- **Líneas largas solo flotantes:** RTKLIB no resuelve ambigüedades a 100+ km (su ionosfera estimada no fijó nunca).
-  La solución profesional es una resolución propia ancha/estrecha sobre la libre de ionosfera, como TBC; hoy da
-  1–3 cm con 1–2 h y ≤ 1 cm con 4 h o más (validado), pero sin el «fijo» que muestran los programas comerciales.
+- **Líneas largas: validadas con un solo día, una región y un solo tipo de receptor y antena** (Trimble Alloy con
+  TRM115000.00 en todas las estaciones). Falta probarlas con un MeridianV/MeridianVI contra la RGNA (receptores
+  distintos: el motor solo hace dobles diferencias con la misma clase de señal, lo demás queda flotante) y, sobre todo,
+  con la calibración de la antena de los Meridian: en la libre de ionosfera la diferencia de centro de fase con la de
+  la base pesa unas 3 veces más que en L1 (centímetros en la vertical). Sin carga oceánica (1–2 mm tierra adentro;
+  hasta 5–10 mm en la costa). Sin pares de la RGNA de 20–30 km ni de más de 141 km para probar. GLONASS no entra en
+  el propio (FDMA), ni QZSS; BeiDou geoestacionario tampoco. La duración mínima y los modelos de error se calibraron
+  con ese día (`docs/validacion.md` §3 y §4): conviene repetir la validación con otro día y otra zona.
+- El procesador propio deja en el motor el aviso de la licencia del software de las Convenciones del IERS (GMF y
+  mareas, `tresvizo_ppk/core/larga/iers.py`): la licencia pide su fuente y el aviso íntegro en toda distribución de
+  la fuente; el instalador lleva bytecode. Conviene copiar `iers.py` (o el aviso) a la carpeta `licencias/` del
+  instalador (`scripts/distribuir.py`, del coordinador).
 - **Descarga de la RGNA (§3.2): la hace el usuario (decisión del propietario, 26-10-2026).** La página del INEGI es un
   formulario para personas, sin servicio documentado para programas; su SFTP público (geodesia2.inegi.org.mx) usa un
   usuario y contraseña publicados en la página, y el propietario decidió no meterlos en el programa. La app guía con
