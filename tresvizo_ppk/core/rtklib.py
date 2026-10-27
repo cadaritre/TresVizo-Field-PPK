@@ -6,6 +6,7 @@ Nombres y valores de las opciones: los de `src/options.c` de RTKLIB-EX 2.5.1.
 from __future__ import annotations
 
 import math
+import os
 import shutil
 import threading
 from dataclasses import dataclass, field
@@ -222,7 +223,11 @@ def run_rnx2rtkp(config_path: Path, out_pos: Path, rover_obs: Path, base_obs: Pa
             shutil.rmtree(folder)
         folder.mkdir(parents=True)
         for k, f in enumerate(files):
-            shutil.copy2(f, folder / f"{k:03d}_{Path(f).name}")
+            target = folder / f"{k:03d}_{Path(f).name}"
+            try:
+                os.link(f, target)              # enlace duro: sin copiar megas por cada proceso
+            except OSError:
+                shutil.copy2(f, target)
         args.append(str(folder / "*"))
     out_pos.unlink(missing_ok=True)
     span = None
