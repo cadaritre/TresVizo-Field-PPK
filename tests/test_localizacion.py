@@ -644,3 +644,26 @@ def test_exporta_en_locales_como_las_apps(tmp_path):
     text = dxf.read_bytes().decode("cp1252")
     assert "\r\nLOCALIZACION\r\n" in text and "localizacion_planta: semejanza" in text
     assert not dxf.with_suffix(".prj").exists()       # unas locales no tienen WKT: no se inventa un .prj
+
+
+# --- Se guarda en el proyecto -----------------------------------------------------------------------------------------
+
+def test_se_guarda_en_el_proyecto(tmp_path):
+    from tresvizo_ppk import project as projects
+    from tresvizo_ppk.model import Project
+    record = L.applied(L.draft(_site_pairs(), CoordinateChoice("EPSG:32613", "", "ggm10")),
+                       at=datetime(2026, 10, 27, 12, 0, 0, tzinfo=timezone.utc))
+    old = L.removed(L.applied(L.draft(_site_pairs()[:3], CoordinateChoice("EPSG:32613", "", None))),
+                    at=datetime(2026, 10, 27, 13, 0, 0, tzinfo=timezone.utc))
+    project = Project(kind="points", coordinates=CoordinateChoice("EPSG:32613", "", "ggm10", "UTM 13N", record),
+                      localization_history=[old])
+    path = projects.save(project, tmp_path / "obra.tvppk")
+    data = json.loads(path.read_text("utf-8"))
+    stored = data["coordinates"]["localization"]
+    assert stored["baseGrid"] == {"kind": "projectCRS", "crsCode": "EPSG:32613"}
+    assert stored["heightBase"] == {"kind": "orthometric", "geoidModelID": "ggm10"}
+    assert stored["origin"] == "calculada en la oficina" and stored["appliedAt"] == "2026-10-27T12:00:00Z"
+    again = projects.load(path)
+    assert again.coordinates.localization == record
+    assert again.localization_history == [old] and again.localization_history[0].removed_at is not None
+    assert projects.load(projects.save(Project(kind="static"), tmp_path / "sin.tvppk")).coordinates.localization is None

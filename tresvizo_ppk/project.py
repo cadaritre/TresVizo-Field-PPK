@@ -223,6 +223,21 @@ def _parse_options(d: dict, folder: Path) -> ProcessingOptions:
     return options
 
 
+def _localization(record) -> dict | None:
+    """La localización en el JSON del contrato de las apps (`crs.localizacion.record_to_json`), más su origen."""
+    if record is None:
+        return None
+    from .crs import localizacion
+    return {**localizacion.record_to_json(record), "origin": record.origin}
+
+
+def _parse_localization(d) -> object | None:
+    if d is None:
+        return None
+    from .crs import localizacion
+    return localizacion.record_from_json(d, origin=str(d.get("origin", "")) if isinstance(d, dict) else "")
+
+
 def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
     return {"formato": FORMAT, "version": FORMAT_VERSION, "app_version": app_version,
             "kind": project.kind, "name": project.name, "number": project.number, "place": project.place, "point_name": project.point_name,
@@ -230,7 +245,9 @@ def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
             "pole_height_m": project.pole_height_m, "inputs": project.inputs, "hashes": project.hashes,
             "options": _options(project.options, folder),
             "coordinates": {"crs_id": project.coordinates.crs_id, "zone": project.coordinates.zone,
-                            "geoid_id": project.coordinates.geoid_id, "label": project.coordinates.label},
+                            "geoid_id": project.coordinates.geoid_id, "label": project.coordinates.label,
+                            "localization": _localization(project.coordinates.localization)},
+            "localization_history": [_localization(r) for r in project.localization_history],
             "bases": [_station(s) for s in project.bases], "base_kind": project.base_kind,
             "source_project": project.source_project,
             "position": None if project.position is None else _ecef(project.position),
@@ -257,7 +274,10 @@ def from_dict(data: dict, folder: Path) -> Project:
                        inputs=inputs, hashes=hashes, options=_parse_options(data.get("options", {}), folder),
                        coordinates=CoordinateChoice(crs_id=str(c.get("crs_id", CoordinateChoice.crs_id)),
                                                     zone=str(c.get("zone", "")), geoid_id=c.get("geoid_id"),
-                                                    label=str(c.get("label", ""))),
+                                                    label=str(c.get("label", "")),
+                                                    localization=_parse_localization(c.get("localization"))),
+                       localization_history=[_parse_localization(r) for r in data.get("localization_history", [])
+                                             if r is not None],
                        pole_height_m=float(data.get("pole_height_m", 0.0)),
                        point_name=str(data.get("point_name", "")), number=str(data.get("number", "")),
                        point_code=str(data.get("point_code", "")),
