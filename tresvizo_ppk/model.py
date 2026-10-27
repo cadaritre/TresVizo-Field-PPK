@@ -44,7 +44,8 @@ Matrix3 = tuple[tuple[float, float, float], tuple[float, float, float], tuple[fl
 
 @dataclass
 class Station:
-    """Estación de referencia: de la RGNA (catálogo oficial) o una base propia con su coordenada."""
+    """Estación de referencia: de una red CORS (catálogo oficial de su paquete, §3.0) o una base propia con su
+    coordenada. El marco y la época de la coordenada van en `position` (los de la red, o los que escribió el usuario)."""
     id: str                                  # clave (p. ej. «INEG», «CHIH»)
     name: str                                # nombre editable que sale en el informe
     position: Ecef                           # coordenada fija de la base
@@ -55,6 +56,10 @@ class Station:
     receiver: str = ""
     source: str = ""                         # de dónde salió la coordenada (fuente y fecha) o «manual»
     official: bool = True                    # False si el usuario la corrigió o es una base propia
+    # Añadido por el motor (redes CORS, §3.0):
+    network: str = ""                        # id del paquete de su red («rgna-inegi»); vacío en una base propia
+    network_name: str = ""                   # «RGNA — INEGI, México», para el informe
+    attribution: str = ""                    # atribución que pide la licencia de la red («Fuente: INEGI, …»)
 
 
 @dataclass
