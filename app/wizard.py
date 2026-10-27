@@ -313,8 +313,10 @@ class PointsJob:
     own_source: str = 'rinex'
     own_project: Path | None = None
     own_position: Ecef | None = None         # leída del proyecto estático
-    rinex_position: Ecef | None = None       # APPROX POSITION del encabezado RINEX de la base (al inspeccionarla)
-    rinex_missing: bool = False              # ya se inspeccionó y no trae posición
+    rinex_position: Ecef | None = None       # posición de la candidata elegida (al inspeccionar la base)
+    rinex_missing: bool = False              # ya se inspeccionó y el motor no dio ninguna candidata
+    candidates: list[Station] = field(default_factory=list)   # base_coordinate_candidates() del motor
+    candidate_index: int = 0
     coord_format: str = 'geodetic'           # «geodetic» (lat, lon, h) o «ecef»
     coord_text: tuple[str, str, str] = ('', '', '')
     rover_files: list[Path] = field(default_factory=list)
@@ -354,9 +356,10 @@ class PointsJob:
                     found.append(Issue('own_coord', 'La grabación de la base no trae posición aproximada: elige un '
                                                     'proyecto georreferenciado o un punto conocido.'
                                        if self.rinex_missing else 'Leyendo la posición del encabezado de la base…'))
-                elif self.rinex_position is not None:
-                    found.append(Issue('own_coord', 'Coordenada aproximada del encabezado RINEX (unos metros): los '
-                                                    'puntos quedan bien entre sí, pero no ligados a ninguna red.',
+                elif self.rinex_position is not None and (not self.candidates or self.candidates[
+                        min(self.candidate_index, len(self.candidates)-1)].approximate):
+                    found.append(Issue('own_coord', 'Coordenada aproximada (unos metros): los puntos quedan bien '
+                                                    'entre sí, pero desplazados en bloque y sin ligar a ninguna red.',
                                        'warning'))
             elif self.own_source == 'project':
                 if self.own_project is None:
@@ -397,6 +400,11 @@ class PointsJob:
         if self.base_kind == 'rgna':
             return replace(self.base.station, name=(self.base.name.strip() or self.base.station.name))
         if self.own_source == 'rinex':
+            if self.candidates:
+                chosen = self.candidates[min(self.candidate_index, len(self.candidates)-1)]
+                name = self.own_name.strip() or chosen.name
+                return replace(chosen, name=name, antenna_height_m=parse_number(self.own_height)
+                               if self.own_height.strip() else chosen.antenna_height_m)
             if self.rinex_position is None:
                 raise ValueError('Sin posición en el encabezado RINEX de la base.')
             position, source = self.rinex_position, RINEX_SOURCE
@@ -405,9 +413,10 @@ class PointsJob:
         else:
             position, source = self.manual_position(), 'Punto conocido (escrito por el usuario)'
         name = self.own_name.strip()
+        origin = {'rinex': 'rinex-header', 'project': 'project'}.get(self.own_source, 'manual')
         return Station(id=re.sub(r'[^A-Za-z0-9]', '', name)[:9].upper() or 'BASE', name=name, position=position,
                        antenna_height_m=parse_number(self.own_height), receiver='MeridianV', source=source,
-                       official=False)
+                       official=False, coordinate_origin=origin, approximate=self.own_source == 'rinex')
 
     def base_height_m(self) -> float | None:
         return parse_number(self.own_height) if self.base_kind == 'own' else None

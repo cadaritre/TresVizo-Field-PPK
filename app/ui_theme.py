@@ -17,10 +17,14 @@ def font_families(root) -> tuple[str, str]:
 
 
 class Fonts:
-    def __init__(self, root):
+    def __init__(self, root, scale=1.0):
         self.regular, self.semibold = font_families(root)
         # Tk mide en puntos; macOS dibuja a 72 ppp y Windows a 96: misma altura visual con tamaños distintos.
-        self.base = 13 if sys.platform == 'darwin' else 10 if sys.platform == 'win32' else 10
+        self.normal = 13 if sys.platform == 'darwin' else 10
+        self.base = round(self.normal*scale)
+
+    def set_scale(self, scale):
+        self.base = round(self.normal*scale)
         self.bold_weight = 'normal' if sys.platform == 'win32' else 'bold'
 
     def body(self, delta=0):
@@ -139,7 +143,7 @@ class ThemeManager:
         s.map('TCombobox', selectbackground=[('!focus', t['surface']), ('focus', t['selection'])],
               selectforeground=[('!focus', t['text']), ('focus', t['on_selection'])])
         s.configure('Treeview', background=t['surface'], fieldbackground=t['surface'], foreground=t['text'],
-                    rowheight=int((30 if sys.platform == 'darwin' else 32)*scale), bordercolor=t['separator'],
+                    rowheight=self.row_height(), bordercolor=t['separator'],
                     lightcolor=t['separator'], darkcolor=t['separator'], borderwidth=1, font=f.body())
         s.map('Treeview', background=[('selected', t['selection'])], foreground=[('selected', t['on_selection'])])
         s.configure('Treeview.Heading', background=t['surface'], foreground=t['muted_surface'], padding=6,
@@ -206,6 +210,14 @@ class ThemeManager:
         self.callbacks = [(w, fn) for w, fn in self.callbacks if w.winfo_exists()]
         for _, callback in self.callbacks:
             callback(t)
+
+    def row_height(self):
+        """Alto de fila de las tablas a partir de la letra (crece con «Tamaño de letra»)."""
+        line = tkfont.Font(root=self.root, font=self.fonts.body()).metrics('linespace')
+        return int(max(line+14, 26)*getattr(self.root, 'ui_scale', 1))
+
+    def text_scale(self):
+        return self.fonts.base/self.fonts.normal
 
     def indicators(self, t):
         """Casillas y botones de opción dibujados (marca ✓ y punto), con estados de foco y deshabilitado."""

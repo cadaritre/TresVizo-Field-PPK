@@ -91,16 +91,19 @@ class StaticPage(WizardPage):
         recording = origin.startswith('de la sesión')
         self.rover_info.configure(text=f'{self.obs_summary(obs)} · {origin}')
         self.rover_info.pack(fill='x', pady=(8, 0))
-        self.autofill(self.name_var, self.name_field, obs.marker, origin)
-        if recording:
+        self.autofill(self.name_var, self.name_field, getattr(obs, 'point_name', '') or obs.marker,
+                      self.origin_text(obs, 'point_name', origin))
+        pole = self.pole_from(obs)
+        if recording or pole is not None:
             self.height_field.title.configure(text='Altura del bastón o trípode (m)')
             self.height_field.hint.configure(text=self.POLE_HINT)
-            pole = self.pole_from(obs)
-            self.autofill(self.height_var, self.height_field, f'{pole:.3f}' if pole is not None else None, origin)
+            self.autofill(self.height_var, self.height_field, f'{pole:.3f}' if pole is not None else None,
+                          self.origin_text(obs, 'pole_height_m', origin))
         else:
             self.height_field.title.configure(text='Altura de la antena a la ARP (m)')
             self.height_field.hint.configure(text=self.ARP_HINT)
-            self.autofill(self.height_var, self.height_field, f'{obs.antenna_height_m:.4f}', origin)
+            self.autofill(self.height_var, self.height_field, f'{obs.antenna_height_m:.4f}',
+                          self.origin_text(obs, 'antenna_height_m', origin))
 
     def edit(self, **values):
         for key, value in values.items():

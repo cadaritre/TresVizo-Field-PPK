@@ -42,6 +42,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--view', choices=VIEWS, default='home')
     parser.add_argument('--theme', default='Claro')
+    parser.add_argument('--text-size', default='normal', choices=['normal', 'grande', 'muy grande'])
     parser.add_argument('--width', type=int, default=1280)
     parser.add_argument('--height', type=int, default=820)
     parser.add_argument('--capture', type=Path)
@@ -84,7 +85,11 @@ def main():
         app.settings.save(company='Topografía y Geodesia del Centro', surveyor='Ing. Laura Méndez',
                           license_id='12345678', data_dir=str(folder/'TresVizo Field PPK'), theme=args.theme)
         from app.themes import palette
+        from app.settings import TEXT_SIZES
+        app.settings.save(text_size=args.text_size)
+        app.theme.fonts.set_scale(TEXT_SIZES[args.text_size])
         app.theme.apply(palette(args.theme))
+        app.after(300, app.fit_nav)
         app.geometry(f'{args.width}x{args.height}+40+40')
         for name, kind in (('Vértice Las Flores', 'static'), ('Levantamiento predio Las Flores', 'points'),
                            ('Control norte', 'static')):

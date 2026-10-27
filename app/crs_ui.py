@@ -153,9 +153,13 @@ class CrsPage(ttk.Frame):
         wrap_label(self, 'El catálogo firmado de TresVizo Field: sistemas, geoides, rejillas y redes CORS. Lo de fábrica '
                          'viene incluido; lo demás se baja de github.com/cadaritre/GNSS-TresVizo solo cuando lo pides y '
                          'se comprueba su firma antes de usarlo.').pack(anchor='w', fill='x', pady=(4, 10))
-        self.notice = ttk.Frame(self)
+        # Todo lo de abajo se desplaza junto: en ventanas bajas la lista conserva un alto útil.
+        self.page_scroll = ScrollFrame(self, padding=(0, 0, 10, 8))
+        self.page_scroll.pack(fill='both', expand=True)
+        page = self.page_scroll.body
+        self.notice = ttk.Frame(page)
         self.notice.pack(fill='x')
-        self.segments = FlowFrame(self)
+        self.segments = FlowFrame(page)
         self.segments.pack(fill='x', pady=(0, 4))
         self.segment_buttons = {}
         for cls, (title, icon, _) in catalog_view.CLASSES.items():
@@ -163,7 +167,7 @@ class CrsPage(ttk.Frame):
             app.icons.bind(button, icon, 16, color_token=self.cv.CLASSES[cls][2])
             self.segments.add(button)
             self.segment_buttons[cls] = button
-        tools = FlowFrame(self)
+        tools = FlowFrame(page)
         tools.pack(fill='x', pady=(4, 8))
         search = ttk.Frame(tools)
         app.icons.label(search, 'search', 16).pack(side='left', padx=(0, 6))
@@ -184,7 +188,7 @@ class CrsPage(ttk.Frame):
         self.refresh_button = ttk.Button(tools, text='Actualizar catálogo', command=self.download_index)
         app.icons.bind(self.refresh_button, 'refresh-cw', 16)
         tools.add(self.refresh_button)
-        self.body = ttk.Frame(self)
+        self.body = ttk.Frame(page)
         self.body.pack(fill='both', expand=True)
         self.list_card = ttk.Frame(self.body, style='Card.TFrame', padding=1)
         self.tree = ttk.Treeview(self.list_card, columns=('code', 'state'), show='tree headings', selectmode='browse')
@@ -197,10 +201,11 @@ class CrsPage(ttk.Frame):
         scrolled(self.tree, self.list_card)
         self.tree.bind('<<TreeviewOpen>>', self.expand)
         self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_detail())
-        self.detail_scroll = ScrollFrame(self.body, padding=(0, 0, 4, 4))
-        self.detail = ttk.Frame(self.detail_scroll.body, style='Card.TFrame', padding=16)
-        self.detail.pack(fill='x')
+        self.detail_scroll = ttk.Frame(self.body)
+        self.detail = ttk.Frame(self.detail_scroll, style='Card.TFrame', padding=16)
+        self.detail.pack(fill='x', anchor='n')
         self.body.bind('<Configure>', self.arrange, add='+')
+        self.bind('<Configure>', self.fit_rows, add='+')
         self.arranged = None
         if app.backend.crs is None:
             Banner(self.notice, app, 'error', app.backend.missing_message('crs')).pack(fill='x', pady=(0, 8))
@@ -209,8 +214,15 @@ class CrsPage(ttk.Frame):
 
     # --- Disposición: lista y detalle lado a lado, o uno sobre otro si la ventana es angosta -----------------------
 
+    def fit_rows(self, event=None):
+        """Filas visibles de la lista según el alto de la ventana (entre 8 y 22)."""
+        row = int(ttk.Style(self).lookup('Treeview', 'rowheight') or 30)
+        rows = max(8, min(22, (self.winfo_height()-300)//max(1, row)))
+        if int(self.tree.cget('height')) != rows:
+            self.tree.configure(height=rows)
+
     def arrange(self, event=None):
-        wide = self.body.winfo_width() >= 860
+        wide = self.body.winfo_width() >= 860*self.app.theme.text_scale()
         if wide == self.arranged:
             return
         self.arranged = wide

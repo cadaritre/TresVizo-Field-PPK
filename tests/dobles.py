@@ -72,12 +72,30 @@ class FakeCore:
         self.calls = []
         self.rover_point = offset(STATIONS[0].position, 2810.0, -3655.0, 14.0)
 
-    def rgna_catalog(self):
+    def cors_networks(self):
+        return [SimpleNamespace(id='rgna-inegi', title='RGNA — INEGI, México', countries=['MX'], frame='ITRF2008',
+                                epoch=2010.0, attribution='Doble de prueba.', license='Solo pruebas.', bundled=True,
+                                source={'title': SOURCE}, download={'url': 'https://www.inegi.org.mx/app/geo2/rgna/'})]
+
+    def station_catalog(self, network_id=None):
         return list(STATIONS)
 
-    def rgna_catalog_info(self):
-        return {'frame': 'ITRF2008', 'epoch': 2010.0, 'source': SOURCE, 'attribution': 'Doble de prueba.',
-                'license': 'Solo pruebas.'}
+    def station_download_guide(self, station, start, end):
+        return f'Baja los RINEX de {station.id} del {start:%Y-%m-%d}, de {start:%H:%M} a {end:%H:%M} UTC.'
+
+    def can_download_station(self, station):
+        return False
+
+    def base_coordinate_candidates(self, obs, workdir=None, *, autonomous=None, cancel=None):
+        official = self.find_station(obs.marker)
+        if official is not None:
+            return [official]
+        if obs.approx_position is None:
+            raise UserError('La base no está en ningún catálogo y su RINEX no trae posición.')
+        return [Station(id=(obs.marker or 'BASE')[:9].upper(), name=obs.point_name or 'Base propia',
+                        position=obs.approx_position, antenna_type=obs.antenna_type, receiver=obs.receiver,
+                        source='Aproximada: APPROX POSITION XYZ del encabezado RINEX (unos metros).', official=False,
+                        coordinate_origin='rinex-header', approximate=True)]
 
     def find_station(self, marker):
         return next((s for s in STATIONS if s.id == marker.upper()), None)
@@ -97,7 +115,11 @@ class FakeCore:
                                   start=START, end=START+timedelta(hours=1, minutes=43), interval_s=1.0,
                                   rinex_version='3.04', source_files=[Path(p) for p in paths], radome='NONE',
                                   approx_position=offset(self.rover_point, 3.0, -2.0, 1.0), receiver_model='MeridianV',
-                                  case_offset_m=0.116, epochs=6180)
+                                  case_offset_m=0.116, epochs=6180, point_name=marker or 'LF-01',
+                                  pole_height_m=1.8 if pole_height_m is None else pole_height_m,
+                                  field_sources={'point_name': 'sesión del receptor',
+                                                 'pole_height_m': 'sesión del receptor',
+                                                 'antenna_type': 'sesión del receptor'})
         return ObservationSet(obs=[Path(workdir)/'unido.obs'], marker=marker or (station.id if station else 'ROVR'),
                               receiver=station.receiver if station else 'TRIMBLE NETR9',
                               antenna_type=station.antenna_type if station else 'TRM59800.00',
@@ -105,7 +127,9 @@ class FakeCore:
                               antenna_height_m=pole_height_m if pole_height_m is not None else 0.0083,
                               start=START-timedelta(hours=1), end=START+timedelta(hours=3), interval_s=15.0,
                               rinex_version='3.04', source_files=[Path(p) for p in paths],
-                              approx_position=station.position if station else self.rover_point, epochs=960)
+                              approx_position=station.position if station else self.rover_point, epochs=960,
+                              point_name=marker or (station.id if station else 'ROVR'),
+                              field_sources={'point_name': 'encabezado RINEX', 'antenna_height_m': 'encabezado RINEX'})
 
     def assess_quality(self, obs):
         return quality()
@@ -113,9 +137,6 @@ class FakeCore:
     def download_precise_products(self, start, end, workdir, progress=None, cancel=None):
         _wait(progress, cancel, 3, 'Bajando órbitas IGS…', self.delay)
         return [Path(workdir)/'IGS0OPSFIN_20262970000_01D_15M_ORB.SP3']
-
-    def rgna_download_guide(self, station_id, start, end):
-        return f'Baja los RINEX de {station_id} del {start:%Y-%m-%d}, de {start:%H:%M} a {end:%H:%M} UTC.'
 
     def process_static(self, rover, bases, options, workdir, progress=None, cancel=None, point_name=''):
         self.calls.append(('static', [s.id for s, _ in bases], options.elevation_mask_deg))

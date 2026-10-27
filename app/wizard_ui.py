@@ -500,15 +500,25 @@ class WizardPage(ttk.Frame):
         self.worker = None
         head = ttk.Frame(self)
         head.pack(fill='x')
+        head.columnconfigure(0, weight=1)
         titles = ttk.Frame(head)
-        titles.pack(side='left', fill='x', expand=True)
+        titles.grid(row=0, column=0, sticky='ew')
         ttk.Label(titles, text=self.TITLE, style='Title.TLabel').pack(anchor='w')
-        self.project_label = ttk.Label(titles, text='', style='Subtitle.TLabel')
-        self.project_label.pack(anchor='w', pady=(2, 0))
+        self.project_label = ttk.Label(titles, text='', style='Subtitle.TLabel', justify='left')
+        self.project_label.pack(anchor='w', fill='x', pady=(2, 0))
         actions = ttk.Frame(head)
-        actions.pack(side='right', anchor='n')
+        actions.grid(row=0, column=1, sticky='ne', padx=(12, 0))
+
+        def fit(event):
+            # Botones solo con icono si la página es angosta; el nombre del proyecto se envuelve.
+            compact = event.width < 860
+            for button in (self.new_button, self.save_button):
+                button.set_compact(compact)
+            self.project_label.configure(wraplength=max(200, event.width-actions.winfo_reqwidth()-24))
+        head.bind('<Configure>', fit, add='+')
         self.new_button = ttk.Button(actions, text='Nuevo', command=self.ask_new)
         app.icons.bind(self.new_button, 'file-plus')
+        Tooltip(self.new_button, 'Proyecto nuevo', app.theme)
         self.new_button.pack(side='left')
         self.save_button = ttk.Button(actions, text='Guardar proyecto', command=self.save)
         app.icons.bind(self.save_button, 'save')
@@ -673,7 +683,7 @@ class WizardPage(ttk.Frame):
 
     # --- Lectura de los archivos al soltarlos: los campos se llenan solos ------------------------------------------
 
-    def inspect(self, slot, files, callback):
+    def inspect(self, slot, files, callback, extra=None):
         """Lee los archivos en segundo plano (encabezado y sesión) y llama `callback(ObservationSet)` en el hilo de la
         interfaz. Si los archivos cambian antes de terminar, el resultado viejo se descarta. La copia temporal se
         borra al terminar."""
@@ -696,7 +706,11 @@ class WizardPage(ttk.Frame):
 
         def work(progress, cancel):
             try:
-                return core.prepare_observations(files, folder, progress=progress, cancel=cancel)
+                obs = core.prepare_observations(files, folder, progress=progress, cancel=cancel)
+                if extra is not None:
+                    # Lo que necesita los archivos ya preparados (p. ej. las candidatas de coordenada de la base).
+                    obs.ui_extra = extra(obs, folder/'extra', cancel)
+                return obs
             finally:
                 shutil.rmtree(folder, ignore_errors=True)
 
@@ -718,6 +732,17 @@ class WizardPage(ttk.Frame):
         self.app.set_status('Leyendo los archivos para llenar los datos que traen…')
         workers[slot] = (key, tasks.run(self, work, on_done=done, on_error=failed,
                                         on_cancel=lambda m: None))
+
+    @staticmethod
+    def origin_text(obs, key, fallback='') -> str:
+        """Etiqueta de origen de un campo a partir de `ObservationSet.field_sources` («del encabezado RINEX»…)."""
+        source = (getattr(obs, 'field_sources', {}) or {}).get(key, '')
+        if not source:
+            return fallback
+        if source.startswith(('indicad', 'sin ')):
+            return ''
+        article = 'de la' if source.split()[0] in ('sesión', 'grabación') else 'del'
+        return f'{article} {source}'
 
     @staticmethod
     def origin_of(files) -> str:
@@ -742,7 +767,9 @@ class WizardPage(ttk.Frame):
 
     @staticmethod
     def pole_from(obs) -> float | None:
-        """Altura del bastón que trae la sesión del Meridian (ARP − desplazamiento del case), o None."""
+        """Altura del bastón que trae la sesión (la que da el motor, o ARP − desplazamiento del case), o None."""
+        if getattr(obs, 'pole_height_m', None) is not None:
+            return obs.pole_height_m
         if obs.case_offset_m is not None and obs.antenna_height_m and obs.antenna_height_m > obs.case_offset_m:
             return obs.antenna_height_m-obs.case_offset_m
         return None

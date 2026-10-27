@@ -93,12 +93,8 @@ class PointsPage(WizardPage):
         frame.pack(fill='x', pady=(16, 0))
         self.source_var = tk.StringVar(value=self.job.own_source)
         from app.components import FlowFrame
-        row = FlowFrame(inner, style='Flat.Card.TFrame', gap=18)
-        row.pack(fill='x')
-        for value, text in (('rinex', 'Aproximada (encabezado RINEX)'), ('project', 'Georreferenciada (proyecto)'),
-                            ('manual', 'Punto conocido')):
-            row.add(ttk.Radiobutton(row, text=text, value=value, variable=self.source_var, style='Card.TRadiobutton',
-                                    command=self.switch_source))
+        self.source_row = FlowFrame(inner, style='Flat.Card.TFrame', gap=18)
+        self.source_row.pack(fill='x')
         self.from_rinex = ttk.Label(inner, text='', style='Card.TLabel', justify='left', padding=(0, 10, 0, 0))
         self.from_project = ttk.Frame(inner, style='Flat.Card.TFrame', padding=(0, 10, 0, 0))
         pick = ttk.Button(self.from_project, text='Elegir proyecto…', command=self.pick_static_project)
@@ -127,6 +123,7 @@ class PointsPage(WizardPage):
         self.coord_hint = ttk.Label(self.manual, text='', style='Card.Subtitle.TLabel')
         self.coord_hint.pack(anchor='w', pady=(6, 0))
         self.switch_format(notify=False)
+        self.render_candidates()
         self.switch_source(notify=False)
 
     def edit(self, **values):
@@ -163,22 +160,62 @@ class PointsPage(WizardPage):
             self.own_list.pack_forget()
         self.job.rinex_position, self.job.rinex_missing = None, False
         self.own_info.pack_forget()
+        self.job.candidates = []
         if paths:
-            self.inspect('own', paths, self.own_inspected)
+            core = self.app.backend.core
+
+            def candidates(obs, folder, cancel):
+                if not callable(getattr(core, 'base_coordinate_candidates', None)):
+                    return None
+                try:
+                    return core.base_coordinate_candidates(obs, folder, cancel=cancel)
+                except Exception as exc:  # noqa: BLE001 - sin candidatas se elige proyecto o punto conocido
+                    if tasks.classify(exc)[0] == 'program':
+                        raise
+                    return []
+            self.inspect('own', paths, self.own_inspected, extra=candidates)
         if notify:
             self.changed()
 
     def own_inspected(self, obs):
         origin = self.origin_of(self.job.base.files)
-        self.autofill(self.own_name, self.own_name_field, obs.marker, origin)
+        self.autofill(self.own_name, self.own_name_field, getattr(obs, 'point_name', '') or obs.marker,
+                      self.origin_text(obs, 'point_name', origin))
         pole = self.pole_from(obs)
-        self.autofill(self.own_height, self.own_height_field, f'{pole:.3f}' if pole is not None else None, origin)
-        self.job.rinex_position = obs.approx_position
-        self.job.rinex_missing = obs.approx_position is None
+        self.autofill(self.own_height, self.own_height_field, f'{pole:.3f}' if pole is not None else None,
+                      self.origin_text(obs, 'pole_height_m', origin))
+        found = getattr(obs, 'ui_extra', None)
+        if found is None:      # motor sin candidatas: la del encabezado
+            self.job.candidates = []
+            self.job.rinex_position = obs.approx_position
+        else:
+            self.job.candidates = list(found)
+            self.job.candidate_index = 0
+            self.job.rinex_position = found[0].position if found else None
+        self.job.rinex_missing = self.job.rinex_position is None
+        self.render_candidates()
         self.own_info.configure(text=f'{self.obs_summary(obs)} · {origin}')
         self.own_info.pack(fill='x', pady=(8, 0))
         self.show_rinex_position()
         self.changed()
+
+    CANDIDATE_TEXT = {'official': 'Oficial (catálogo de su red)', 'rinex-header': 'Aproximada (encabezado RINEX)',
+                      'autonomous': 'Aproximada (solución autónoma de la sesión)'}
+
+    def render_candidates(self):
+        """Una opción por candidata del motor (la primera, por omisión) + proyecto + punto conocido."""
+        from app.components import FlowFrame
+        self.source_row.clear()
+        options = [(f'rinex:{i}', self.CANDIDATE_TEXT.get(c.coordinate_origin, c.source or 'Del archivo'))
+                   for i, c in enumerate(self.job.candidates)] or [('rinex:0', 'Aproximada (encabezado RINEX)')]
+        options += [('project', 'Georreferenciada (proyecto)'), ('manual', 'Punto conocido')]
+        current = (f'rinex:{self.job.candidate_index}' if self.job.own_source == 'rinex' else self.job.own_source)
+        self.source_var.set(current)
+        for value, text in options:
+            self.source_row.add(ttk.Radiobutton(self.source_row, text=text, value=value, variable=self.source_var,
+                                                style='Card.TRadiobutton', command=self.switch_source))
+        self.app.theme.walk(self.source_row)
+        self.show_rinex_position()
 
     def show_rinex_position(self):
         if not hasattr(self, 'from_rinex'):
@@ -191,13 +228,22 @@ class PointsPage(WizardPage):
             from app.charts import ecef_to_geodetic
             from app.formatting import dms
             lat, lon = ecef_to_geodetic(p)
-            text = (f'{dms(lat, "N", "S", 3)}  {dms(lon, "E", "O", 3)}\n{ecef_text(p)} · aproximada, del encabezado '
-                    'RINEX (unos metros): los puntos quedan bien entre sí, pero desplazados en bloque y sin ligar a '
-                    'ninguna red.')
+            chosen = (self.job.candidates[min(self.job.candidate_index, len(self.job.candidates)-1)]
+                      if self.job.candidates else None)
+            note = (chosen.source if chosen is not None else 'Aproximada, del encabezado RINEX (unos metros): los '
+                    'puntos quedan bien entre sí, pero desplazados en bloque y sin ligar a ninguna red.')
+            text = f'{dms(lat, "N", "S", 3)}  {dms(lon, "E", "O", 3)} · {p.frame} {p.epoch:g}\n{ecef_text(p)}\n{note}'
         self.from_rinex.configure(text=text)
 
     def switch_source(self, notify=True):
-        self.job.own_source = self.source_var.get()
+        value = self.source_var.get()
+        if value.startswith('rinex'):
+            self.job.own_source = 'rinex'
+            self.job.candidate_index = int(value.split(':')[1]) if ':' in value else 0
+            if self.job.candidates:
+                self.job.rinex_position = self.job.candidates[self.job.candidate_index].position
+        else:
+            self.job.own_source = value
         for frame in (self.from_rinex, self.from_project, self.manual):
             frame.pack_forget()
         {'rinex': self.from_rinex, 'project': self.from_project}.get(self.job.own_source, self.manual).pack(fill='x')

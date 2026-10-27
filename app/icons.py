@@ -28,7 +28,8 @@ class Icons:
         return self.cache[key]
 
     def size(self, base=18):
-        return int(base*getattr(self.theme.root, 'ui_scale', 1))
+        scale = getattr(self.theme.root, 'ui_scale', 1)*self.theme.text_scale()
+        return int(base*scale)
 
     def bind(self, widget, name, size=18, show_text=True, color_token=None):
         """Icono con los colores de cada estado del botón (reposo, hover, presionado, deshabilitado)."""
@@ -59,9 +60,17 @@ class Icons:
                 for state, variant in [('disabled', 'disabled'), ('pressed', 'pressed'), ('active', 'hover')]:
                     states.extend((state, self.photo(widget.icon_name, pixels, tokens[f'on_{key}_{variant}'])))
             widget.icon_states = states
-            widget.configure(image=tuple(states), compound='left' if show_text else 'image')
+            compact = getattr(widget, 'compact', False)
+            widget.configure(image=tuple(states), compound='left' if show_text and not compact else 'image')
 
         widget.refresh_icon = lambda: update(self.theme.tokens)
+
+        def set_compact(value):
+            # Solo el icono (con su ayuda al pasar el cursor) cuando no cabe el texto.
+            if getattr(widget, 'compact', False) != value:
+                widget.compact = value
+                update(self.theme.tokens)
+        widget.set_compact = set_compact
         self.theme.subscribe(widget, update)
         return widget
 

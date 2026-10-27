@@ -1,8 +1,7 @@
 """Redes de estaciones de referencia (CORS, §3.0) vistas desde la interfaz, sin suponer ningún país.
 
-El motor publica las redes como paquetes del índice firmado. Este adaptador lee `core.networks()` cuando existe y,
-mientras tanto, arma la red que trae la 1.0 (la RGNA del INEGI) con `rgna_catalog()` y `rgna_catalog_info()`. Así las
-pantallas trabajan siempre con «red + estaciones» y no con la RGNA fija.
+El motor publica las redes como paquetes del índice firmado (`cors_networks()` y `station_catalog()`); este adaptador
+las pasa a una forma única para las pantallas, que trabajan siempre con «red + estaciones» y no con la RGNA fija.
 """
 from __future__ import annotations
 
@@ -65,21 +64,13 @@ def load(core) -> list[Network]:
                                source=source_text, origin='incluida' if _get(item, 'bundled', default=False) else
                                'instalada'))
         return out
-    if not callable(getattr(core, 'rgna_catalog', None)):
-        return []
-    info = core.rgna_catalog_info() if callable(getattr(core, 'rgna_catalog_info', None)) else {}
-    return [Network(id='rgna-inegi', name='RGNA — INEGI, México', country='MX', frame=info.get('frame', 'ITRF2008'),
-                    epoch=info.get('epoch', 2010.0), stations=list(core.rgna_catalog()),
-                    attribution=info.get('attribution', ''), license=info.get('license', ''),
-                    url='https://www.inegi.org.mx/app/geo2/rgna/', source=info.get('source', ''), origin='incluida')]
+    return []
 
 
 def guide_text(core, network: Network, station: Station, start, end) -> str | None:
     """Qué pedir en la página de la red para cubrir la sesión, si el motor lo sabe calcular para esa red."""
     if callable(getattr(core, 'station_download_guide', None)):
         return core.station_download_guide(station, start, end)
-    if callable(getattr(core, 'rgna_download_guide', None)):
-        return core.rgna_download_guide(station.id, start, end)
     return None
 
 

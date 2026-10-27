@@ -308,14 +308,15 @@ class FileList(ttk.Frame):
         self.app, self.on_remove = app, on_remove
         self.tree = ttk.Treeview(self, columns=('name', 'kind', 'size'), show='headings', height=height,
                                  selectmode='extended')
-        for key, title, width, stretch in [('name', 'Archivo', 300, True), ('kind', 'Tipo', 210, False),
-                                           ('size', 'Tamaño', 90, False)]:
+        for key, title, width, stretch in [('name', 'Archivo', 300, True), ('kind', 'Tipo', 190, True),
+                                           ('size', 'Tamaño', 80, False)]:
             self.tree.heading(key, text=title, anchor='w')
-            self.tree.column(key, width=width, minwidth=60, stretch=stretch, anchor='w')
-        self.tree.pack(side='left', fill='both', expand=True)
-        self.remove_button = ttk.Button(self, text='Quitar', style='Card.Link.TButton', command=self.remove)
+            self.tree.column(key, width=width, minwidth=90 if key == 'size' else 70, stretch=stretch, anchor='w')
+        self.tree.pack(fill='both', expand=True)
+        self.remove_button = ttk.Button(self, text='Quitar seleccionados', style='Card.Link.TButton',
+                                        command=self.remove)
         app.icons.bind(self.remove_button, 'trash-2', 16)
-        self.remove_button.pack(side='left', anchor='n', padx=(8, 0))
+        self.remove_button.pack(anchor='e', pady=(2, 0))
         self.tree.bind('<Delete>', lambda e: self.remove())
         self.tree.bind('<BackSpace>', lambda e: self.remove())
         self.paths: list[Path] = []

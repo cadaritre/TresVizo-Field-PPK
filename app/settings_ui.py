@@ -107,6 +107,13 @@ class SettingsPage(ttk.Frame):
         for name in BUILTINS:
             ttk.Radiobutton(row, text=name, value=name, variable=self.theme, style='Card.TRadiobutton',
                             command=self.preview_theme).pack(side='left', padx=(0, 18))
+        size_row = ttk.Frame(inner, style='Flat.Card.TFrame')
+        size_row.pack(fill='x', pady=(10, 0))
+        ttk.Label(size_row, text='Tamaño de letra', style='Card.TLabel').pack(side='left', padx=(0, 12))
+        self.text_size = tk.StringVar(value=v.text_size)
+        for name in ('normal', 'grande', 'muy grande'):
+            ttk.Radiobutton(size_row, text=name.capitalize(), value=name, variable=self.text_size,
+                            style='Card.TRadiobutton', command=self.preview_text_size).pack(side='left', padx=(0, 14))
         self.reduce = tk.BooleanVar(value=v.reduce_motion)
         ttk.Checkbutton(inner, text='Reducir movimiento (sin transiciones)', variable=self.reduce,
                         style='Card.TCheckbutton', command=self.touch).pack(anchor='w', pady=(10, 0))
@@ -273,6 +280,14 @@ class SettingsPage(ttk.Frame):
         self.app.settings.folder.mkdir(parents=True, exist_ok=True)
         open_in_system(self.app.settings.folder)
 
+    def preview_text_size(self):
+        from app.settings import TEXT_SIZES
+        self.app.theme.fonts.set_scale(TEXT_SIZES[self.text_size.get()])
+        self.app.theme.apply(palette(self.theme.get()))
+        self.app.after_idle(self.app.fit_nav)
+        self.touch()
+        self.saved.configure(text='Cambios sin guardar. Algunas pantallas toman el tamaño nuevo al volver a abrirlas.')
+
     def preview_theme(self):
         self.app.theme.apply(palette(self.theme.get()))
         self.touch()
@@ -281,7 +296,8 @@ class SettingsPage(ttk.Frame):
         units = next(k for k, u in UNITS.items() if u[0] == self.units.get())
         changes = {key: var.get().strip() for key, var in self.vars.items()}
         changes.update(units=units, decimals=int(self.decimals.get()), theme=self.theme.get(),
-                       reduce_motion=self.reduce.get(), check_updates=self.check_updates.get())
+                       reduce_motion=self.reduce.get(), check_updates=self.check_updates.get(),
+                       text_size=self.text_size.get())
         choice = self.chooser.get()
         changes.update(crs_id=choice.crs_id, zone=choice.zone, geoid_id=choice.geoid_id)
         if self.new_folder is not None:

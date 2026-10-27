@@ -25,6 +25,9 @@ UNITS = {'m': ('metros', 'm', 1.0),
          'ft': ('pies internacionales', 'ft', 0.3048)}
 
 
+TEXT_SIZES = {'normal': 1.0, 'grande': 1.2, 'muy grande': 1.4}
+
+
 class SettingsError(Exception):
     pass
 
@@ -45,7 +48,8 @@ class Preferences:
     geoid_id: str | None = CoordinateChoice.geoid_id
     recents: list[str] = field(default_factory=list)
     last_folder: str = ''
-    check_updates: bool = False             # buscar actualizaciones al abrir (solo si el usuario lo activa)
+    check_updates: bool = False
+    text_size: str = 'normal'               # «normal», «grande» o «muy grande» (accesibilidad)             # buscar actualizaciones al abrir (solo si el usuario lo activa)
 
 
 def validate(p: Preferences) -> Preferences:
@@ -57,6 +61,8 @@ def validate(p: Preferences) -> Preferences:
         raise SettingsError('Unidad de longitud desconocida.')
     if not isinstance(p.decimals, int) or not 0 <= p.decimals <= 4:
         raise SettingsError('Elige de 0 a 4 decimales.')
+    if p.text_size not in TEXT_SIZES:
+        raise SettingsError('Tamaño de letra desconocido.')
     if p.theme not in BUILTINS:
         raise SettingsError('Apariencia desconocida.')
     if not isinstance(p.recents, list) or not all(isinstance(r, str) for r in p.recents):

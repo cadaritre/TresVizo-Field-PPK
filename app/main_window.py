@@ -72,6 +72,8 @@ class Application(TkinterDnD.Tk):
         self.ui_scale = scale
         self.theme = ThemeManager(self)
         self.theme.reduce_motion = self.settings.values.reduce_motion
+        from app.settings import TEXT_SIZES
+        self.theme.fonts.set_scale(TEXT_SIZES[self.settings.values.text_size])
         self.icons = Icons(self.theme)
         self.title(APP_NAME)
         width = min(int(1240*scale), self.winfo_screenwidth()-40)
@@ -144,10 +146,33 @@ class Application(TkinterDnD.Tk):
         bottom.pack(side='bottom', fill='x')
         for name, icon in NAV_BOTTOM:
             self.nav_button(bottom, name, icon, name).pack(fill='x', pady=2)
+        self.nav_words = words
+        self.bind('<Configure>', self.fit_nav, add='+')
         self.content = ttk.Frame(self, padding=(28, 20, 28, 12))
         self.content.pack(side='left', fill='both', expand=True)
         self.content.rowconfigure(0, weight=1)
         self.content.columnconfigure(0, weight=1)
+
+    def fit_nav(self, event=None):
+        """Barra lateral: completa en ventanas anchas, más angosta en las medianas y solo iconos en las chicas."""
+        if event is not None and event.widget is not self:
+            return
+        width = self.winfo_width()
+        mode = 'full' if width >= 1180 else 'narrow' if width >= 940 else 'icons'
+        if getattr(self, 'nav_mode', None) == mode and event is not None:
+            return
+        self.nav_mode = mode
+        # El ancho crece con la letra para que ningún nombre se corte.
+        needed = max((b.winfo_reqwidth() for b in self.nav_buttons.values()), default=0)+24
+        widths = {'full': max(258, needed), 'narrow': max(214, needed), 'icons': 64}
+        self.nav.configure(width=int(widths[mode]*(1 if mode != 'icons' else self.ui_scale*self.theme.text_scale())))
+        for button in self.nav_buttons.values():
+            button.set_compact(mode == 'icons')
+        if mode == 'icons':
+            self.nav_words.pack_forget()
+        elif not self.nav_words.winfo_manager():
+            self.nav_words.pack(side='left', padx=(10, 0))
+        self.content.configure(padding=(28, 20, 28, 12) if mode == 'full' else (18, 16, 18, 10))
 
     def nav_button(self, parent, name, icon, tip):
         button = ttk.Button(parent, text=name, style='Nav.TButton', command=lambda: self.show(name))

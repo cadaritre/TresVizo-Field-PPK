@@ -31,11 +31,11 @@ class NetworksPage(ttk.Frame):
         holder.pack(fill='x')
         self.net_tree = ttk.Treeview(holder, columns=('name', 'country', 'frame', 'stations', 'state'),
                                      show='headings', height=4, selectmode='browse')
-        for key, title, width, stretch in [('name', 'Red', 260, True), ('country', 'País', 120, False),
+        for key, title, width, stretch in [('name', 'Red', 260, True), ('country', 'País', 90, False),
                                            ('frame', 'Marco y época oficial', 200, False),
                                            ('stations', 'Estaciones', 90, False), ('state', 'Estado', 170, False)]:
             self.net_tree.heading(key, text=title, anchor='w')
-            self.net_tree.column(key, width=width, minwidth=60, stretch=stretch, anchor='w')
+            self.net_tree.column(key, width=width, minwidth=200 if key == 'name' else 70, stretch=stretch, anchor='w')
         scrolled(self.net_tree, holder)
         self.net_tree.bind('<<TreeviewSelect>>', lambda e: self.network_selected())
         self.net_detail = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')

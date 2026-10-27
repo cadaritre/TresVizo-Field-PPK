@@ -304,6 +304,7 @@ def test_dropping_files_fills_fields_with_their_origin(app, tmp_path):
     points.add_own_files([f['S-20261024-150214.bin']])
     pump(app, lambda: points.job.rinex_position is not None)
     assert points.own_height.get() == '1.800' and points.job.own_source == 'rinex'
-    assert 'aproximada' in points.from_rinex.cget('text')
+    assert 'aproximada' in points.from_rinex.cget('text').lower()
+    assert points.job.station().coordinate_origin == 'rinex-header' and points.job.station().approximate
     from app.wizard import errors
     assert errors(points.job.step_issues(0)) == []
