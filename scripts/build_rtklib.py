@@ -69,12 +69,18 @@ def build_program(cc: str, name: str, main_c: Path, modules: list[str], out_dir:
     obj_dir.mkdir(parents=True, exist_ok=True)
     if _is_msvc(cc):
         cmd = [cc, "/nologo", "/O2", "/W1", "/D_CRT_SECURE_NO_WARNINGS", f"/Fo{obj_dir}\\"]
+        # RTKLIB y crx2rnx eligen Windows con `WIN32`, que el compilador de Microsoft no define (solo `_WIN32`).
+        cmd.append("/DWIN32")
         cmd += [f"/D{d}" for d in DEFINES] if include else []
         if include:
             cmd.append(f"/I{include}")
         cmd += [str(s) for s in sources] + [f"/Fe{exe}", "/link"] + [f"{lib}.lib" for lib in extra_libs]
     else:
         cmd = [cc, "-std=c99", "-O3", "-w"]
+        # Con -std=c99 (modo estricto) MinGW define `_WIN32` pero no `WIN32`, y RTKLIB elige Windows con `WIN32`:
+        # sin esto busca cabeceras de Unix (sys/select.h). Los makefiles de RTKLIB para MinGW lo ponen igual.
+        if sys.platform == "win32":
+            cmd.append("-DWIN32")
         cmd += [f"-D{d}" for d in DEFINES] if include else []
         if include:
             cmd.append(f"-I{include}")
