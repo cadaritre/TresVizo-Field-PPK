@@ -384,3 +384,14 @@ def test_own_base_from_rinex_reads_arp_height_and_candidates_after_network_use(a
     assert page.own_height_field.title.cget('text') == 'Altura de la antena a la ARP (m)'
     assert page.own_height.get() == '0.0083'
     assert 'oficial (catálogo de su red)' in '\n'.join(page.summary_lines())
+
+
+def test_sidebar_fits_every_name_from_the_start(app):
+    """La barra lateral mide sus botones ya armados: «Estaciones de referencia» no se corta al abrir."""
+    app.geometry('1280x820')
+    end = time.monotonic()+1.0
+    while time.monotonic() < end:
+        app.update()
+        time.sleep(0.01)
+    needed = max(b.winfo_reqwidth() for b in app.nav_buttons.values())
+    assert int(app.nav.cget('width')) >= needed+24

@@ -94,6 +94,7 @@ class Application(TkinterDnD.Tk):
         self.protocol('WM_DELETE_WINDOW', self.close)
         self.show('Inicio')
         self.deiconify()
+        self.after(200, self.fit_nav)
         if self.settings.recovered_from:
             self.after(300, lambda: messagebox.showwarning(
                 'Preferencias restablecidas', 'Las preferencias estaban dañadas y se restablecieron. El archivo '
@@ -165,13 +166,19 @@ class Application(TkinterDnD.Tk):
             return
         width = self.winfo_width()
         mode = 'full' if width >= 1180 else 'narrow' if width >= 940 else 'icons'
-        if getattr(self, 'nav_mode', None) == mode and event is not None:
-            return
-        self.nav_mode = mode
-        # El ancho crece con la letra para que ningún nombre se corte.
+        # El ancho crece con la letra para que ningún nombre se corte. Se mide siempre (no solo al cambiar de modo):
+        # la primera vez los botones aún no tienen su tamaño final y la barra se quedaba angosta, cortando
+        # «Estaciones de referencia» y, con letra muy grande, casi todos los nombres.
+        if mode != 'icons':
+            for button in self.nav_buttons.values():
+                button.set_compact(False)
         needed = max((b.winfo_reqwidth() for b in self.nav_buttons.values()), default=0)+24
         widths = {'full': max(258, needed), 'narrow': max(214, needed), 'icons': 64}
-        self.nav.configure(width=int(widths[mode]*(1 if mode != 'icons' else self.ui_scale*self.theme.text_scale())))
+        target = int(widths[mode]*(1 if mode != 'icons' else self.ui_scale*self.theme.text_scale()))
+        if getattr(self, 'nav_mode', None) == mode and event is not None and int(self.nav.cget('width')) == target:
+            return
+        self.nav_mode = mode
+        self.nav.configure(width=target)
         for button in self.nav_buttons.values():
             button.set_compact(mode == 'icons')
         if mode == 'icons':
