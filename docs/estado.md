@@ -109,6 +109,19 @@
   la red (la descarga directa solo aparece si `can_download_station()` lo permite; hoy la RGNA no).
 - Actualizaciones desde GitHub Releases (`app/updates.py`) con manifiesto firmado Ed25519 y `scripts/firmar_version.py`.
 - Proyectos `.tvppk` con rutas relativas, SHA-256, aviso de archivos cambiados, número de proyecto y coordenada final.
+- Robustez (27-10-2026, paquete 1 de la auditoría):
+  - **Reabrir mientras se procesa.** Pregunta si se cancela el proceso y espera a que termine. Cada proyecto en
+    pantalla tiene su generación, y un resultado viejo nunca cae en el nuevo. Cada lectura usa su propia carpeta
+    temporal. Los `after` de Tk van en la ventana principal (`components.later`).
+  - **Comprobación con el motor real.** El arnés de la auditoría (`reabrir2.py`) hizo 38 pasos con dos proyectos de
+    la RGNA, reabriéndolos durante el proceso, en 40 s y sin ningún error.
+  - **La estación del rover no es base.** Si está a menos de 30 m o tiene su clave, sale «Es el rover» y no se puede
+    usar. El motor da un `UserError` si una línea base mide menos de 1 m o usa los mismos archivos que el rover.
+  - **Base escrita a mano.** Lleva su marco y su época, se guardan en el proyecto y el informe los dice. Se avisa si
+    no son los de la red de la zona (no se transforma), y el receptor sale de la grabación.
+  - **Otros arreglos.** La tabla de líneas base muestra la clave y el nombre completo. Hay un campo «Lugar» para la
+    firma. Con letra «muy grande», la ventana ya no se congela.
+  - **Sin verificar.** No hay capturas de pantalla: `screencapture` no tiene permiso en el entorno de los agentes.
 - Pruebas: la suite completa pasa (212, 3 omitidas), entre ellas 81 de la interfaz, proyectos y actualizaciones.
 - PyInstaller: `TresVizo Field PPK.app` con RTKLIB y datos incluidos; su autoprueba pasa entera (interfaz, tkdnd,
   motor, sistemas, informe, exportación, binarios, datos); DMG de arm64 armado (51.7 MB) en este equipo, con el
