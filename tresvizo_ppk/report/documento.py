@@ -34,9 +34,20 @@ PAGE = A4
 CONTENT_WIDTH = PAGE[0] - estilo.MARGINS["left"] - estilo.MARGINS["right"]
 
 
+# Subíndices y el signo menos volado que la letra del informe no trae (W₀, m²s⁻² en las fichas de los geoides): se
+# escriben con el marcado de ReportLab.
+_NO_GLYPH = {**{chr(0x2080 + d): f"<sub>{d}</sub>" for d in range(10)},
+             **{f"\u207b{sup}": f"<super>−{d}</super>" for d, sup in enumerate("⁰¹²³⁴⁵⁶⁷⁸⁹")},
+             "\u207b": "<super>−</super>"}
+
+
 def text(value) -> str:
     """Texto del usuario o de los datos, escapado para el marcado de ReportLab."""
-    return escape(str(value)).replace("\n", "<br/>")
+    out = escape(str(value)).replace("\n", "<br/>")
+    for char, markup in _NO_GLYPH.items():
+        if char in out:
+            out = out.replace(char, markup)
+    return out
 
 
 class _NumberedCanvas(rl_canvas.Canvas):

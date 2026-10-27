@@ -275,11 +275,13 @@ def warnings_section(r: Report, warnings: list[str]) -> None:
         r.para("Sin avisos.")
 
 
-def annex(r: Report, log: list[str]) -> None:
+def annex(r: Report, log: list[str], project: Project | None = None) -> None:
     r.page_break()
     r.h1("Anexo: bitácora del proceso")
     r.para("Versión de RTKLIB, configuración completa y avisos, tal como quedaron en el proyecto.", "small")
-    r.log(log)
+    # La carpeta del proyecto es de este equipo: va en la bitácora, no en los datos del informe.
+    head = [f"Carpeta del proyecto: {project.folder}"] if project is not None and project.folder else []
+    r.log(head + list(log))
 
 
 def ecef_sigma(cov) -> tuple[float, float, float]:

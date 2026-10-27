@@ -8,7 +8,7 @@ from reportlab.platypus import Paragraph
 
 from ..crs import api as crs
 from ..model import Ecef, Enu, Project, Solution, StaticResult, UserProfile
-from . import calculos, estilo, secciones
+from . import calculos, estilo, normas, secciones
 from .documento import Report, text
 from .estilo import num, signed
 
@@ -128,6 +128,10 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
                ("Bases", ", ".join(secciones.station_label(b) for b in result.bases) or "—"),
                ("Cálculo", "ajuste por mínimos cuadrados de las líneas base" if result.adjustment else
                 "una sola línea base, sin ajuste")]
+    acc = normas.accuracy(result.sigma_enu, c) if kind != "error" else None
+    if acc is not None:
+        summary.append(("Orden de exactitud", f"{normas.order_text(acc)} (CEP95 {num(acc.cep95_m, 3)} m, "
+                                              "NT EEP art. 8)"))
     r.fields(summary, columns=2, label_width=70)
     r.space(4)
     r.callout(kind, f"Resultado: {status}", reasons or ["Todas las líneas base resueltas y el ajuste dentro de "
@@ -158,15 +162,18 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
         h_sigma = crs.height_sigma(s.u, c)
         prec.append((f"σ de la cota (con el geoide ±{num(c.geoid_uncertainty_m, 2)} m)", num(h_sigma, 3, "m")))
     r.fields(prec, columns=2, label_width=120)
-    r.para("σ es la desviación típica (1σ) del proceso. Al 95 %: 1.96σ en la vertical y 2.45σ (círculo de una "
-           "normal bidimensional) en la horizontal. La cota hereda además la incertidumbre del geoide.", "small")
+    if acc is not None:
+        r.space(4)
+        r.fields(normas.accuracy_fields(acc, normas.height_name(c)), columns=1, label_width=230)
+    r.para(text("σ es la desviación típica (1σ) del proceso. Vertical al 95 %: 1.96σ de la altura elipsoidal. "
+                + normas.HORIZONTAL_NOTE + " La cota hereda además la incertidumbre del geoide. "
+                + normas.accuracy_note(acc)), "small")
 
     # 2. Proyecto y sistema -------------------------------------------------------------------------------------------
     r.h1("Proyecto")
     proj_pairs = [("Proyecto", project.name or "—"), ("Número", project.number or "—"),
                   ("Creado", estilo.utc_text(project.created)), ("Procesado", estilo.utc_text(project.processed)),
-                  ("Altura del bastón", num(project.pole_height_m, 3, "m")),
-                  ("Carpeta", str(project.folder) if project.folder else "—")]
+                  (pole_label(result.rover), num(project.pole_height_m, 3, "m"))]
     r.fields(proj_pairs, columns=2, label_width=80)
     secciones.system_section(r, c, choice, problem, secciones.frame_text(result.position))
     secciones.options_section(r, options, {b.ephemeris for b in result.baselines}, result.log)
@@ -271,8 +278,17 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
         all_warnings.append(problem)
     secciones.warnings_section(r, list(dict.fromkeys(all_warnings)))
     r.brand()
-    secciones.annex(r, result.log)
+    secciones.annex(r, result.log, project)
+    usable = kind != "error"
+    normas.signature_section(r, normas.declaration(result.bases, result.position if usable else None, c, usable),
+                             project, user)
     return r.build(out_pdf, subject=f"Línea base · {result.point_name}")
+
+
+def pole_label(rover) -> str:
+    """La misma etiqueta que el asistente: con una grabación de un Meridian la altura es la del bastón o trípode (a
+    la base del receptor; el motor le suma el case); con cualquier otro RINEX, la de la antena a la ARP."""
+    return "Altura del bastón o trípode" if rover.receiver_model else "Altura de la antena a la ARP"
 
 
 def _overall_solution(result: StaticResult) -> str:

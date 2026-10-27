@@ -3,6 +3,7 @@ valores críticos de la prueba χ² del ajuste. Sin dependencias fuera de la bib
 from __future__ import annotations
 
 import math
+from decimal import Decimal
 
 from ..model import Ecef, Matrix3
 
@@ -67,6 +68,53 @@ def horizontal_95(sigma_e: float, sigma_n: float) -> float:
 
 def vertical_95(sigma_u: float) -> float:
     return K95_1D * sigma_u
+
+
+# --- Norma Técnica de Estándares de Exactitud Posicional (INEGI, DOF 23-12-2010) -----------------------------------
+# Factores tal como los escribe la norma (no los redondeados de arriba), para que la cifra sea la de su fórmula.
+CEP95_FACTOR = 1.2238       # art. 6: CEP95 = 1.2238 (σφ + σλ), σ de la latitud y de la longitud en metros
+EPV_FACTOR = 1.9600         # art. 7: EPV = 1.9600 σ; art. 12: EPV = 1.9600 (σGNSS² + σN²)^½
+
+# Art. 8, tabla 1 «Órdenes de Exactitud Posicional Horizontal»: el límite superior de cada rango, en milímetros
+# («Hasta 0.010 metros», «De 0.011 a 0.020 metros», …, «De 200.001 a 500.000 metros»).
+ACCURACY_ORDERS: tuple[tuple[int, str], ...] = (
+    (10, "1 centímetro"), (20, "2 centímetros"), (50, "5 centímetros"), (100, "1 decímetro"),
+    (200, "2 decímetros"), (500, "5 decímetros"), (1_000, "1 metro"), (2_000, "2 metros"), (5_000, "5 metros"),
+    (10_000, "10 metros"), (20_000, "20 metros"), (50_000, "50 metros"), (100_000, "100 metros"),
+    (200_000, "200 metros"), (500_000, "500 metros"))
+
+
+def cep95(sigma_lat_m: float, sigma_lon_m: float) -> float:
+    """NT EEP art. 6: CEP95 = 1.2238 (σφ + σλ), con σφ y σλ las desviaciones estándar (1σ) de la latitud y la
+    longitud en metros (σ Norte y σ Este). La norma no pone condición sobre su cociente."""
+    return CEP95_FACTOR * (sigma_lat_m + sigma_lon_m)
+
+
+def epv(sigma_m: float) -> float:
+    """NT EEP art. 7: EPV = 1.9600 σ de la altura geodésica (u ortométrica)."""
+    return EPV_FACTOR * sigma_m
+
+
+def epv_gnss_leveling(sigma_gnss_m: float, sigma_geoid_m: float) -> float:
+    """NT EEP art. 12, nivelación GNSS: EPV = 1.9600 (σGNSS² + σN²)^½, con σN la del modelo geoidal del INEGI."""
+    return EPV_FACTOR * math.sqrt(sigma_gnss_m ** 2 + sigma_geoid_m ** 2)
+
+
+def millimeters(value_m: float) -> int:
+    """La cifra en milímetros tal como sale impresa con tres decimales (la misma con la que se clasifica)."""
+    return int(Decimal(f"{value_m:.3f}") * 1000)
+
+
+def accuracy_order(cep95_m: float | None) -> str | None:
+    """NT EEP art. 8, tabla 1: el orden de exactitud horizontal del CEP95, comparado al milímetro como lo da la
+    tabla (0.0104 m → 0.010 → «1 centímetro»; 0.0106 m → 0.011 → «2 centímetros»). None sin dato o pasado de 500 m."""
+    if cep95_m is None or not math.isfinite(cep95_m) or cep95_m < 0:
+        return None
+    mm = millimeters(cep95_m)
+    for limit, name in ACCURACY_ORDERS:
+        if mm <= limit:
+            return name
+    return None
 
 
 def azimuth_zenith(base: Ecef, vector: tuple[float, float, float]) -> tuple[float, float]:

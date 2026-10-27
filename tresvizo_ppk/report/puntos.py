@@ -7,7 +7,7 @@ from pathlib import Path
 
 from ..crs import api as crs
 from ..model import CoordinateChoice, Ecef, Enu, PointsResult, ProcessedPoint, Project, Solution, UserProfile
-from . import calculos, estilo, graficas, secciones
+from . import calculos, estilo, graficas, normas, secciones
 from .documento import Report, text
 from .estilo import num, signed
 from .rtklib_salida import read_pos
@@ -76,6 +76,8 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     for p in points:
         c, problem = secciones.transform_or_none(p.position, point_choice)
         coords.append((p, c, problem))
+    accs = [normas.accuracy(p.sigma_enu, c) if p.position is not None else None for p, c, _ in coords]
+    orders = Counter(normas.order_text(a) for a in accs if a is not None)
 
     # 1. Resumen ------------------------------------------------------------------------------------------------------
     r.h1("Resumen")
@@ -86,6 +88,9 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
                ("Épocas fijas de la trayectoria", f"{num(100 * result.fix_rate, 1)} %"),
                ("Base", secciones.station_label(result.base)),
                ("Origen de la base", _base_origin(result.base, project))]
+    if orders:
+        summary.append(("Orden de exactitud (NT EEP art. 8)", "; ".join(
+            f"{name}: {n} punto{'s' if n != 1 else ''}" for name, n in sorted(orders.items(), key=_order_key))))
     r.fields(summary, columns=2, label_width=120)
     if counts[Solution.FIXED] == total and total:
         kind, title = "success", "Todos los puntos fijos"
@@ -133,21 +138,22 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     hl = secciones.height_label(first)
     rows, highlight = [], {}
     for i, (p, c, problem) in enumerate(coords):
+        order = normas.order_text(accs[i])
         if c is None:
             rows.append([p.point.name, p.point.code, "—", "—", "—", "—",
-                         secciones.POINT_SOLUTION_NAMES[p.solution]])
+                         secciones.POINT_SOLUTION_NAMES[p.solution], order])
         elif c.easting_m is not None:
             rows.append([p.point.name, p.point.code, num(c.northing_m, 3), num(c.easting_m, 3),
                          num(secciones.height_value(c), 3), num(c.ellipsoidal_height_m, 3),
-                         secciones.POINT_SOLUTION_NAMES[p.solution]])
+                         secciones.POINT_SOLUTION_NAMES[p.solution], order])
         else:
             rows.append([p.point.name, p.point.code, estilo.lat_text(c.latitude_deg), estilo.lon_text(c.longitude_deg),
                          num(secciones.height_value(c), 3), num(c.ellipsoidal_height_m, 3),
-                         secciones.POINT_SOLUTION_NAMES[p.solution]])
+                         secciones.POINT_SOLUTION_NAMES[p.solution], order])
         if p.solution != Solution.FIXED:
             highlight[i] = estilo.SEMANTIC["warning_bg"] if p.solution != Solution.NONE else estilo.SEMANTIC["error_bg"]
-    r.table(["Punto", "Código", a1, a2, hl.split(" (")[0] + " (m)", "h (m)", "Solución"], rows,
-            widths=[60, 55, 82, 82, 70, 70, 70], right={2, 3, 4, 5}, highlight=highlight)
+    r.table(["Punto", "Código", a1, a2, hl.split(" (")[0] + " (m)", "h (m)", "Solución", "Orden de exactitud"], rows,
+            widths=[52, 46, 74, 74, 60, 56, 62, 66], right={2, 3, 4, 5}, highlight=highlight)
     r.space(6)
     r.h2("Calidad de cada punto")
     qrows = []
@@ -167,6 +173,26 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
             widths=[55, 42, 42, 58, 58, 44, 48, 48, 48, 56], right={1, 2, 5, 6, 7, 8}, highlight=highlight)
     r.para("σH = √(σE² + σN²) y σV de las épocas promediadas (1σ). ΔH y ΔV: posproceso menos lo medido en campo. "
            "Un punto sin épocas fijas se promedia con las flotantes y queda marcado como FLOTANTE.", "small")
+    r.space(6)
+    r.h2("Exactitud posicional (NT EEP, DOF 23-12-2010)")
+    has_h = any(a is not None and a.epv_orthometric_m is not None for a in accs)
+    erows = []
+    for (p, c, _), a in zip(coords, accs):
+        s_ = p.sigma_enu
+        erows.append([p.point.name, num(s_.n, 3) if s_ and a else "—", num(s_.e, 3) if s_ and a else "—",
+                      num(calculos.horizontal_95(s_.e, s_.n), 3) if s_ and a else "—",
+                      num(a.cep95_m, 3) if a else "—", normas.order_text(a),
+                      num(a.epv_ellipsoidal_m, 3) if a else "—"]
+                     + ([num(a.epv_orthometric_m, 3) if a and a.epv_orthometric_m is not None else "—"] if has_h
+                        else []))
+    heads = ["Punto", "σφ = σN (m)", "σλ = σE (m)", "Horizontal 95 % círculo (m)", "CEP95 art. 6 (m)",
+             "Orden art. 8", "EPV h art. 7 (m)"] + ([f"EPV {secciones.height_label(first).split(' (')[0].lower()} "
+                                                       f"art. 12 (m)"] if has_h else [])
+    r.table(heads, erows, widths=[55, 55, 55, 70, 62, 72, 60] + ([62] if has_h else []),
+            right={1, 2, 3, 4, 6, 7}, highlight=highlight)
+    r.para(text(normas.HORIZONTAL_NOTE + " EPV h: 1.9600·σ de la altura elipsoidal. "
+                + normas.accuracy_note(next((a for a in accs if a is not None and a.epv_orthometric_m is not None),
+                                            None))), "small")
 
     # 5. Trayectoria --------------------------------------------------------------------------------------------------
     r.h1("Trayectoria")
@@ -215,8 +241,15 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     if first is not None and first.attribution:
         r.para(" ".join(text(a) for a in first.attribution), "small")
     r.brand()
-    secciones.annex(r, result.log)
+    secciones.annex(r, result.log, project)
+    solved = any(p.position is not None and p.solution != Solution.NONE for p in points)
+    normas.signature_section(r, normas.declaration([result.base], result.base.position, first, solved), project, user)
     return r.build(out_pdf, subject=f"PPK · {project.name or result.rover.marker}")
+
+
+def _order_key(item: tuple[str, int]) -> int:
+    names = [name for _, name in calculos.ACCURACY_ORDERS]
+    return names.index(item[0]) if item[0] in names else len(names)
 
 
 def _base_origin(base, project: Project) -> str:
