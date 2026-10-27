@@ -72,6 +72,13 @@ class ObservationSet:
     rinex_version: str = ""
     source_files: list[Path] = field(default_factory=list)   # lo que entregó el usuario, tal cual
     antenna_pco_measured: bool | None = None  # PCO de la antena medido (True), sin medir (False) o no se sabe (None)
+    # Añadido por el motor:
+    radome: str = ""                         # radomo de la antena (ANTEX), «NONE» si no lleva
+    approx_position: Ecef | None = None      # APPROX POSITION XYZ del RINEX (decenas de metros)
+    receiver_model: str = ""                 # «MeridianV» / «MeridianVI» si es una grabación de esos receptores
+    case_offset_m: float | None = None       # base del receptor → ARP de los Meridian (0.116 / 0.152 m)
+    epochs: int = 0
+    warnings: list[str] = field(default_factory=list)          # de la conversión, la unión y el recorte
 
 
 @dataclass
@@ -139,6 +146,12 @@ class BaselineSolution:
     pos_file: Path | None = None
     stat_file: Path | None = None
     warnings: list[str] = field(default_factory=list)
+    # Añadido por el motor:
+    fix_rate: float = 0.0                      # épocas fijas / épocas con solución
+    strategy: str = ""                         # «L1+L2, ionosfera estimada, ambigüedades fijas»…
+    config_file: Path | None = None            # configuración de RTKLIB usada
+    formal_sigma_enu: Enu | None = None        # σ formal de RTKLIB (antes del modelo de error)
+    antenna_notes: list[str] = field(default_factory=list)   # qué calibración de antena se usó en cada extremo
 
 
 @dataclass
@@ -152,6 +165,11 @@ class AdjustmentResult:
     degrees_of_freedom: int
     passed: bool                               # prueba chi² al 95 %
     flagged_baselines: list[str] = field(default_factory=list)
+    # Añadido por el motor:
+    standardized_residuals: dict[str, Enu] = field(default_factory=dict)   # prueba w de Baarda por componente
+    critical_value: float = 0.0                # valor crítico de la prueba w
+    chi2_lower: float = 0.0                    # límites de la prueba chi² al 95 %
+    chi2_upper: float = 0.0
 
 
 @dataclass
@@ -166,6 +184,11 @@ class StaticResult:
     sigma_enu: Enu
     log: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # Añadido por el motor:
+    base_quality: dict[str, DataQuality] = field(default_factory=dict)   # id de la base → calidad de sus datos
+    ephemeris: Ephemeris = Ephemeris.BROADCAST
+    precise_files: list[str] = field(default_factory=list)              # nombres de los SP3 usados
+    rtklib_version: str = ""
 
 
 # --- Resultados: PPK de puntos ---------------------------------------------------------------------------------------
@@ -194,6 +217,10 @@ class ProcessedPoint:
     distance_to_base_m: float | None
     delta_from_field_enu: Enu | None
     message: str = ""                          # por qué no se posprocesó o qué avisar
+    # Añadido por el motor:
+    antenna_position: Ecef | None = None       # la antena (ARP) promediada, antes de bajar la altura
+    height_used_m: float | None = None         # altura vertical restada (marca → ARP)
+    epochs_float: int = 0
 
 
 @dataclass
@@ -206,6 +233,14 @@ class PointsResult:
     fix_rate: float = 0.0                      # épocas fijas / épocas con solución
     log: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    # Añadido por el motor:
+    base_quality: DataQuality | None = None
+    stat_file: Path | None = None
+    config_file: Path | None = None
+    ephemeris: Ephemeris = Ephemeris.BROADCAST
+    precise_files: list[str] = field(default_factory=list)
+    rtklib_version: str = ""
+    trajectory: list[tuple[datetime, Ecef, Solution]] = field(default_factory=list)   # para la gráfica
 
 
 # --- Sistemas de coordenadas, usuario y proyecto ---------------------------------------------------------------------
