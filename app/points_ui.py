@@ -10,12 +10,13 @@ from tresvizo_ppk import project as projects
 from tresvizo_ppk.model import Ephemeris, Solution
 
 from app import tasks
+from tresvizo_ppk.nombres import display_name
 from app.charts import BarChart, PlanChart, enu_of
 from app.components import DropZone, FileList, LabeledEntry, ThinScrollbar, card, wrap_label
-from app.formatting import dms, horizontal, solution_key, solution_text
+from app.formatting import dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import PointsJob, classify
-from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, BasePanel, OptionsPanel, WizardPage, ecef_text
+from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text
 from app.static_ui import RECORDING_TYPES
 
 EXPORTS = [('field_csv', 'CSV de TresVizo Field…', '.csv', 'CSV de TresVizo Field'),
@@ -399,14 +400,13 @@ class PointsPage(WizardPage):
                       else 'escrita a mano')
             base = f'Base propia {job.own_name or "—"}, altura {job.own_height or "—"} m, coordenada {origin}'
         o = job.options
-        lines = [base+f' · {len(job.base.files)} archivo(s)', f'Rover: {len(job.rover_files)} archivo(s)',
+        lines = [base+f' · {plural(len(job.base.files), "archivo")}', f'Rover: {plural(len(job.rover_files), "archivo")}',
                  f'Puntos: {Path(job.csv_file).name if job.csv_file else "—"}'
                  + (f' ({len(self.csv_points)} puntos)' if getattr(self, 'csv_points', None) else ''),
                  f'Proceso: cinemático, {"combinado adelante/atrás" if o.combined else "adelante"}, máscara '
                  f'{o.elevation_mask_deg:g}°, efemérides {"precisas" if o.ephemeris is Ephemeris.PRECISE else "difundidas"}',
                  'Cada punto: promedio de las épocas fijas de su ocupación (o flotantes, marcadas), todo plomeado.',
-                 f'Resultado en {job.coordinates.label or job.coordinates.crs_id}'
-                 + (f' + {job.coordinates.geoid_id.upper()}' if job.coordinates.geoid_id else '')]
+                 f'Resultado en {choice_text(self.app, job.coordinates)}']
         if self.path:
             lines.append(f'Carpeta de trabajo: {projects.workdir(self.project or self.make_project(self.path.parent), self.path)}')
         return lines
@@ -478,7 +478,7 @@ class PointsPage(WizardPage):
         result, choice = self.output['result'], self.output['choice']
 
         def done(path):
-            self.app.set_status(f'Puntos exportados en {path}.')
+            self.app.set_status(f'Puntos exportados: {Path(path).name}.', Path(path).parent)
 
         def failed(kind_, message, detail):
             self.app.show_error(kind_, message, detail, 'No se pudo exportar')
@@ -506,7 +506,8 @@ class PointsPage(WizardPage):
                  f'Base: {result.base.id} · {result.base.name} ({"oficial" if result.base.official else result.base.source})',
                  f'{len(result.points)} puntos del CSV']
         q = result.rover_quality
-        lines.append(f'Rover: {q.epochs} épocas · {len(q.gaps)} hueco(s) · {len(q.satellites)} satélites')
+        lines.append(f'Rover: {plural(q.epochs, "época")} · {plural(len(q.gaps), "hueco")} · '
+                     f'{plural(len(q.satellites), "satélite")}')
         for line in lines:
             wrap_label(inner, line, style='Card.TLabel', margin=40).pack(fill='x', pady=(6, 0))
         frame, inner = card(top, 'Puntos en planta')
@@ -563,6 +564,9 @@ class PointsPage(WizardPage):
                 p.point.name, p.point.code, a, b, h, format_length(horizontal(p.sigma_enu), prefs),
                 format_length(None if p.sigma_enu is None else p.sigma_enu.u, prefs),
                 f'{p.epochs_fixed}/{p.epochs_total}', solution_text(p.solution), delta))
+        from app.components import CellTips, fit_columns
+        fit_columns(tree, self.app, stretch='name')
+        CellTips(tree, self.app)
         tree.pack(fill='x')
         scroll = ThinScrollbar(inner, tree.xview, orient='horizontal')
         tree.configure(xscrollcommand=scroll.set)

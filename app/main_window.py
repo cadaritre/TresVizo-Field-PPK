@@ -121,8 +121,14 @@ class Application(TkinterDnD.Tk):
         return ImageTk.PhotoImage(image, master=self)
 
     def shell(self):
-        self.status_bar = ttk.Label(self, textvariable=self.status, style='Subtitle.TLabel', padding=(20, 6))
+        self.status_bar = ttk.Frame(self, padding=(20, 4))
         self.status_bar.pack(side='bottom', fill='x')
+        ttk.Label(self.status_bar, textvariable=self.status, style='Subtitle.TLabel').pack(side='left')
+        self.status_folder = None
+        self.status_button = ttk.Button(self.status_bar, text='Abrir carpeta', style='Link.TButton',
+                                        command=lambda: self.status_folder and self.guard(open_in_system,
+                                                                                          self.status_folder))
+        self.icons.bind(self.status_button, 'folder-open', 14)
         ttk.Separator(self, orient='horizontal').pack(side='bottom', fill='x')
         nav = self.nav = ttk.Frame(self, style='Nav.TFrame', padding=(10, 14), width=int(258*self.ui_scale))
         nav.pack(side='left', fill='y')
@@ -323,8 +329,14 @@ class Application(TkinterDnD.Tk):
 
     # --- Mensajes, errores y cierre ----------------------------------------------------------------------------------
 
-    def set_status(self, text):
+    def set_status(self, text, folder=None):
+        """Mensaje breve (sin rutas largas); con `folder`, un botón para abrir esa carpeta."""
         self.status.set(text)
+        self.status_folder = Path(folder) if folder else None
+        if self.status_folder is not None:
+            self.status_button.pack(side='left', padx=(10, 0))
+        else:
+            self.status_button.pack_forget()
 
     def guard(self, fn, *args):
         try:

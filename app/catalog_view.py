@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import unicodedata
 
+from tresvizo_ppk.nombres import display_name
+
 CLASSES = {  # clave → (título, icono Lucide, token de color)
     'projected': ('Sistemas proyectados', 'map', 'chart1'),
     'geographic': ('Sistemas geográficos', 'globe', 'chart2'),
@@ -114,7 +116,7 @@ def system_details(info, definition) -> list[tuple[str, str]]:
     rows = []
     if definition is not None:
         rows.append(('Código', definition.code))
-        rows.append(('Datum', definition.datum or '—'))
+        rows.append(('Datum', display_name(definition.datum) or '—'))
         e = definition.ellipsoid
         if e is not None:
             rows.append(('Elipsoide', f'{e.name} (a = {_fmt(e.a, 3)} m, 1/f = {_fmt(e.rf, 9)})'))
@@ -172,12 +174,14 @@ def build(crs, networks=()) -> list[Entry]:
         package = packages.get(info.origin)
         bundled = info.origin in ('fábrica', 'fabrica') or (package is not None and package.bundled)
         entries.append(Entry(
-            cls=cls, key='sys:'+info.code, title=info.name, code=info.code if info.code.startswith('EPSG') else '',
-            subtitle=('Zona automática por la longitud' if info.kind == 'family' else info.datum),
+            cls=cls, key='sys:'+info.code, title=display_name(info.name),
+            code=info.code if info.code.startswith('EPSG') else '',
+            subtitle=('Zona automática por la longitud' if info.kind == 'family' else display_name(info.datum)),
             countries=_system_countries(info, packages), installed=True, bundled=bundled,
             update=bool(package and package.update_available), downloadable=bool(package and package.downloadable),
             item_id='' if bundled else info.origin, package=package.title if package else 'De fábrica',
-            details=system_details(info, definition), extra_search=info.datum))
+            details=([('Nombre EPSG', info.name)] if display_name(info.name) != info.name else [])
+            + system_details(info, definition), extra_search=f'{info.datum} {info.name}'))
     for item in items:
         if item.kind == 'factory':
             continue

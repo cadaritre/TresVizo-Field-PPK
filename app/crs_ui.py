@@ -5,6 +5,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from tresvizo_ppk.model import CoordinateChoice
+from tresvizo_ppk.nombres import display_name
 
 from app import tasks
 from app.components import Banner, ProgressPanel, ScrollFrame, card, scrolled, wrap_label
@@ -74,7 +75,7 @@ class CoordinateChooser(ttk.Frame):
 
     @staticmethod
     def system_text(s):
-        return s.name+(f' · {s.accuracy_text}' if s.accuracy_text else '')
+        return display_name(s.name)+(f' · {s.accuracy_text}' if s.accuracy_text else '')
 
     def set(self, choice: CoordinateChoice):
         self.choice = choice
@@ -103,7 +104,7 @@ class CoordinateChooser(ttk.Frame):
         if system is None:
             self.note.configure(text='')
             return
-        parts = [p for p in (system.datum, system.frame, system.accuracy_text) if p]
+        parts = [p for p in (display_name(system.datum), system.frame, system.accuracy_text) if p]
         if system.missing_grids:
             parts.append('Falta la rejilla de transformación: bájala en Sistemas y geoides.')
         if self.geoid_var.get() == NO_GEOID:
@@ -133,7 +134,7 @@ class CoordinateChooser(ttk.Frame):
             return self.choice
         return CoordinateChoice(crs_id=system.code, zone='' if zone in (AUTO_ZONE, '—', '') else zone,
                                 geoid_id=geoid.id if geoid else None,
-                                label=system.name)
+                                label=display_name(system.name))
 
 
 class CrsPage(ttk.Frame):
@@ -199,6 +200,8 @@ class CrsPage(ttk.Frame):
         self.tree.column('code', width=110, minwidth=80, stretch=False)
         self.tree.column('state', width=120, minwidth=100, stretch=False)
         scrolled(self.tree, self.list_card)
+        from app.components import CellTips
+        CellTips(self.tree, app)
         self.tree.bind('<<TreeviewOpen>>', self.expand)
         self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_detail())
         self.detail_scroll = ttk.Frame(self.body)
@@ -229,15 +232,16 @@ class CrsPage(ttk.Frame):
         self.list_card.grid_forget()
         self.detail_scroll.grid_forget()
         if wide:
-            self.body.columnconfigure(0, weight=3)
-            self.body.columnconfigure(1, weight=2)
+            # Proporción fija (uniform): lo que pida la tabla no le quita espacio al detalle.
+            self.body.columnconfigure(0, weight=5, uniform='catalogo')
+            self.body.columnconfigure(1, weight=3, uniform='catalogo')
             self.body.rowconfigure(0, weight=1)
             self.body.rowconfigure(1, weight=0)
             self.list_card.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
             self.detail_scroll.grid(row=0, column=1, sticky='nsew')
         else:
-            self.body.columnconfigure(0, weight=1)
-            self.body.columnconfigure(1, weight=0)
+            self.body.columnconfigure(0, weight=1, uniform='')
+            self.body.columnconfigure(1, weight=0, uniform='')
             self.body.rowconfigure(0, weight=3)
             self.body.rowconfigure(1, weight=2)
             self.list_card.grid(row=0, column=0, sticky='nsew', pady=(0, 10))
@@ -313,6 +317,8 @@ class CrsPage(ttk.Frame):
         self.tree.tag_configure('country', foreground=tokens['muted_surface'])
         if not self.visible:
             self.tree.insert('', 'end', iid='vacío', text='Nada coincide con la búsqueda y el filtro.')
+        from app.components import fit_columns
+        fit_columns(self.tree, self.app, stretch='#0')
         keep = [i for i in selected if self.tree.exists(i)]
         if not keep:
             first = next((i for r in self.tree.get_children() for c in self.tree.get_children(r)
@@ -383,8 +389,12 @@ class CrsPage(ttk.Frame):
             v = ttk.Label(grid, text=value, style='Card.TLabel', justify='left')
             v.grid(row=row, column=1, sticky='nw', pady=2)
             values.append(v)
-        grid.bind('<Configure>', lambda e: [v.configure(wraplength=max(160, e.width-200)) for v in values
-                                            if v.winfo_exists()], add='+')
+        def wrap(event):
+            first = grid.grid_bbox(0, 0)[2] if values else 0
+            for v in values:
+                if v.winfo_exists():
+                    v.configure(wraplength=max(120, event.width-first-16))
+        grid.bind('<Configure>', wrap, add='+')
         if entry.package and entry.cls in ('projected', 'geographic') and not entry.key.startswith('pkg:'):
             wrap_label(self.detail, f'Lo trae: {entry.package}', style='Card.Subtitle.TLabel', margin=40).pack(
                 fill='x', pady=(8, 0))

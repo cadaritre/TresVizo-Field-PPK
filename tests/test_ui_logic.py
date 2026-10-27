@@ -316,8 +316,9 @@ def test_catalog_view_classes_search_and_groups():
     crs = N(catalog=lambda: items, systems=lambda: systems, definition=lambda code: None)
     entries = cv.build(crs)
     assert cv.counts(entries) == {'projected': 2, 'geographic': 2, 'geoid': 1, 'grid': 1, 'cors': 1}
-    assert [e.title for e in cv.select(entries, 'projected', 'méxico')] == ['Mexico ITRF2008 / UTM zona 14N']
-    assert [e.title for e in cv.select(entries, None, 'EPSG:6369')] == ['Mexico ITRF2008 / UTM zona 14N']
+    assert [e.title for e in cv.select(entries, 'projected', 'méxico')] == ['México ITRF2008 / UTM zona 14N']
+    assert [e.title for e in cv.select(entries, None, 'EPSG:6369')] == ['México ITRF2008 / UTM zona 14N']
+    assert ('Nombre EPSG', 'Mexico ITRF2008 / UTM zona 14N') in cv.select(entries, None, 'EPSG:6369')[0].details
     assert [e.cls for e in cv.select(entries, None, 'brasil')] == ['projected', 'geographic', 'cors']
     assert all(not e.installed for e in cv.select(entries, None, state='available'))
     assert {e.title for e in cv.select(entries, None, state='installed')} >= {'WGS 84', 'GGM10 · Geoide Gravimétrico Mexicano'}
@@ -325,3 +326,14 @@ def test_catalog_view_classes_search_and_groups():
     assert list(groups) == ['Norteamérica', 'Sudamérica'] and list(groups['Sudamérica']) == ['Brasil']
     assert cv.grouped(cv.select(entries, 'geographic'))['Mundo']['Mundo'][0].title == 'WGS 84'
     assert cv.normalize('Ñandú México') == 'nandu mexico'
+
+
+def test_spanish_display_names_and_plurals():
+    from tresvizo_ppk.nombres import display_name
+    from app.formatting import plural
+    assert display_name('Mexico ITRF2008 / UTM zona 14N + GGM10 height') == 'México ITRF2008 / UTM zona 14N · cota GGM10'
+    assert display_name('NAD27 / UTM zone 13N') == 'NAD27 / UTM zona 13N'
+    assert display_name('SIRGAS 2000 / UTM zone 23S', spanish='SIRGAS 2000 / UTM zona 23S') == 'SIRGAS 2000 / UTM zona 23S'
+    assert display_name('') == ''
+    assert plural(1, 'línea base', 'líneas base') == '1 línea base' and plural(2, 'línea base', 'líneas base') == '2 líneas base'
+    assert plural(0, 'hueco') == '0 huecos'

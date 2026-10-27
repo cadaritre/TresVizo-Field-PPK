@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from tkinter import ttk
 
-from app.components import Banner, ScrollFrame, card, scrolled, wrap_label
+from app.components import Banner, CellTips, ScrollFrame, card, fit_columns, scrolled, wrap_label
 
 KINDS = {'static': 'Georreferenciar punto', 'points': 'PPK de puntos'}
 
@@ -70,6 +70,7 @@ class HomePage(ttk.Frame):
             self.tree.heading(key, text=title, anchor='w')
             self.tree.column(key, width=width, minwidth=80, stretch=stretch, anchor='w')
         scrolled(self.tree, holder)
+        CellTips(self.tree, app)
         self.tree.bind('<Double-1>', lambda e: self.open_selected())
         self.tree.bind('<Return>', lambda e: self.open_selected())
         self.empty = ttk.Label(inner, text='Todavía no hay proyectos. Empieza uno de los dos trabajos de arriba.',
@@ -101,6 +102,7 @@ class HomePage(ttk.Frame):
             kind, folder, date = project_summary(Path(path))
             self.tree.insert('', 'end', iid=path, values=(Path(path).stem, kind, folder, date))
         self.tree.configure(height=max(3, min(8, len(self.app.settings.values.recents))))
+        fit_columns(self.tree, self.app, stretch='folder', maximum=360)
         if self.app.settings.values.recents:
             self.empty.pack_forget()
             first = self.tree.get_children()[0]

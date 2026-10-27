@@ -9,12 +9,13 @@ from tkinter import ttk
 from tresvizo_ppk.model import Ephemeris, Solution
 
 from app import tasks
+from tresvizo_ppk.nombres import display_name
 from app.charts import BarChart, PlanChart, enu_of, enu_sigma
 from app.components import DropZone, FileList, LabeledEntry, card, wrap_label
-from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, solution_key, solution_text
+from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import MAX_BASES, BaseEntry, StaticJob, classify
-from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, BasePanel, OptionsPanel, WizardPage, ecef_text
+from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text
 
 RECORDING_TYPES = [('Grabación del receptor o RINEX', '*.bin *.part *.obs *.nav *.rnx *.crx *.??o *.??d *.??n *.Z '
                     '*.gz *.zip'), ('Todos los archivos', '*')]
@@ -175,19 +176,18 @@ class StaticPage(WizardPage):
     def summary_lines(self):
         job = self.job
         lines = [f'Punto: {job.point_name.strip() or "—"} · altura del bastón o trípode {job.pole_height or "—"} m',
-                 f'Rover: {len(job.rover_files)} archivo(s)']
+                 f'Rover: {plural(len(job.rover_files), "archivo")}']
         for base in job.bases:
             if base.station:
-                lines.append(f'Estación {base.station.id} ({base.name or base.station.name}): {len(base.files)} '
-                             f'archivo(s) · coordenada {"oficial" if base.station.official else "corregida"}')
+                lines.append(f'Estación {base.station.id} ({base.name or base.station.name}): '
+                             f'{plural(len(base.files), "archivo")} · coordenada {"oficial" if base.station.official else "corregida"}')
         o = job.options
         eph = 'precisas' if o.ephemeris is Ephemeris.PRECISE else 'difundidas'
         lines.append(f'Proceso: estático, {"combinado adelante/atrás" if o.combined else "adelante"}, máscara '
                      f'{o.elevation_mask_deg:g}°, {", ".join(o.constellations)}, efemérides {eph}')
         if len(job.bases) >= 2:
             lines.append(f'Ajuste por mínimos cuadrados con {len(job.bases)} líneas base y prueba chi² al 95 %.')
-        lines.append(f'Resultado en {job.coordinates.label or job.coordinates.crs_id}'
-                     + (f' + {job.coordinates.geoid_id.upper()}' if job.coordinates.geoid_id else ''))
+        lines.append(f'Resultado en {choice_text(self.app, job.coordinates)}')
         if self.path:
             from tresvizo_ppk import project as projects
             lines.append(f'Carpeta de trabajo: {projects.workdir(self.project or self.make_project(self.path.parent), self.path)}')
@@ -270,12 +270,12 @@ class StaticPage(WizardPage):
         top.pack(fill='x')
         top.columnconfigure(0, weight=3, uniform='top')
         top.columnconfigure(1, weight=2, uniform='top')
-        frame, inner = card(top, f'Punto {result.point_name}', coordinate.label if coordinate else
+        frame, inner = card(top, f'Punto {result.point_name}', display_name(coordinate.label) if coordinate else
                             'Sin transformar: se muestra el marco oficial.')
         frame.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
         status = 'Aprobado' if passed and not warnings else 'Con avisos' if passed else 'Revisar'
         kind = 'success' if passed and not warnings else 'warning' if passed else 'error'
-        ttk.Label(inner, text=f'{status} · {len(result.baselines)} línea(s) base · '
+        ttk.Label(inner, text=f'{status} · {plural(len(result.baselines), "línea base", "líneas base")} · '
                               + ', '.join(sorted(solution_text(s) for s in solutions)), style=kind+'.TLabel').pack(
             anchor='w', pady=(0, 10))
         grid = ttk.Frame(inner, style='Flat.Card.TFrame')
@@ -318,6 +318,9 @@ class StaticPage(WizardPage):
                                            solution_text(b.solution), '—' if b.ratio is None else f'{b.ratio:.1f}',
                                            '—' if b.rms_m is None else format_length(b.rms_m, prefs),
                                            f'{format_length(sh, prefs)} / {format_length(sv, prefs)}', b.epochs_used, len(b.satellites)))
+        from app.components import CellTips, fit_columns
+        fit_columns(tree, self.app, stretch='base')
+        CellTips(tree, self.app)
         tree.pack(fill='x')
         if result.adjustment:
             adj = result.adjustment
@@ -337,7 +340,7 @@ class StaticPage(WizardPage):
         frame, inner = card(body, 'Calidad de los datos del rover')
         frame.pack(fill='x', pady=(16, 0))
         completeness = f'{q.epochs/q.expected_epochs*100:.1f} %' if q.expected_epochs else '—'
-        text = (f'{q.epochs} épocas de {q.expected_epochs or "—"} esperadas ({completeness}) · {len(q.gaps)} hueco(s) · '
+        text = (f'{q.epochs} épocas de {q.expected_epochs or "—"} esperadas ({completeness}) · {plural(len(q.gaps), "hueco")} · '
                 f'{len(q.satellites)} satélites · {sum(q.cycle_slips.values())} saltos de ciclo')
         if q.multipath_m:
             text += ' · MP '+', '.join(f'{k} {v:.2f} m' for k, v in q.multipath_m.items())

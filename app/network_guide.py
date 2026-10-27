@@ -62,7 +62,8 @@ class GuideDialog(tk.Toplevel):
 
         def done(paths):
             self.worker = None
-            self.progress.stop(f'{len(paths)} archivo(s) bajados.')
+            from app.formatting import plural
+            self.progress.stop(f'{plural(len(paths), "archivo bajado", "archivos bajados")}.')
             if self.on_files:
                 self.on_files(list(paths))
             self.destroy()

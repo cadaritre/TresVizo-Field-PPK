@@ -5,10 +5,17 @@ import math
 
 from tresvizo_ppk.model import Enu, Solution
 
+from tresvizo_ppk.nombres import display_name
+
 from app.settings import Preferences, format_length
 
 SOLUTION_TEXT = {Solution.FIXED: 'FIJA', Solution.FLOAT: 'FLOTANTE', Solution.SINGLE: 'AUTÓNOMA',
                  Solution.NONE: 'SIN SOLUCIÓN'}
+
+
+def plural(n: int, singular: str, plural_form: str | None = None) -> str:
+    """«1 línea base», «2 líneas base», «0 huecos»."""
+    return f'{n} {singular if n == 1 else (plural_form or singular+"s")}'
 
 
 def solution_text(solution) -> str:
@@ -74,7 +81,7 @@ def coordinate_clipboard(name: str, coordinate, ecef, sigma: Enu | None) -> str:
     """Texto plano para pegar en otra aplicación (metros, sin separadores de miles)."""
     lines = [name]
     if coordinate is not None:
-        lines.append(coordinate.label or coordinate.crs_name)
+        lines.append(display_name(coordinate.label or coordinate.crs_name))
         if coordinate.northing_m is not None:
             lines.append(f'Norte\t{coordinate.northing_m:.4f}\nEste\t{coordinate.easting_m:.4f}')
         lines.append(f'Latitud\t{coordinate.latitude_deg:.9f}\nLongitud\t{coordinate.longitude_deg:.9f}')

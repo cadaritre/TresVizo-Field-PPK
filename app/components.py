@@ -317,6 +317,7 @@ class FileList(ttk.Frame):
                                         command=self.remove)
         app.icons.bind(self.remove_button, 'trash-2', 16)
         self.remove_button.pack(anchor='e', pady=(2, 0))
+        CellTips(self.tree, app)
         self.tree.bind('<Delete>', lambda e: self.remove())
         self.tree.bind('<BackSpace>', lambda e: self.remove())
         self.paths: list[Path] = []
@@ -329,6 +330,7 @@ class FileList(ttk.Frame):
             size = size_text(path.stat().st_size) if path.is_file() else 'no está'
             self.tree.insert('', 'end', iid=str(index), values=(path.name, KIND_TEXT[classify(path)], size))
         self.tree.configure(height=max(1, min(6, len(self.paths))))
+        fit_columns(self.tree, self.app, stretch='name')
         self.remove_button.state(['!disabled'] if self.paths else ['disabled'])
 
     def remove(self):
@@ -567,3 +569,90 @@ class FlowFrame(ttk.Frame):
             c = columns.get(r, 0)
             widget.grid(row=r, column=c, sticky='w', padx=(0, self.gap), pady=(0, self.row_gap))
             columns[r] = c+1
+
+
+def fit_columns(tree, app, stretch=None, limit=400, maximum=520):
+    """Ancho de cada columna según su contenido (encabezado y filas), sin cortar; `stretch` absorbe el sobrante.
+
+    Lo que aun así no cabe se ve completo en la ayuda emergente de la celda (`CellTips`)."""
+    from tkinter import font as tkfont
+    body = tkfont.Font(root=tree, font=app.theme.fonts.body())
+    head = tkfont.Font(root=tree, font=app.theme.fonts.strong(-1))
+    items, stack = [], list(tree.get_children(''))
+    while stack and len(items) < limit:
+        item = stack.pop(0)
+        items.append(item)
+        if tree.item(item, 'open'):
+            stack[0:0] = list(tree.get_children(item))
+    columns = list(tree['columns'])
+    show = str(tree.cget('show'))
+    if 'tree' in show:
+        columns = ['#0']+columns
+    for column in columns:
+        texts = [str(tree.heading(column, 'text'))]
+        if column == '#0':
+            texts += [str(tree.item(i, 'text')) for i in items]
+            extra = 46     # sangría de los grupos y el indicador
+        else:
+            texts += [str(tree.set(i, column)) for i in items]
+            extra = 24
+        width = max([head.measure(texts[0])]+[body.measure(t) for t in texts[1:]])+extra
+        width = min(maximum, max(56, width))
+        tree.column(column, width=width, minwidth=min(width, 90), stretch=column == stretch)
+    tree.fit_natural = {c: tree.column(c, 'width') for c in columns}
+    tree.fit_stretch = stretch
+    if not getattr(tree, 'fit_bound', False):
+        # Las demás columnas conservan su ancho natural; la elástica toma lo que queda (y no menos de 160 px).
+        def fit(event=None):
+            natural = getattr(tree, 'fit_natural', {})
+            column = getattr(tree, 'fit_stretch', None)
+            if not natural or column not in natural:
+                return
+            others = sum(w for c, w in natural.items() if c != column)
+            room = tree.winfo_width()-others-4
+            tree.column(column, width=max(160, min(room, max(room, natural[column]))))
+        tree.bind('<Configure>', fit, add='+')
+        tree.fit_bound = True
+    tree.after_idle(lambda: tree.winfo_exists() and tree.event_generate('<Configure>'))
+
+
+class CellTips:
+    """Ayuda emergente con el texto completo de la celda bajo el cursor cuando la columna lo corta."""
+
+    def __init__(self, tree, app):
+        from tkinter import font as tkfont
+        self.tree, self.app, self.tip, self.key = tree, app, None, None
+        self.font = tkfont.Font(root=tree, font=app.theme.fonts.body())
+        tree.bind('<Motion>', self.motion, add='+')
+        tree.bind('<Leave>', lambda e: self.hide(), add='+')
+        tree.bind('<ButtonPress>', lambda e: self.hide(), add='+')
+
+    def motion(self, event):
+        row, column = self.tree.identify_row(event.y), self.tree.identify_column(event.x)
+        if not row or not column:
+            self.hide()
+            return
+        if (row, column) == self.key:
+            return
+        self.hide()
+        if column == '#0':
+            text = str(self.tree.item(row, 'text'))
+            width = self.tree.column('#0', 'width')-40
+        else:
+            name = self.tree['columns'][int(column[1:])-1]
+            text = str(self.tree.set(row, name))
+            width = self.tree.column(name, 'width')-16
+        if not text or self.font.measure(text) <= width:
+            return
+        self.key = (row, column)
+        self.tip = tk.Toplevel(self.tree)
+        self.tip.overrideredirect(True)
+        ttk.Label(self.tip, text=text, style='Card.TLabel', padding=6, wraplength=420).pack()
+        self.app.theme.walk(self.tip)
+        self.tip.geometry(f'+{event.x_root+14}+{event.y_root+16}')
+
+    def hide(self):
+        self.key = None
+        if self.tip is not None:
+            self.tip.destroy()
+            self.tip = None

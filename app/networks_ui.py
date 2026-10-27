@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 
 from app import tasks
-from app.components import Banner, ProgressPanel, ScrollFrame, card, scrolled, wrap_label
+from app.components import Banner, CellTips, ProgressPanel, ScrollFrame, card, fit_columns, scrolled, wrap_label
 from app.wizard_ui import ecef_text, network_catalog, station_label
 
 
@@ -76,6 +76,8 @@ class NetworksPage(ttk.Frame):
             self.tree.heading(key, text=title, anchor='w', command=lambda k=key: self.sort(k))
             self.tree.column(key, width=width, minwidth=60, stretch=stretch, anchor='w')
         scrolled(self.tree, table)
+        CellTips(self.tree, app)
+        CellTips(self.net_tree, app)
         self.tree.bind('<<TreeviewSelect>>', lambda e: self.details())
         self.detail_text = ttk.Label(panes, text='Elige una estación.', style='Card.TLabel', justify='left')
         self.detail_text.grid(row=0, column=1, sticky='nw')
@@ -111,6 +113,7 @@ class NetworksPage(ttk.Frame):
             self.net_tree.insert('', 'end', iid='pkg:'+item.id, values=(item.title, item.region or '—', '—', '—',
                                                                        'Disponible para bajar'))
         self.net_tree.configure(height=max(2, min(6, len(self.networks)+len(self.available))))
+        fit_columns(self.net_tree, self.app, stretch='name')
         keep = [i for i in selected if self.net_tree.exists(i)]
         children = self.net_tree.get_children()
         if keep or children:
@@ -200,6 +203,7 @@ class NetworksPage(ttk.Frame):
                                                          s.antenna_type or '—', 'oficial' if s.official else
                                                          'corregida'))
         self.count.configure(text=f'{len(rows)} de {len(stations)}')
+        fit_columns(self.tree, self.app, stretch='name')
 
     def details(self):
         chosen = self.tree.selection()

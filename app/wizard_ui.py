@@ -41,6 +41,20 @@ def station_label(station: Station) -> str:
     return f'{station.id} · {name}'
 
 
+def choice_text(app, choice) -> str:
+    """«México ITRF2008 / UTM, zona según la longitud · cota GGM10»: el sistema elegido en español."""
+    from tresvizo_ppk.nombres import display_name
+    name = choice.label
+    crs = app.backend.crs
+    if not name and crs is not None:
+        try:
+            name = next((s.name for s in crs.systems() if s.code == choice.crs_id), '')
+        except Exception:  # noqa: BLE001 - es solo el texto del resumen
+            name = ''
+    text = display_name(name or choice.crs_id)
+    return text + (f' · cota {choice.geoid_id.upper()}' if choice.geoid_id else ' · sin cota (altura elipsoidal)')
+
+
 def ecef_text(p: Ecef) -> str:
     return f'X {p.x:,.4f}   Y {p.y:,.4f}   Z {p.z:,.4f} m'.replace(',', ' ')
 
@@ -937,7 +951,7 @@ class WizardPage(ttk.Frame):
             self.project, self.path, self.dirty = project, path, False
             self.update_title()
             self.app.remember(path)
-            self.app.set_status(f'Proyecto guardado en {path}.')
+            self.app.set_status(f'Proyecto guardado: {path.name}.', path.parent)
             if then:
                 then()
 
@@ -1142,7 +1156,7 @@ class WizardPage(ttk.Frame):
 
         def done(path):
             from app.viewer import DocumentViewer
-            self.app.set_status(f'Informe listo: {path}')
+            self.app.set_status(f'Informe listo: {Path(path).name}.', Path(path).parent)
             DocumentViewer(self.app, path, f'Informe · {self.path.stem}', f'Informe {self.path.stem}.pdf')
 
         def failed(kind, message, detail):

@@ -104,7 +104,12 @@ class PlanChart(_Chart):
             self.create_text(width/2, height/2, text='Sin datos para dibujar.', fill=t['muted_surface'],
                              font=self.font())
             return
-        pad_l, pad_r, pad_t, pad_b = 24, 24, 34 if self.title else 18, 46
+        from tkinter import font as tkfont
+        small = tkfont.Font(root=self, font=self.font(-3))
+        label_w = max([small.measure(i.get('label', '')) for i in self.items]+[0])
+        # Márgenes automáticos: las etiquetas caben a los dos lados sin cortarse en la orilla.
+        side = min(label_w+18, width*0.3)
+        pad_l, pad_r, pad_t, pad_b = max(24, side), max(24, side), 34 if self.title else 22, 46
         es = [i['e'] for i in self.items]
         ns = [i['n'] for i in self.items]
         span = max(max(es)-min(es), max(ns)-min(ns), 1.0)*1.15
@@ -137,7 +142,12 @@ class PlanChart(_Chart):
                 legend[{'fixed': 'Fija', 'float': 'Flotante', 'single': 'Autónoma', 'none': 'Sin solución'}[key]] = \
                     ('point', color)
             if item.get('label'):
-                self.create_text(x+10, y-10, text=item['label'], anchor='w', fill=t['text'], font=self.font(-3))
+                text = item['label']
+                w = small.measure(text)
+                if x+10+w <= width-4:
+                    self.create_text(x+10, y-10, text=text, anchor='w', fill=t['text'], font=self.font(-3))
+                else:                                    # sin espacio a la derecha: a la izquierda del punto
+                    self.create_text(max(4+w, x-10), y-10, text=text, anchor='e', fill=t['text'], font=self.font(-3))
         # Norte y escala.
         nx, ny = width-pad_r-8, pad_t+6
         self.create_line(nx, ny+26, nx, ny, arrow='last', fill=t['text'], width=2)
@@ -188,13 +198,24 @@ class BarChart(_Chart):
         if not self.rows:
             self.create_text(width/2, 60, text='Sin datos.', fill=t['muted_surface'], font=self.font())
             return
+        from tkinter import font as tkfont
+        small = tkfont.Font(root=self, font=self.font(-3))
         rows = self.rows[:24]
         maximum = max([v for _, v, _ in rows]+([self.limit] if self.limit else [])) or 1.0
-        label_w, value_w = 150, 90
+        # Columnas de etiqueta y valor medidas con su letra (la etiqueta, hasta el 40 % del ancho).
+        label_w = min(max(small.measure(r[0]) for r in rows)+24, int(width*0.4))
+        value_w = max(small.measure(self.value_text(v)) for _, v, _ in rows)+24
         left, right = label_w, width-value_w
+
+        def fit(text):
+            if small.measure(text) <= label_w-20:
+                return text
+            while text and small.measure(text+'…') > label_w-20:
+                text = text[:-1]
+            return text+'…'
         for index, (label, value, key) in enumerate(rows):
             y = 42+index*24
-            self.create_text(12, y, text=label[:22], anchor='w', fill=t['text'], font=self.font(-3))
+            self.create_text(12, y, text=fit(label), anchor='w', fill=t['text'], font=self.font(-3))
             length = (right-left)*max(0.0, value)/maximum
             color = t.get('solution_'+key, t.get(key, t['chart1']))
             self.create_rectangle(left, y-7, left+max(2, length), y+7, fill=color, outline='')

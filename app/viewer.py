@@ -115,4 +115,4 @@ class DocumentViewer(tk.Toplevel):
                                               filetypes=[('Documento PDF', '*.pdf')])
         if target:
             shutil.copyfile(self.path, target)
-            self.app.set_status(f'Informe guardado en {target}.')
+            self.app.set_status(f'Informe guardado: {Path(target).name}.', Path(target).parent)
