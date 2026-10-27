@@ -45,38 +45,46 @@ def load(core) -> list[Network]:
     """Redes instaladas con sus estaciones. Corre en un hilo aparte (puede leer paquetes del disco)."""
     if core is None:
         return []
-    if callable(getattr(core, 'networks', None)):
+    if callable(getattr(core, 'cors_networks', None)):
         out = []
-        for item in core.networks():
-            stations = _get(item, 'stations', default=None)
-            if stations is None and callable(getattr(core, 'network_stations', None)):
-                stations = core.network_stations(_get(item, 'id'))
-            out.append(Network(id=str(_get(item, 'id')), name=str(_get(item, 'name', 'title', default='')),
-                               country=str(_get(item, 'country', default='') or ''),
-                               frame=str(_get(item, 'frame', default='') or ''),
-                               epoch=_get(item, 'epoch', default=None), stations=list(stations or []),
-                               attribution=str(_get(item, 'attribution', default='') or ''),
+        for item in core.cors_networks():
+            source = _get(item, 'source', default={}) or {}
+            download = _get(item, 'download', default={}) or {}
+            countries = _get(item, 'countries', default=[]) or []
+            stations = core.station_catalog(item.id) if callable(getattr(core, 'station_catalog', None)) else []
+            source_text = source.get('title', '') if isinstance(source, dict) else str(source)
+            if isinstance(source, dict) and source.get('cutoff'):
+                source_text += f", {source['cutoff']}"
+            out.append(Network(id=str(item.id), name=str(_get(item, 'title', 'name', default=item.id)),
+                               country=', '.join(countries) if isinstance(countries, (list, tuple)) else str(countries),
+                               frame=str(_get(item, 'frame', default='') or ''), epoch=_get(item, 'epoch'),
+                               stations=list(stations), attribution=str(_get(item, 'attribution', default='') or ''),
                                license=str(_get(item, 'license', default='') or ''),
-                               url=str(_get(item, 'url', 'download_url', default='') or ''),
-                               source=str(_get(item, 'source', default='') or ''),
-                               origin=str(_get(item, 'origin', default='') or '')))
+                               url=str((download.get('url') if isinstance(download, dict) else '') or
+                                       (source.get('url') if isinstance(source, dict) else '') or ''),
+                               source=source_text, origin='incluida' if _get(item, 'bundled', default=False) else
+                               'instalada'))
         return out
     if not callable(getattr(core, 'rgna_catalog', None)):
         return []
     info = core.rgna_catalog_info() if callable(getattr(core, 'rgna_catalog_info', None)) else {}
-    return [Network(id='rgna', name='RGNA — INEGI, México', country='México', frame=info.get('frame', 'ITRF2008'),
+    return [Network(id='rgna-inegi', name='RGNA — INEGI, México', country='MX', frame=info.get('frame', 'ITRF2008'),
                     epoch=info.get('epoch', 2010.0), stations=list(core.rgna_catalog()),
                     attribution=info.get('attribution', ''), license=info.get('license', ''),
                     url='https://www.inegi.org.mx/app/geo2/rgna/', source=info.get('source', ''), origin='incluida')]
 
 
-def guide_text(core, network: Network, station_id: str, start, end) -> str | None:
+def guide_text(core, network: Network, station: Station, start, end) -> str | None:
     """Qué pedir en la página de la red para cubrir la sesión, si el motor lo sabe calcular para esa red."""
-    if callable(getattr(core, 'download_guide', None)):
-        return core.download_guide(network.id, station_id, start, end)
-    if network.id == 'rgna' and callable(getattr(core, 'rgna_download_guide', None)):
-        return core.rgna_download_guide(station_id, start, end)
+    if callable(getattr(core, 'station_download_guide', None)):
+        return core.station_download_guide(station, start, end)
+    if callable(getattr(core, 'rgna_download_guide', None)):
+        return core.rgna_download_guide(station.id, start, end)
     return None
+
+
+def can_download(core, station: Station) -> bool:
+    return callable(getattr(core, 'can_download_station', None)) and bool(core.can_download_station(station))
 
 
 def network_of(networks: list[Network], station: Station) -> Network | None:

@@ -243,10 +243,27 @@ def test_updates_in_settings(app, tmp_path, monkeypatch):
 def test_networks_page_lists_network_and_stations(app):
     page = app.show('Redes y estaciones')
     pump(app, lambda: page.networks)
-    assert page.networks[0].id == 'rgna' and page.networks[0].frame_text == 'ITRF2008, época 2010'
+    assert page.networks[0].id == 'rgna-inegi' and page.networks[0].frame_text == 'ITRF2008, época 2010'
     assert len(page.tree.get_children()) == len(dobles.STATIONS)
     page.query.set('zaca')
     assert page.tree.get_children() == ('ZAC1',)
     page.tree.selection_set('ZAC1')
     app.update()
     assert 'LEIAR25.R4' in page.detail_text.cget('text')
+
+
+def test_networks_adapter_with_engine_api():
+    """Con `cors_networks()` del motor (paquetes de redes), el adaptador toma red, marco, época y estaciones."""
+    from types import SimpleNamespace
+    from app import networks
+    net = SimpleNamespace(id='rbmc-ibge', title='RBMC — IBGE, Brasil', countries=['BR'], frame='SIRGAS2000',
+                          epoch=2000.4, attribution='Fonte: IBGE', license='CC BY', bundled=False,
+                          source={'title': 'IBGE', 'cutoff': '2026'}, download={'url': 'https://ibge.example/rbmc'})
+    station = dobles.STATIONS[0]
+    core = SimpleNamespace(cors_networks=lambda: [net], station_catalog=lambda nid: [station],
+                           station_download_guide=lambda s, a, b: f'guía {s.id}', can_download_station=lambda s: True)
+    found = networks.load(core)
+    assert found[0].frame_text == 'SIRGAS2000, época 2000.4' and found[0].url == 'https://ibge.example/rbmc'
+    assert found[0].origin == 'instalada' and found[0].country == 'BR' and found[0].stations == [station]
+    assert networks.guide_text(core, found[0], station, None, None) == 'guía INEG'
+    assert networks.can_download(core, station)

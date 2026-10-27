@@ -703,14 +703,26 @@ class WizardPage(ttk.Frame):
             def with_window(start, end):
                 from app.network_guide import GuideDialog
                 try:
-                    text = networks.guide_text(core, network, entry.station.id, start, end)
+                    text = networks.guide_text(core, network, entry.station, start, end)
                 except Exception as exc:  # noqa: BLE001
                     kind, message = tasks.classify(exc)
                     self.app.show_error(kind, message, repr(exc))
                     return
-                GuideDialog(self.app, network, entry.station, text or NETWORK_GUIDE)
+                download = None
+                if networks.can_download(core, entry.station):
+                    def download(progress, cancel, station=entry.station, start=start, end=end):
+                        folder = self.app.settings.downloads_dir()/'Redes'/network.id/station.id
+                        return core.download_station_rinex(station, start, end, folder, progress, cancel)
+                GuideDialog(self.app, network, entry.station, text or NETWORK_GUIDE, download,
+                            lambda paths: self.add_downloaded(entry, paths))
             self.session_window(with_window)
         network_catalog(self.app, show)
+
+    def add_downloaded(self, entry: BaseEntry, paths):
+        entry.files = list(dict.fromkeys([*entry.files, *paths]))
+        self.build_steps()
+        self.go(self.step)
+        self.changed()
 
     # --- Proyecto -----------------------------------------------------------------------------------------------
 
