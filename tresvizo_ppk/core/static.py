@@ -106,6 +106,21 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
                                                 np.array([b.rover_position.x, b.rover_position.y,
                                                           b.rover_position.z]), cov))
         adjustment = adjust.adjust(lines, frame, epoch)
+        full = adjustment
+        if not adjustment.passed and len(lines) >= 3 and len(adjustment.flagged_baselines) == 1:
+            # con tres o más bases y una sola línea que no cuadra: se ajusta sin ella si así pasa la prueba
+            bad = adjustment.flagged_baselines[0]
+            reduced = adjust.adjust([l for l in lines if l.base_id != bad], frame, epoch)
+            if reduced.passed:
+                log.append(f"Ajuste con todas las bases: χ² = {full.chi2:.2f} (límite {full.chi2_upper:.2f}), NO "
+                           f"PASA; la prueba w señala {bad}.")
+                r = full.residuals_enu[bad]
+                warnings.append(f"La línea base con {bad} no cuadra con las demás (residuo E {r.e * 100:+.1f}, N "
+                                f"{r.n * 100:+.1f}, U {r.u * 100:+.1f} cm): se dejó fuera del ajuste. Revisa la "
+                                f"coordenada, la altura y los avisos de {bad}.")
+                reduced.excluded_baselines = [bad]
+                reduced.flagged_baselines = [bad]
+                adjustment = reduced
         position = adjustment.position
         sigma = adjustment.sigma_enu
         log.append(f"Ajuste: χ² = {adjustment.chi2:.2f} con {adjustment.degrees_of_freedom} gl (límite al 95 %: "
@@ -115,10 +130,10 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
             w = adjustment.standardized_residuals[sid]
             log.append(f"  residuo {sid}: E {r.e * 1000:+.1f} N {r.n * 1000:+.1f} U {r.u * 1000:+.1f} mm "
                        f"(w {w.e:+.2f} {w.n:+.2f} {w.u:+.2f})")
-        if not adjustment.passed:
+        if not adjustment.passed and not adjustment.excluded_baselines:
             warnings.append(f"El ajuste no pasa la prueba chi² (χ² = {adjustment.chi2:.1f} > "
                             f"{adjustment.chi2_upper:.1f}): las líneas base no cuadran entre sí.")
-        if adjustment.flagged_baselines:
+        if adjustment.flagged_baselines and not adjustment.excluded_baselines:
             if len(baselines) == 2:
                 warnings.append("Las dos líneas base no concuerdan y con dos no se puede saber cuál falla: agrega "
                                 "una tercera base o revisa las alturas y las coordenadas de las bases.")

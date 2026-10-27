@@ -80,7 +80,7 @@ def _with_precise(options: ProcessingOptions, args, start, end, workdir: Path, p
 
 
 def _station_for(obs, args_coord: str | None, args_id: str | None, height: float | None, name: str | None,
-                 frame: str | None = None, epoch: float | None = None) -> Station:
+                 frame: str | None = None, epoch: float | None = None, work: Path | None = None) -> Station:
     if args_coord:
         try:
             x, y, z = (float(v) for v in args_coord.replace(";", ",").split(","))
@@ -92,10 +92,10 @@ def _station_for(obs, args_coord: str | None, args_id: str | None, height: float
                        antenna_height_m=height if height is not None else obs.antenna_height_m,
                        receiver=obs.receiver, source="manual", official=False)
     station = api.find_station(args_id or obs.marker)
-    if station is None:
-        raise UserError(f"La estación «{args_id or obs.marker}» no está en ninguna red instalada: da su coordenada "
-                        "con --base-coordenada X,Y,Z y su marco con --base-marco.")
-    return station
+    if station is not None:
+        return station
+    # base propia sin coordenada escrita: la del encabezado RINEX o la media autónoma (aproximadas, se avisa)
+    return api.base_coordinate_candidates(obs, work)[0]
 
 
 def _frame(text: str | None) -> tuple[str | None, float | None]:
@@ -120,7 +120,8 @@ def cmd_static(args) -> dict:
     for k, files in enumerate(args.base):
         obs = api.prepare_observations([Path(p) for p in files], work / f"base{k + 1}", window=window,
                                        progress=progress, cancel=cancel)
-        station = _station_for(obs, None, ids[k] if k < len(ids) else None, None, None)
+        station = _station_for(obs, None, ids[k] if k < len(ids) else None, None, None,
+                               work=work / f"base{k + 1}_coordenada")
         bases.append((station, obs))
     options = _options(args)
     _with_precise(options, args, rover.start, rover.end, work, progress, cancel)
@@ -143,7 +144,7 @@ def cmd_points(args) -> dict:
                         "«ITRF2008@2010.0» o «SIRGAS2000@2000.4»).")
     frame, epoch = _frame(args.base_marco)
     station = _station_for(base_obs, args.base_coordenada, args.estacion, args.base_altura, args.base_nombre,
-                           frame, epoch)
+                           frame, epoch, work=work / "base_coordenada")
     points = api.read_field_csv(Path(args.csv))
     options = _options(args)
     _with_precise(options, args, rover.start, rover.end, work, progress, cancel)

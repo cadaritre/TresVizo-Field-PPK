@@ -71,3 +71,32 @@ def test_two_inconsistent_lines_flag_both():
 def test_needs_two_lines():
     with pytest.raises(ValueError):
         adjust.adjust([line("A", (0, 0, 0), (0.01, 0.01, 0.01))], "ITRF2008", 2010.0)
+
+
+def test_static_excludes_single_bad_line(monkeypatch, tmp_path):
+    """process_static: con tres bases y una que no cuadra, la deja fuera si el ajuste sin ella pasa (sin RTKLIB)."""
+    from tresvizo_ppk.core import static
+    from tresvizo_ppk.model import BaselineSolution, Ecef, Enu, ObservationSet, ProcessingOptions, Solution, Station
+    from datetime import datetime, timezone
+    offsets = {"UQRO": (0.004, -0.003, 0.010), "ISLP": (-0.005, 0.002, -0.008), "INEG": (0.010, -0.018, 0.735)}
+    t0 = datetime(2026, 10, 20, 14, tzinfo=timezone.utc)
+
+    def fake_baseline(rover, station, base, options, workdir, **kw):
+        obs = line(station.id, offsets[station.id], (0.01, 0.01, 0.02))
+        pos = Ecef(*obs.position)
+        return BaselineSolution(base=station, rover_marker="UGTO", start=t0, end=t0, epochs_used=10, satellites=[],
+                                solution=Solution.FLOAT, ratio=None, rms_m=0.01, vector_ecef=pos, vector_enu=Enu(0, 0, 0),
+                                length_m=1e5, azimuth_deg=0, zenith_deg=90,
+                                covariance_ecef=tuple(map(tuple, obs.covariance)), rover_position=pos,
+                                ephemeris=options.ephemeris), None
+
+    monkeypatch.setattr(static, "process_baseline", fake_baseline)
+    monkeypatch.setattr(static, "trim", lambda obs, *a, **k: obs)
+    monkeypatch.setattr(static.quality, "assess", lambda obs, cancel=None: __import__("tresvizo_ppk.model", fromlist=["DataQuality"]).DataQuality())
+    rover = ObservationSet(obs=[], marker="UGTO", start=t0, end=t0)
+    bases = [(Station(id=s, name=s, position=Ecef(*P)), ObservationSet(obs=[], start=t0, end=t0)) for s in offsets]
+    result = static.process_static(rover, bases, ProcessingOptions(), tmp_path)
+    a = result.adjustment
+    assert a.excluded_baselines == ["INEG"] and a.passed and a.degrees_of_freedom == 3
+    assert any("se dejó fuera" in w for w in result.warnings)
+    assert abs(result.position.x - a.position.x) < 1e-12
