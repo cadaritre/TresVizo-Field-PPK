@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import shutil
 import threading
+import unicodedata
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -42,7 +44,7 @@ class RtkConfig:
         lines = ["# Configuración de rnx2rtkp generada por TresVizo Field PPK (" + tools.RTKLIB_VERSION + ")"]
         for key, value in self.values.items():
             lines.append(f"{key:<18}={value}")
-        path.write_text("\n".join(lines) + "\n", encoding="ascii", errors="replace")
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
     def text(self) -> list[str]:
         return [f"{k}={v}" for k, v in self.values.items()]
@@ -190,6 +192,96 @@ def navsys_mask(constellations) -> int:
     return mask or NAVSYS_BITS["GPS"]
 
 
+# --- Carpeta de trabajo con nombres ASCII ----------------------------------------------------------------------------
+
+def ascii_name(name: str) -> str:
+    """«Vértice 1.26O» → «Vertice_1.26O»: solo letras y números ASCII, punto, guion y guion bajo."""
+    plain = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode("ascii")
+    plain = re.sub(r"[^A-Za-z0-9._-]", "_", plain).strip("._") or "archivo"
+    return plain
+
+
+class Stage:
+    """Carpeta donde corre RTKLIB con nombres ASCII y rutas relativas.
+
+    RTKLIB abre los archivos con `fopen` de C: en Windows eso usa la página de códigos ANSI, así que una ruta con
+    acentos o eñes (la carpeta del usuario, un proyecto «Vértice…») no se abre aunque se le pase bien codificada; en
+    macOS y Linux depende de la configuración regional. Aquí cada entrada se enlaza (o se copia) dentro de una
+    subcarpeta de nombre ASCII de la carpeta de trabajo, RTKLIB corre con esa subcarpeta como directorio actual y solo
+    ve nombres relativos ASCII; las salidas se mueven después a donde las espera el motor. Los comprimidos (.gz, .Z,
+    .zip) se descomprimen ahí mismo, porque RTKLIB los abriría con un `gzip` externo que no hay en Windows.
+    """
+
+    def __init__(self, workdir: Path, name: str) -> None:
+        self.dir = Path(workdir) / f"_rtklib_{ascii_name(name)}"
+        if self.dir.exists():
+            shutil.rmtree(self.dir)
+        self.dir.mkdir(parents=True)
+        self._count = 0
+
+    def file(self, source: Path, subfolder: str = "") -> str:
+        """Pone `source` en la carpeta (descomprimido si hace falta) y devuelve su nombre relativo."""
+        from . import compress
+        source = Path(source)
+        folder = self.dir / subfolder if subfolder else self.dir
+        folder.mkdir(parents=True, exist_ok=True)
+        self._count += 1
+        if source.suffix.lower() in (".gz", ".z", ".zip"):
+            scratch = self.dir / f"_descomprimir_{self._count:03d}"
+            files = compress.unpack([source], scratch)
+            names = []
+            for f in files:
+                names.append(self._place(f, folder, move=True))
+            shutil.rmtree(scratch, ignore_errors=True)
+            return names[0]
+        return self._place(source, folder, move=False)
+
+    def _place(self, source: Path, folder: Path, *, move: bool) -> str:
+        target = folder / f"{self._count:03d}_{ascii_name(source.name)}"
+        if move:
+            shutil.move(str(source), target)
+        else:
+            try:
+                os.link(source, target)              # enlace duro: sin copiar megas por cada proceso
+            except OSError:
+                shutil.copy2(source, target)
+        return os.path.relpath(target, self.dir)
+
+    def folder(self, files: list[Path], name: str) -> str:
+        """Pone varios archivos en una subcarpeta y devuelve el comodín relativo que RTKLIB expande («nav/*»,
+        con el separador del sistema: RTKLIB busca la carpeta del comodín con él)."""
+        sub = ascii_name(name)
+        for f in files:
+            self.file(f, sub)
+        return f"{sub}{os.sep}*"
+
+    def config(self, source: Path) -> str:
+        """Copia la configuración con los archivos que nombra (ANTEX…) puestos en la carpeta y en relativo."""
+        lines = []
+        for line in Path(source).read_text(encoding="utf-8").splitlines():
+            key, sep, value = line.partition("=")
+            if sep and key.strip().startswith("file-") and value.strip():
+                line = f"{key}={self.file(Path(value.strip()))}"
+            lines.append(line)
+        target = self.dir / "config.conf"
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return target.name
+
+    def collect(self, name: str, target: Path) -> bool:
+        """Mueve una salida de RTKLIB a su lugar definitivo."""
+        produced = self.dir / name
+        if not produced.is_file():
+            return False
+        target = Path(target)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.unlink(missing_ok=True)
+        shutil.move(str(produced), target)
+        return True
+
+    def close(self) -> None:
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+
 # --- Ejecución --------------------------------------------------------------------------------------------------------
 
 def _gpst_str(moment: datetime) -> tuple[str, str]:
@@ -203,7 +295,8 @@ def run_rnx2rtkp(config_path: Path, out_pos: Path, rover_obs: Path, base_obs: Pa
                  log: list[str] | None = None, label: str = "", combined: bool = True) -> Path:
     """Corre rnx2rtkp; devuelve el `.pos`. El `.stat` queda junto (`<pos>.stat`)."""
     exe = tools.find_tool("rnx2rtkp")
-    args = [str(exe), "-k", str(config_path), "-o", str(out_pos)]
+    stage = Stage(workdir, out_pos.stem)
+    args = [str(exe), "-k", stage.config(config_path), "-o", "salida.pos"]
     if start_gpst is not None:
         d, t = _gpst_str(start_gpst)
         args += ["-ts", d, t]
@@ -214,21 +307,10 @@ def run_rnx2rtkp(config_path: Path, out_pos: Path, rover_obs: Path, base_obs: Pa
         args += ["-ti", f"{interval_s:g}"]
     # rnx2rtkp lee como mucho 16 archivos de entrada (MAXFILE) y descarta los demás sin avisar: la navegación y las
     # órbitas van cada una en su carpeta y se pasan con comodín, que RTKLIB expande (readrnxt/expath) sin límite.
-    args += [str(rover_obs), str(base_obs)]
+    args += [stage.file(rover_obs), stage.file(base_obs)]
     for kind, files in (("navegacion", nav), ("orbitas", precise)):
-        if not files:
-            continue
-        folder = workdir / f"{out_pos.stem}_{kind}"
-        if folder.exists():
-            shutil.rmtree(folder)
-        folder.mkdir(parents=True)
-        for k, f in enumerate(files):
-            target = folder / f"{k:03d}_{Path(f).name}"
-            try:
-                os.link(f, target)              # enlace duro: sin copiar megas por cada proceso
-            except OSError:
-                shutil.copy2(f, target)
-        args.append(str(folder / "*"))
+        if files:
+            args.append(stage.folder(list(files), kind))
     out_pos.unlink(missing_ok=True)
     span = None
     if start_gpst and end_gpst:
@@ -255,7 +337,14 @@ def run_rnx2rtkp(config_path: Path, out_pos: Path, rover_obs: Path, base_obs: Pa
             frac = 0.5 + 0.5 * (1.0 - frac) if state["backward"] else 0.5 * frac
         return frac, f"{label}{'hacia atrás' if state['backward'] else 'hacia adelante'} {stamp:%H:%M:%S}"
 
-    result = tools.run(args, cwd=workdir, progress=progress, cancel=cancel, progress_parser=parse, log=log)
+    try:
+        result = tools.run(args, cwd=stage.dir, progress=progress, cancel=cancel, progress_parser=parse, log=log)
+        stat = Path(str(out_pos) + ".stat")
+        stat.unlink(missing_ok=True)
+        stage.collect("salida.pos", out_pos)
+        stage.collect("salida.pos.stat", stat)
+    finally:
+        stage.close()
     if result.returncode != 0 or not out_pos.is_file():
         detail = result.stderr.strip().splitlines()
         message = detail[-1] if detail else f"código {result.returncode}"

@@ -123,14 +123,20 @@ def approx_position(obs: ObservationSet, nav: list[Path], workdir: Path, cancel=
         return np.array([p.x, p.y, p.z])
     exe = tools.find_tool("rnx2rtkp")
     out = workdir / f"{obs.obs[0].stem}_puntual.pos"
-    args = [str(exe), "-p", "0", "-e", "-o", str(out)]
-    if obs.start:
-        s = utc_to_gps(obs.start)
-        args += ["-ts", s.strftime("%Y/%m/%d"), s.strftime("%H:%M:%S"),
-                 "-te", (s + timedelta(minutes=10)).strftime("%Y/%m/%d"),
-                 (s + timedelta(minutes=10)).strftime("%H:%M:%S")]
-    args += [str(obs.obs[0])] + [str(n) for n in nav]
-    tools.run(args, cwd=workdir, cancel=cancel, log=log)
+    stage = rtklib.Stage(workdir, out.stem)          # nombres ASCII y rutas relativas (ver rtklib.Stage)
+    try:
+        args = [str(exe), "-p", "0", "-e", "-o", "salida.pos"]
+        if obs.start:
+            s = utc_to_gps(obs.start)
+            args += ["-ts", s.strftime("%Y/%m/%d"), s.strftime("%H:%M:%S"),
+                     "-te", (s + timedelta(minutes=10)).strftime("%Y/%m/%d"),
+                     (s + timedelta(minutes=10)).strftime("%H:%M:%S")]
+        args += [stage.file(obs.obs[0]), stage.folder(list(nav), "navegacion")]
+        tools.run(args, cwd=stage.dir, cancel=cancel, log=log)
+        out.unlink(missing_ok=True)
+        stage.collect("salida.pos", out)
+    finally:
+        stage.close()
     rows = _read_single(out)
     if not rows:
         raise UserError(f"No se pudo calcular una posición aproximada de {obs.marker}: revisa el archivo de "
@@ -302,6 +308,9 @@ def _process_own(rover, station, base, options, base_xyz, approx, rover_choice, 
     base_ep = procesador.Endpoint(base.obs[0], base_xyz, base_h, full(base_choice), station.id)
     nav = list(dict.fromkeys(list(rover.nav) + list(base.nav)))
     precise = [Path(p) for p in options.precise_files] if options.ephemeris == Ephemeris.PRECISE else []
+    if any(p.suffix.lower() in (".gz", ".z", ".zip") for p in precise):
+        from . import compress
+        precise = compress.unpack(precise, workdir / "orbitas_descomprimidas")
     result = procesador.process(rover_ep, base_ep, nav, precise, mask_deg=options.elevation_mask_deg,
                                 start=gps_seconds(start_g), end=gps_seconds(end_g), interval_s=options.interval_s,
                                 systems=systems, progress=progress, cancel=cancel)

@@ -22,12 +22,13 @@ import numpy as np
 
 from ..errors import UserError
 from ..model import Ecef, Enu, ObservationSet, Station
-from . import networks, tools
+from . import networks, rtklib, tools
 from .geodesy import decimal_year, ecef_to_geodetic, enu_rotation, utc_to_gps
 
 APPROX_NOTE = ("coordenada de la base aproximada ({origen}): los puntos quedan bien entre sí, pero desplazados lo "
                "mismo que la base")
 AUTONOMOUS_FRAME = "WGS 84 (solución autónoma)"
+HEADER_FRAME = "WGS 84 (posición del encabezado RINEX)"
 
 
 def _own_station(obs: ObservationSet, position: Ecef, sigma: Enu | None, origin: str, source: str) -> Station:
@@ -38,11 +39,12 @@ def _own_station(obs: ObservationSet, position: Ecef, sigma: Enu | None, origin:
                    coordinate_origin=origin, approximate=True)
 
 
-def _frame_for(obs: ObservationSet) -> tuple[str, float]:
+def _frame_for(obs: ObservationSet, default: str = AUTONOMOUS_FRAME) -> tuple[str, float]:
+    """Marco declarado por el receptor si lo grabó; si no, el del origen de la coordenada (`default`)."""
     epoch = round(decimal_year(obs.start), 4) if obs.start else 0.0
     if obs.frame_declared:
         return obs.frame_declared, obs.frame_epoch_declared or epoch
-    return AUTONOMOUS_FRAME, epoch
+    return default, epoch
 
 
 def autonomous_position(obs: ObservationSet, workdir: Path, cancel: threading.Event | None = None,
@@ -53,14 +55,15 @@ def autonomous_position(obs: ObservationSet, workdir: Path, cancel: threading.Ev
     exe = tools.find_tool("rnx2rtkp")
     workdir.mkdir(parents=True, exist_ok=True)
     out = workdir / f"{obs.obs[0].stem}_autonoma.pos"
-    navdir = workdir / f"{obs.obs[0].stem}_autonoma_nav"
-    navdir.mkdir(exist_ok=True)
-    import shutil
-    for k, n in enumerate(obs.nav):
-        shutil.copy2(n, navdir / f"{k:03d}_{Path(n).name}")
-    args = [str(exe), "-p", "0", "-e", "-sys", "G,R,E,C,J", "-ti", f"{interval_s:g}", "-o", str(out),
-            str(obs.obs[0]), str(navdir / "*")]
-    tools.run(args, cwd=workdir, cancel=cancel, log=log)
+    stage = rtklib.Stage(workdir, out.stem)          # nombres ASCII y rutas relativas (ver rtklib.Stage)
+    try:
+        args = [str(exe), "-p", "0", "-e", "-sys", "G,R,E,C,J", "-ti", f"{interval_s:g}", "-o", "salida.pos",
+                stage.file(obs.obs[0]), stage.folder(list(obs.nav), "navegacion")]
+        tools.run(args, cwd=stage.dir, cancel=cancel, log=log)
+        out.unlink(missing_ok=True)
+        stage.collect("salida.pos", out)
+    finally:
+        stage.close()
     rows = []
     for line in out.read_text(encoding="ascii", errors="replace").splitlines() if out.is_file() else []:
         if line.startswith("%") or not line.strip():
@@ -96,13 +99,15 @@ def base_coordinate_candidates(obs: ObservationSet, workdir: Path | None = None,
     if official is not None:
         return [official]
     candidates: list[Station] = []
-    frame, epoch = _frame_for(obs)
     if obs.approx_position is not None:
         p = obs.approx_position
-        origin_text = obs.approx_position_source or "encabezado RINEX"
+        frame, epoch = _frame_for(obs, HEADER_FRAME)
+        origin_text = "APPROX POSITION XYZ del encabezado RINEX"
+        extra = (obs.approx_position_source or "").strip()
+        if extra and "encabezado rinex" not in extra.lower():
+            origin_text += f" ({extra})"
         candidates.append(_own_station(obs, Ecef(p.x, p.y, p.z, frame, epoch), None, "rinex-header",
-                                       APPROX_NOTE.format(origen=f"APPROX POSITION XYZ del encabezado RINEX, "
-                                                                 f"{origin_text}")))
+                                       APPROX_NOTE.format(origen=origin_text)))
     if autonomous or (autonomous is None and not candidates):
         if workdir is None:
             raise UserError("Falta la carpeta de trabajo para calcular la posición autónoma de la base.")

@@ -76,6 +76,8 @@ def test_own_base_candidates_header_and_autonomous(tmp_path, unzip):
     header, autonomous = api.base_coordinate_candidates(obs, tmp_path / "c", autonomous=True)
     assert header.coordinate_origin == "rinex-header" and header.approximate and not header.official
     assert "encabezado RINEX" in header.source and "desplazados lo mismo que la base" in header.source
+    assert header.source.count("encabezado RINEX") == 1                 # sin repetir el origen
+    assert header.position.frame == "WGS 84 (posición del encabezado RINEX)"   # no es una solución autónoma
     assert autonomous.coordinate_origin == "autonomous" and autonomous.sigma_enu is not None
     assert autonomous.position.frame.startswith("WGS 84") and 2026.7 < autonomous.position.epoch < 2026.9
     off = api.find_station("ICEP").position
