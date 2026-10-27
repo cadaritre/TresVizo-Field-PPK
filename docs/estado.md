@@ -28,9 +28,8 @@
 **Pendiente o sin verificar:**
 - La autoprueba exige `tresvizo_ppk.core.api` y `tresvizo_ppk.export.api` (agentes del motor y de exportación); hasta
   que existan falla en «modulos» y `scripts/distribuir.py` no entrega el instalador. La interfaz ya llama a esas
-  funciones con las firmas de la §8 y se probó contra dobles; falta repetir el recorrido con el motor real y datos de la
-  RGNA, y ajustar si el motor usa otros nombres para `ionosphere` («auto», «iono-free», «broadcast») o
-  `ambiguity_mode` («fix-and-hold», «continuous», «instantaneous»).
+  funciones con las firmas de la §8 (y usa los mismos valores de `ionosphere` y `ambiguity_mode` que
+  `core/baseline.py`) y se probó contra dobles; falta repetir el recorrido con el motor real y datos de la RGNA.
 - La descarga de RINEX de la RGNA aparece solo si el motor ofrece `download_rgna`; si no, el asistente guía al usuario
   al sitio del INEGI.
 - MSI de Windows y DMG de x86_64: solo los arma la CI (`.github/workflows/ci.yml`), que no ha corrido todavía (falta el

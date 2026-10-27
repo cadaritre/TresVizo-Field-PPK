@@ -22,8 +22,10 @@ from app.wizard import CONSTELLATIONS, BaseEntry, errors, guess_marker
 RINEX_TYPES = [('Grabación o RINEX', '*.bin *.part *.obs *.nav *.rnx *.crx *.?? *.??o *.??d *.??n *.??g *.Z *.gz *.zip'),
                ('Todos los archivos', '*')]
 PRECISE_TYPES = [('Efemérides SP3/CLK', '*.sp3 *.SP3 *.clk *.CLK *.Z *.gz'), ('Todos los archivos', '*')]
-IONO = [('auto', 'Automática: libre de ionosfera en líneas largas'), ('iono-free', 'Libre de ionosfera siempre'),
-        ('broadcast', 'Modelo de los satélites (líneas cortas)')]
+IONO = [('auto', 'Automática según la longitud de la línea base (recomendada)'),
+        ('iono-free', 'Libre de ionosfera siempre (flotante)'),
+        ('broadcast', 'Ionosfera del mensaje de navegación (líneas cortas)'),
+        ('estimated', 'Estimada por satélite')]
 AMBIGUITY = [('fix-and-hold', 'Fijar y mantener (recomendado)'), ('continuous', 'Continua'),
              ('instantaneous', 'Instantánea (época a época)')]
 INEGI_GUIDE = ('Los RINEX de la RGNA se bajan del sitio del INEGI (Red Geodésica Nacional Activa: '
