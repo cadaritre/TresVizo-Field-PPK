@@ -224,7 +224,7 @@ class ProcessedPoint:
     epochs_fixed: int
     epochs_total: int
     distance_to_base_m: float | None
-    delta_from_field_enu: Enu | None
+    delta_from_field_enu: Enu | None           # posproceso − campo, en ENU del punto de campo (m)
     message: str = ""                          # por qué no se posprocesó o qué avisar
     # Añadido por el motor:
     antenna_position: Ecef | None = None       # la antena (ARP) promediada, antes de bajar la altura
