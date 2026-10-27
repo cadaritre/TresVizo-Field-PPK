@@ -156,10 +156,13 @@ def satellite_track(sat: str, pair: Pair, env: Environment, *, when, sat_ant_cac
 
 
 def satellite_geometry(sat: str, pair: Pair, code1: np.ndarray, station: Station, rec_xyz: np.ndarray,
-                       frame: SiteFrame, env: Environment, track: SatTrack) -> SatGeometry:
+                       frame: SiteFrame, env: Environment, track: SatTrack, *, t_rx: np.ndarray | None = None
+                       ) -> SatGeometry:
     """Geometría y modelo de un satélite visto desde un receptor en todas las épocas. `rec_xyz`: (T, 3) marca +
-    marea + ARP."""
-    t = env.times
+    marea + ARP. `t_rx`: la etiqueta de tiempo real del receptor en cada época (si no cae exacta en la época nominal
+    de `env.times`, p. ej. un receptor sin reloj gobernado a unos ms del segundo); la emisión se calcula desde ella,
+    así que el desfase queda como error de reloj del receptor, común a todos los satélites, y se elimina."""
+    t = env.times if t_rx is None else np.asarray(t_rx, dtype=float)
     valid = np.isfinite(code1) & track.ok
     tau = t - np.where(valid, code1, 2.2e7) / C_LIGHT
     dts = track.clk + track.clk_rate * (tau - track.tau0)

@@ -54,10 +54,11 @@ def _v2_mapping(types: list[str]) -> dict[str, dict[str, str]]:
     return {"G": gps, "E": gal}
 
 
-def read(path: Path, *, start: float | None = None, end: float | None = None, decimate_s: float | None = None
-         ) -> Observations:
+def read(path: Path, *, start: float | None = None, end: float | None = None, decimate_s: float | None = None,
+         tolerance_s: float = 1e-3) -> Observations:
     """Lee un RINEX de observación. `start`/`end` en segundos GPS; `decimate_s`: solo épocas múltiplo de ese
-    intervalo (p. ej. 30 s de un archivo de 15 s)."""
+    intervalo (p. ej. 30 s de un archivo de 15 s), con `tolerance_s` para etiquetas que no caen exactas en el
+    segundo."""
     header = rinex.read_header(Path(path))
     if not header.is_observation:
         raise UserError(f"«{Path(path).name}» no es un RINEX de observación.")
@@ -86,15 +87,17 @@ def read(path: Path, *, start: float | None = None, end: float | None = None, de
     times: list[float] = []
     sat_index: dict[str, int] = {}
     rows: list[dict[tuple[int, str], tuple[float, int]]] = []
+    in_window = 0
     for block in rinex.iter_epochs(header):
         if block.flag > 1 and block.flag != 6:
             continue
         t = gps_seconds(block.time) + bdt_offset
-        if start is not None and t < start - 1e-3:
+        if start is not None and t < start - tolerance_s:
             continue
-        if end is not None and t > end + 1e-3:
+        if end is not None and t > end + tolerance_s:
             break
-        if decimate_s and abs(math.remainder(t, decimate_s)) > 1e-3:
+        in_window += 1
+        if decimate_s and abs(math.remainder(t, decimate_s)) > tolerance_s:
             continue
         epoch: dict[tuple[int, str], tuple[float, int]] = {}
         if v2:
@@ -103,6 +106,9 @@ def read(path: Path, *, start: float | None = None, end: float | None = None, de
             _parse_v3(block, plan, sat_index, epoch)
         times.append(t)
         rows.append(epoch)
+    if not times and in_window:
+        raise UserError(f"Las épocas de «{Path(path).name}» no coinciden en el tiempo con el intervalo de proceso "
+                        f"({decimate_s:g} s): sus etiquetas de tiempo no caen en múltiplos de {decimate_s:g} s.")
     if not times:
         raise UserError(f"«{Path(path).name}» no tiene épocas de observación en el horario pedido.")
     n_t, n_s = len(times), len(sat_index)
@@ -120,7 +126,8 @@ def read(path: Path, *, start: float | None = None, end: float | None = None, de
     lli = {k: v[:, order] for k, v in lli.items()}
     times_arr = np.array(times)
     diffs = np.diff(times_arr)
-    interval = float(np.median(diffs)) if len(diffs) else (header.interval or 0.0)
+    # a la centésima: con etiquetas a unos ms del segundo la mediana no da el intervalo exacto
+    interval = round(float(np.median(diffs)), 2) if len(diffs) else (header.interval or 0.0)
     approx = np.array(header.approx_xyz) if header.approx_xyz and any(header.approx_xyz) else None
     return Observations(marker=header.marker, receiver=header.receiver_type, times=times_arr, sats=sats,
                         values=values, lli=lli, types=types_by_sys, interval=interval, approx_xyz=approx,

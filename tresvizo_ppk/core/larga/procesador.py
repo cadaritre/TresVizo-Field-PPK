@@ -67,6 +67,11 @@ ERROR_FLOOR = {
     "float": {"h": (0.006, 0.0055, 0.001), "v": (0.005, 0.0075, 0.0025)},
 }
 MAX_ITER = 6
+# Tolerancia para tomar como la misma época las etiquetas de tiempo de los dos receptores (y como múltiplo del
+# intervalo de proceso): los receptores sin reloj gobernado etiquetan a unos ms del segundo (saltos de 1 ms). La
+# geometría se calcula en la etiqueta real de cada receptor, así que el desfase no entra en la solución; el límite lo
+# pone la extrapolación de la órbita (`geometria.SatTrack`, |Δτ| < 30 ms).
+EPOCH_TOL_S = 0.02
 
 
 @dataclass
@@ -168,8 +173,10 @@ class _Sat:
     arc: np.ndarray                  # arco de la diferencia simple por época (−1 fuera)
 
 
-def _pick_pair(sat: str, rov: observaciones.Observations, bas: observaciones.Observations) -> tuple | None:
-    """La pareja de frecuencias y los tipos de cada receptor para un satélite, o None."""
+def _pick_pair(sat: str, rov: observaciones.Observations, bas: observaciones.Observations, ir: np.ndarray,
+               ib: np.ndarray) -> tuple | None:
+    """La pareja de frecuencias y los tipos de cada receptor para un satélite, o None. `ir`, `ib`: filas de cada
+    receptor en las épocas comunes (las dos series no tienen por qué tener las mismas épocas)."""
     system = sat[0]
     jr, jb = rov.column(sat), bas.column(sat)
     best = None
@@ -184,8 +191,8 @@ def _pick_pair(sat: str, rov: observaciones.Observations, bas: observaciones.Obs
                 for cb, pb in cand_b:
                     if senales.signal_class(system, band, cb[2]) != cls:
                         continue
-                    n = int(np.sum(np.isfinite(rov.values[cr][:, jr]) & np.isfinite(rov.values[pr][:, jr]) &
-                                   np.isfinite(bas.values[cb][:, jb]) & np.isfinite(bas.values[pb][:, jb])))
+                    n = int(np.sum(np.isfinite(rov.values[cr][ir, jr]) & np.isfinite(rov.values[pr][ir, jr]) &
+                                   np.isfinite(bas.values[cb][ib, jb]) & np.isfinite(bas.values[pb][ib, jb])))
                     if n > 0 and (pick is None or n > pick[0]):
                         pick = (n, cr, pr, cb, pb, cls)
             if pick is None:
@@ -209,19 +216,21 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     if interval_s is None:
         interval_s = 30.0 if duration > 6 * 3600 else 15.0
     step(0.02, "Leyendo las observaciones…")
-    rov = observaciones.read(rover.obs_path, start=start, end=end)
-    bas = observaciones.read(base.obs_path, start=start, end=end)
+    # cada receptor se lee ya diezmado al intervalo de proceso (un rover a 1 Hz no llena la memoria)
+    rov = observaciones.read(rover.obs_path, start=start, end=end, decimate_s=interval_s, tolerance_s=EPOCH_TOL_S)
+    bas = observaciones.read(base.obs_path, start=start, end=end, decimate_s=interval_s, tolerance_s=EPOCH_TOL_S)
     tools.check(cancel)
-    data_interval = max(rov.interval, bas.interval, 1.0)
-    proc = max(interval_s, data_interval)
-    times = np.intersect1d(np.round(rov.times, 3), np.round(bas.times, 3))
-    times = times[np.abs(np.remainder(times + 1e-3, proc) - 1e-3) < 2e-3]
+    times, ir, ib, proc = align_epochs(rov.times, bas.times, interval_s, rov.interval, bas.interval)
     if len(times) < 20:
-        raise UserError("Hay muy pocas épocas comunes entre el rover y la base para la línea larga.")
-    ir = np.searchsorted(np.round(rov.times, 3), times)
-    ib = np.searchsorted(np.round(bas.times, 3), times)
+        raise UserError(_few_epochs_text(rov, bas, len(times), proc))
+    t_rov, t_bas = rov.times[ir], bas.times[ib]           # etiquetas de tiempo reales de cada receptor
     log.append(f"Épocas comunes: {len(times)} cada {proc:g} s, de {gps_datetime(times[0]):%H:%M:%S} a "
-               f"{gps_datetime(times[-1]):%H:%M:%S} GPS.")
+               f"{gps_datetime(times[-1]):%H:%M:%S} GPS (rover cada {rov.interval:g} s, base cada "
+               f"{bas.interval:g} s).")
+    skew = max(float(np.max(np.abs(t_rov - times))), float(np.max(np.abs(t_bas - times))))
+    if skew > 1e-6:
+        log.append(f"Etiquetas de tiempo corridas hasta {skew * 1000:.1f} ms del segundo: la geometría se calcula en "
+                   "el instante de cada receptor.")
 
     # Órbitas
     step(0.05, "Órbitas y relojes de los satélites…")
@@ -251,7 +260,7 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     groups: dict[str, GroupInfo] = {}
     skipped: dict[str, list[str]] = {}
     for s in common:
-        got = _pick_pair(s, rov, bas)
+        got = _pick_pair(s, rov, bas, ir, ib)
         if got is None:
             skipped.setdefault("sin pareja de frecuencias común (misma señal en los dos receptores)", []).append(s)
             continue
@@ -293,7 +302,7 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     cache: dict = {}
     tracks = {s.name: geometria.satellite_track(s.name, s.pair, env, when=when, sat_ant_cache=cache) for s in sats}
     base_geo = {s.name: geometria.satellite_geometry(s.name, s.pair, s.bas.code1, base_station, base_rec,
-                                                     base_frame, env, tracks[s.name]) for s in sats}
+                                                     base_frame, env, tracks[s.name], t_rx=t_bas) for s in sats}
     rover_xyz = np.array(rover.xyz, dtype=float)
     tide_rover = geometria.tide_series(rover_xyz, env)
 
@@ -301,7 +310,7 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
         frame = geometria.site_frame(xyz, mjd)
         rec = xyz[None, :] + tide_rover + frame.rot[2][None, :] * rover.height_m
         geo = {s.name: geometria.satellite_geometry(s.name, s.pair, s.rov.code1, rover_station, rec, frame, env,
-                                                    tracks[s.name]) for s in sats}
+                                                    tracks[s.name], t_rx=t_rov) for s in sats}
         return frame, geo
 
     rover_frame, rover_geo = rover_geometry(rover_xyz)
@@ -554,6 +563,54 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     log.append(f"Fija: σ0 = {s0_fix:.2f}, cambio respecto de la flotante "
                f"{np.linalg.norm(result.position - pos_float) * 1000:.1f} mm.")
     return result
+
+
+def align_epochs(t_rov: np.ndarray, t_bas: np.ndarray, interval_s: float, rov_interval: float, bas_interval: float,
+                 tol_s: float = EPOCH_TOL_S) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    """Épocas comunes de dos receptores en la rejilla del intervalo de proceso.
+
+    El intervalo de proceso es el mayor entre el pedido y los de los dos receptores (un rover a 1 Hz contra una base
+    cada 15 s se procesa cada 15 s); cada etiqueta se lleva al múltiplo más cercano de ese intervalo si está a menos
+    de `tol_s` (si dos caen en el mismo, la más cercana). Devuelve las épocas nominales, las filas de cada receptor y
+    el intervalo. Huecos, épocas sueltas que falten e intervalos distintos quedan fuera sin más."""
+    rov_interval, bas_interval = (round(float(v or 0.0), 2) for v in (rov_interval, bas_interval))
+    proc = max(float(interval_s), rov_interval, bas_interval, 1.0)
+    # un intervalo de datos que no es divisor del de proceso (10 s contra 15 s): la rejilla común es su mínimo común
+    for other in (rov_interval, bas_interval):
+        if other and other >= 1.0 and abs(math.remainder(proc, other)) > tol_s:
+            a, b = int(round(proc)), int(round(other))
+            if abs(proc - a) < 1e-6 and abs(other - b) < 1e-6:
+                proc = float(a * b // math.gcd(a, b))
+
+    def snap(t):
+        k = np.round(t / proc)
+        off = np.abs(t - k * proc)
+        rows = {}
+        for i in np.flatnonzero(off <= tol_s):
+            key = int(k[i])
+            if key not in rows or off[i] < off[rows[key]]:
+                rows[key] = int(i)
+        return rows
+
+    sr, sb = snap(np.asarray(t_rov, dtype=float)), snap(np.asarray(t_bas, dtype=float))
+    keys = sorted(set(sr) & set(sb))
+    times = np.array([k * proc for k in keys], dtype=float)
+    ir = np.array([sr[k] for k in keys], dtype=int)
+    ib = np.array([sb[k] for k in keys], dtype=int)
+    return times, ir, ib, proc
+
+
+def _few_epochs_text(rov, bas, n: int, proc: float) -> str:
+    """Por qué no hay épocas comunes suficientes, dicho para el usuario."""
+    if not n and len(rov.times) and len(bas.times):
+        overlap = min(rov.times[-1], bas.times[-1]) - max(rov.times[0], bas.times[0])
+        if overlap > 0:
+            return (f"Las épocas del rover y de la base no coinciden en el tiempo (el rover observa cada "
+                    f"{rov.interval:g} s y la base cada {bas.interval:g} s, sin épocas comunes cada {proc:g} s): "
+                    "revisa los intervalos de registro.")
+        return "El rover y la base no observaron al mismo tiempo."
+    return (f"Solo hay {n} épocas comunes entre el rover y la base cada {proc:g} s: hacen falta al menos 20 "
+            "(unos 5 minutos) para la línea larga.")
 
 
 def min_fix_hours(length_km: float) -> float:
