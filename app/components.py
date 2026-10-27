@@ -256,8 +256,22 @@ def card(parent, title=None, subtitle=None, padding=18):
 def wrap_label(parent, text='', style='Subtitle.TLabel', margin=20, **kwargs):
     """Etiqueta que ajusta su ancho de línea al de su contenedor."""
     label = ttk.Label(parent, text=text, style=style, justify='left', **kwargs)
-    parent.bind('<Configure>', lambda e: label.winfo_exists() and label.configure(wraplength=max(200, e.width-margin)),
-                add='+')
+    seen: list[int] = []
+
+    def fit(event):
+        if not label.winfo_exists():
+            return
+        # Si el ancho del contenedor depende del de la etiqueta (rejillas «uniform», letra muy grande), envolver al
+        # ancho nuevo puede devolver el ancho anterior y así sin fin (la ventana se congela). En un rebote A→B→A se
+        # queda el menor de los dos, que cabe en ambos.
+        width = event.width
+        if len(seen) >= 2 and width == seen[-2] and width != seen[-1]:
+            width = min(width, seen[-1])
+        seen[:] = (seen+[event.width])[-2:]
+        target = max(200, width-margin)
+        if str(label.cget('wraplength')) != str(target):
+            label.configure(wraplength=target)
+    parent.bind('<Configure>', fit, add='+')
     return label
 
 
@@ -601,6 +615,11 @@ class FlowFrame(ttk.Frame):
             columns[r] = c+1
 
 
+def text_width(font, text: str) -> int:
+    """Ancho de un texto de una o varias líneas (el de su línea más larga)."""
+    return max((font.measure(line) for line in str(text).split('\n')), default=0)
+
+
 def fit_columns(tree, app, stretch=None, limit=400, maximum=520):
     """Ancho de cada columna según su contenido (encabezado y filas), sin cortar; `stretch` absorbe el sobrante.
 
@@ -626,7 +645,7 @@ def fit_columns(tree, app, stretch=None, limit=400, maximum=520):
         else:
             texts += [str(tree.set(i, column)) for i in items]
             extra = 24
-        width = max([head.measure(texts[0])]+[body.measure(t) for t in texts[1:]])+extra
+        width = max([head.measure(texts[0])]+[text_width(body, t) for t in texts[1:]])+extra
         width = min(maximum, max(56, width))
         tree.column(column, width=width, minwidth=min(width, 90), stretch=column == stretch)
     tree.fit_natural = {c: tree.column(c, 'width') for c in columns}
@@ -688,7 +707,7 @@ class CellTips:
             name = self.tree['columns'][int(column[1:])-1]
             text = str(self.tree.set(row, name))
             width = self.tree.column(name, 'width')-16
-        if not text or self.font.measure(text) <= width:
+        if not text or text_width(self.font, text) <= width:
             return
         self.key = (row, column)
         self.tip = tk.Toplevel(self.tree)

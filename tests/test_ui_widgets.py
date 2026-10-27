@@ -479,6 +479,72 @@ def test_reload_cancels_pending_file_reads_and_uses_its_own_temporary_folder(app
     assert not temporal.exists() or not any(temporal.iterdir())
 
 
+def test_rover_station_is_offered_as_es_el_rover(app, tmp_path, monkeypatch):
+    """En las cercanas, la estación a 0.0 km del rover dice «Es el rover» con el botón desactivado; el paso lo marca
+    como error si se elige a mano."""
+    f = files(tmp_path)
+    core = app.backend.core
+    ineg, uagu = dobles.STATIONS[0], dobles.STATIONS[1]
+    core.rover_point = ineg.position                  # la grabación está sobre INEG (a unos metros)
+    monkeypatch.setattr(core, 'nearest_stations', lambda position, count=3: [(ineg, 3.6), (uagu, 7_512.0)],
+                        raising=False)
+    page = app.show('Georreferenciar punto')
+    page.add_rover([f['S-20261024-150214.bin']])
+    pump(app, lambda: page.job.rover_position is not None)
+    page.next()
+    app.update()
+    buttons = {}
+    stack = list(page.nearby.winfo_children())
+    while stack:
+        w = stack.pop()
+        stack += w.winfo_children()
+        if isinstance(w, tk.ttk.Button):
+            buttons[w.cget('text')] = w
+    assert set(buttons) == {'Es el rover', 'Usar'} and buttons['Es el rover'].instate(['disabled'])
+    page.use_station(ineg)
+    assert page.job.bases[0].station is None
+    page.job.bases[0].station = ineg
+    page.job.bases[0].files = [f['ineg2970.26d.Z']]
+    assert any('propio rover' in i.message and i.level == 'error' for i in page.job.step_issues(1))
+
+
+def test_baseline_table_shows_key_and_full_name_with_very_large_text(app, tmp_path):
+    """Tabla de líneas base: la clave y el nombre completo en dos líneas, también con letra «muy grande»; si la
+    columna no alcanza, los nombres completos salen debajo de la tabla."""
+    from app.settings import TEXT_SIZES
+    from app.themes import palette
+    app.theme.fonts.set_scale(TEXT_SIZES['muy grande'])
+    app.theme.apply(palette('Claro'))
+    app.deiconify()
+    app.geometry('1280x820')
+    page = app.show('Georreferenciar punto')
+    static_ready(app, tmp_path, page)
+    long_name = 'Universidad Autónoma de Querétaro, Centro Universitario, Qro'   # 58 caracteres
+    page.job.bases[0].name = long_name
+    page.project = page._write(page.path)
+    page.process()
+    pump(app, lambda: page.output is not None)
+    app.update()
+    tree = next(w for w in _descendants(page.result_body) if isinstance(w, tk.ttk.Treeview))
+    item = tree.get_children()[0]
+    assert tree.set(item, 'base') == f'INEG\n{long_name}'
+    assert str(tree.cget('style')) == 'TwoLine.Treeview'
+    from tkinter import font as tkfont
+    line = tkfont.Font(root=app, font=app.theme.fonts.body()).metrics('linespace')
+    assert int(tk.ttk.Style(app).lookup('TwoLine.Treeview', 'rowheight')) >= 2*line
+    end = time.monotonic()+1.0
+    while time.monotonic() < end:
+        app.update()
+        time.sleep(0.01)
+    from app.components import text_width
+    needed = text_width(tkfont.Font(root=app, font=app.theme.fonts.body()), tree.set(item, 'base'))+24
+    if tree.column('base', 'width') < needed:
+        assert page.station_names.winfo_manager() and long_name in page.station_names.cget('text')
+    else:
+        assert not page.station_names.winfo_manager()
+    assert not app.shown, app.shown
+
+
 def _descendants(widget):
     stack, out = list(widget.winfo_children()), []
     while stack:
@@ -527,32 +593,3 @@ def test_reopening_an_own_base_project_is_not_a_change(app, tmp_path):
         time.sleep(0.01)
     assert not page.dirty and page.job.own_source == 'rinex' and page.job.own_receiver == 'MeridianV'
     assert page.job.station().receiver == 'MeridianV' and not app.shown
-
-
-def test_rover_station_is_offered_as_es_el_rover(app, tmp_path, monkeypatch):
-    """En las cercanas, la estación a 0.0 km del rover dice «Es el rover» con el botón desactivado; el paso lo marca
-    como error si se elige a mano."""
-    f = files(tmp_path)
-    core = app.backend.core
-    ineg, uagu = dobles.STATIONS[0], dobles.STATIONS[1]
-    core.rover_point = ineg.position                  # la grabación está sobre INEG (a unos metros)
-    monkeypatch.setattr(core, 'nearest_stations', lambda position, count=3: [(ineg, 3.6), (uagu, 7_512.0)],
-                        raising=False)
-    page = app.show('Georreferenciar punto')
-    page.add_rover([f['S-20261024-150214.bin']])
-    pump(app, lambda: page.job.rover_position is not None)
-    page.next()
-    app.update()
-    buttons = {}
-    stack = list(page.nearby.winfo_children())
-    while stack:
-        w = stack.pop()
-        stack += w.winfo_children()
-        if isinstance(w, tk.ttk.Button):
-            buttons[w.cget('text')] = w
-    assert set(buttons) == {'Es el rover', 'Usar'} and buttons['Es el rover'].instate(['disabled'])
-    page.use_station(ineg)
-    assert page.job.bases[0].station is None
-    page.job.bases[0].station = ineg
-    page.job.bases[0].files = [f['ineg2970.26d.Z']]
-    assert any('propio rover' in i.message and i.level == 'error' for i in page.job.step_issues(1))

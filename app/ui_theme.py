@@ -146,6 +146,8 @@ class ThemeManager:
                     rowheight=self.row_height(), bordercolor=t['separator'],
                     lightcolor=t['separator'], darkcolor=t['separator'], borderwidth=1, font=f.body())
         s.map('Treeview', background=[('selected', t['selection'])], foreground=[('selected', t['on_selection'])])
+        # Tablas con dos líneas por fila (la clave y el nombre completo de la estación, por ejemplo).
+        s.configure('TwoLine.Treeview', rowheight=self.row_height(2))
         s.configure('Treeview.Heading', background=t['surface'], foreground=t['muted_surface'], padding=6,
                     borderwidth=0, font=f.strong(-1))
         s.map('Treeview.Heading', background=[('active', t['secondary_hover'])],
@@ -211,10 +213,10 @@ class ThemeManager:
         for _, callback in self.callbacks:
             callback(t)
 
-    def row_height(self):
-        """Alto de fila de las tablas a partir de la letra (crece con «Tamaño de letra»)."""
+    def row_height(self, lines=1):
+        """Alto de fila de las tablas a partir de la letra (crece con «Tamaño de letra»), para `lines` líneas."""
         line = tkfont.Font(root=self.root, font=self.fonts.body()).metrics('linespace')
-        return int(max(line+14, 26)*getattr(self.root, 'ui_scale', 1))
+        return int(max(line*lines+14, 26)*getattr(self.root, 'ui_scale', 1))
 
     def text_scale(self):
         return self.fonts.base/self.fonts.normal

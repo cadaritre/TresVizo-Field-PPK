@@ -23,6 +23,13 @@ RECORDING_TYPES = [('Grabación del receptor o RINEX', '*.bin *.part *.obs *.nav
                     '*.gz *.zip'), ('Todos los archivos', '*')]
 
 
+def baseline_station_text(station) -> str:
+    """«INEG» y, en la segunda línea, el nombre completo sin repetir la clave («Aguascalientes, Ags.»)."""
+    label = station_label(station)
+    name = label.split(' · ', 1)[1] if ' · ' in label else station.name
+    return station.id if not name or name == station.id else f'{station.id}\n{name}'
+
+
 class StaticPage(WizardPage):
     TITLE = 'Georreferenciar punto'
     ICON = 'map-pin'
@@ -418,8 +425,11 @@ class StaticPage(WizardPage):
         plan.set(items)
         frame, inner = card(body, 'Líneas base')
         frame.pack(fill='x', pady=(16, 0))
+        # Estación en dos líneas: la clave y, debajo, el nombre completo (nunca «UQRO · Queréta»). Si aun así la
+        # columna no alcanza, los nombres completos salen debajo de la tabla.
         tree = ttk.Treeview(inner, columns=('base', 'length', 'solution', 'ratio', 'rms', 'sigma', 'epochs', 'sats'),
-                            show='headings', height=max(1, len(result.baselines)), selectmode='none')
+                            show='headings', height=max(1, len(result.baselines)), selectmode='none',
+                            style='TwoLine.Treeview')
         for key, title, width in [('base', 'Estación', 190), ('length', 'Longitud', 120), ('solution', 'Solución', 120),
                                   ('ratio', 'Cociente', 80), ('rms', 'RMS', 90), ('sigma', 'σ H / V', 150),
                                   ('epochs', 'Épocas', 80), ('sats', 'Satélites', 80)]:
@@ -427,14 +437,38 @@ class StaticPage(WizardPage):
             tree.column(key, width=width, minwidth=60, anchor='w', stretch=key == 'base')
         for b in result.baselines:
             sh, sv = enu_sigma(b.base.position, b.covariance_ecef)
-            tree.insert('', 'end', values=(station_label(b.base), format_length(b.length_m, prefs),
+            tree.insert('', 'end', values=(baseline_station_text(b.base), format_length(b.length_m, prefs),
                                            solution_text(b.solution), '—' if b.ratio is None else f'{b.ratio:.1f}',
                                            '—' if b.rms_m is None else format_length(b.rms_m, prefs),
                                            f'{format_length(sh, prefs)} / {format_length(sv, prefs)}', b.epochs_used, len(b.satellites)))
-        from app.components import CellTips, fit_columns
+        from app.components import CellTips, fit_columns, text_width
         fit_columns(tree, self.app, stretch='base')
         CellTips(tree, self.app)
         tree.pack(fill='x')
+        self.station_names = wrap_label(inner, '\n'.join(
+            f'{b.base.id}: {b.base.name}' + (f' · {b.base.network_name}' if b.base.network_name else '')
+            for b in result.baselines), style='Card.Subtitle.TLabel', margin=40, wraplength=400)
+        from tkinter import font as tkfont
+        body_font = tkfont.Font(root=tree, font=self.app.theme.fonts.body())
+
+        def names_fit(event=None):
+            if not tree.winfo_exists():
+                return
+            needed = max((text_width(body_font, tree.set(i, 'base')) for i in tree.get_children()), default=0)+24
+            cut = tree.column('base', 'width') < needed
+            if cut and not self.station_names.winfo_manager():
+                # Con el ancho de la tabla: la nota no debe pedir más ancho que ella (si lo pidiera, la tabla se
+                # ensancharía, la columna alcanzaría, la nota se quitaría… sin fin).
+                self.station_names.configure(wraplength=max(200, tree.winfo_width()-20))
+                self.station_names.pack(fill='x', pady=(8, 0), after=tree)
+            elif not cut and self.station_names.winfo_manager():
+                self.station_names.pack_forget()
+        pending = []
+
+        def schedule(event=None):
+            if not pending:
+                pending.append(later(tree, 'idle', lambda: (pending.clear(), names_fit())))
+        tree.bind('<Configure>', schedule, add='+')
         if result.adjustment:
             adj = result.adjustment
             frame, inner = card(body, 'Ajuste por mínimos cuadrados',
