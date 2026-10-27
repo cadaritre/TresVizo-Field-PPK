@@ -60,6 +60,12 @@ class Station:
     network: str = ""                        # id del paquete de su red («rgna-inegi»); vacío en una base propia
     network_name: str = ""                   # «RGNA — INEGI, México», para el informe
     attribution: str = ""                    # atribución que pide la licencia de la red («Fuente: INEGI, …»)
+    # De dónde sale la coordenada (base propia sin pedirla a mano): «official» (catálogo de su red), «rinex-header»
+    # (APPROX POSITION XYZ), «autonomous» (media de la solución autónoma de la sesión), «project» (encadenada de un
+    # estático) o «manual». `approximate`: la coordenada es aproximada (encabezado o autónoma): los puntos quedan
+    # bien entre sí pero desplazados lo mismo que la base, y el informe lo dice.
+    coordinate_origin: str = "official"
+    approximate: bool = False
 
 
 @dataclass
@@ -84,6 +90,13 @@ class ObservationSet:
     case_offset_m: float | None = None       # base del receptor → ARP de los Meridian (0.116 / 0.152 m)
     epochs: int = 0
     warnings: list[str] = field(default_factory=list)          # de la conversión, la unión y el recorte
+    # Lo que traen los archivos, para llenar la interfaz (editable) con su origen:
+    point_name: str = ""                     # nombre del punto: el de la sesión del receptor o MARKER NAME
+    pole_height_m: float | None = None       # altura del bastón (marca → base del receptor) de la sesión, si la hay
+    field_sources: dict[str, str] = field(default_factory=dict)  # campo → «encabezado RINEX», «catálogo …», «sesión del receptor»
+    approx_position_source: str = ""         # de dónde sale approx_position
+    frame_declared: str = ""                 # marco que declaró el receptor (base con coordenada), si lo grabó
+    frame_epoch_declared: float | None = None
 
 
 @dataclass
@@ -175,6 +188,7 @@ class AdjustmentResult:
     critical_value: float = 0.0                # valor crítico de la prueba w
     chi2_lower: float = 0.0                    # límites de la prueba chi² al 95 %
     chi2_upper: float = 0.0
+    excluded_baselines: list[str] = field(default_factory=list)   # líneas que se dejaron fuera por no cuadrar
 
 
 @dataclass
