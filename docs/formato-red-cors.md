@@ -34,6 +34,15 @@ que arma `scripts/red_rgna_inegi.py` desde la fuente oficial del INEGI.
 | `notes` | no | avisos generales de la red |
 | `stations` | sí | lista de estaciones (abajo), al menos una |
 
+### Campos para el índice firmado
+
+`publicar.py --redes` (repositorio de TresVizo Field, `tools/geoides/`) arma la entrada `cors-network` del índice con
+la cabecera del paquete; por eso un paquete que se publica lleva además, en la raíz: `version` (texto: la fecha de
+corte de la fuente), `region` (texto para la lista), `licenseURL` y `bounds` (`{"south", "north", "west", "east"}`, la
+caja de sus estaciones). La app no los necesita para leer la red (`parse_package` los ignora). La entrada del índice
+lleva también `corsNetwork`: `{"format", "formatVersion", "stations", "frame", "epoch"}`, para mostrar la red antes
+de bajarla.
+
 ## Campos de cada estación
 
 | Campo | Obligatorio | Qué es |
@@ -48,7 +57,8 @@ que arma `scripts/red_rgna_inegi.py` desde la fuente oficial del INEGI.
 | `antennaType`, `radome` | no | nombre IGS/ANTEX sin espacios internos y radomo (`NONE`) |
 | `receiver` | no | receptor |
 | `status` | no | `active` u otro texto |
-| `notes` | no | avisos de la estación (desplazamientos por sismo, hundimientos…): salen en los avisos del proceso |
+| `notes` | no | avisos de la estación (desplazamientos por sismo, hundimientos, antena sin calibración publicada…): salen en la ficha de la estación y en los avisos del proceso |
+| `velocity`, `equipmentSince`, `country`… | no | datos de la fuente que el programa no usa hoy y se conservan (velocidad `{"n", "e", "u", "unit": "mm/a"}`, fecha desde la que vale la antena, país ISO de la estación) |
 
 El programa comprueba que la coordenada esté en la superficie de la Tierra y que las claves no se repitan. Al
 procesar, la antena y la altura del **RINEX de la estación** mandan sobre las del paquete (son las de esos datos), y

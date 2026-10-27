@@ -19,6 +19,18 @@
 - Redes de estaciones de referencia (CORS) como paquetes `cors-network` (formato en `docs/formato-red-cors.md`, comprobación registrada en
   `tresvizo_ppk/datos/`): la RGNA incluida (31 estaciones del INEGI, ITRF2008 2010.0, con atribución), redes de otros
   países instalables del índice firmado con su marco y época, descarga por plantilla https documentada o guía.
+- **Paquetes de redes de otros países, listos para el índice firmado (27-10-2026; los publica el coordinador):**
+  NOAA CORS del NGS (`scripts/red_noaa_cors.py`, 1854 estaciones, NAD83(2011) 2010.0 y PA11/MA11, ARP, dominio
+  público, 12,7 MB por las calibraciones), CACS de NRCan (`red_cacs_nrcan.py`, 135, NAD83(CSRS) 2010.0, OGL-Canada; sin
+  las de Nueva Escocia, de licencia provincial) y ERGNSS del IGN (`red_ergnss_ign.py`, 130, ETRS89 2017.0 y REGCAN95
+  en Canarias, CC BY 4.0), con descarga directa de RINEX diarios por plantilla documentada. Calibraciones de antena del
+  ANTEX de la IGS y, si no está, del ngs20.atx del NGS; 32 estaciones WAAS de la NOAA (MPL_WAAS_2225N, sin calibración
+  publicada) llevan el aviso «antena sin calibración». Comprobado: geodésicas contra cartesianas de cada fuente (1,2 mm
+  NOAA, 3,4 mm IGN), estaciones a mano, y que la app los instala del índice, los lista y avisa
+  (`tests/test_redes_paquetes.py`). **Retenidas por licencia** (sin licencia escrita que permita redistribuir, o de
+  pago): Colombia (MAGNA-ECO), Chile, Perú (REGPMOC), Uruguay (REGNA-ROU), Ecuador, Bolivia, Costa Rica, Guatemala,
+  Panamá, El Salvador, Brasil (RBMC) y Argentina (RAMSAC). Pendiente del motor: `find_station` elige por clave sin mirar
+  la posición, y MELI existe en la NOAA y en el IGN (Melilla).
 - Coordenada de la base sin pedirla a mano: la oficial de su red; base propia: encabezado RINEX o media autónoma
   de la sesión, marcadas aproximadas con su origen (`base_coordinate_candidates`).
 - ANTEX igs20 (satélites y antenas de la RGNA) y órbitas SP3 a petición (ESA o IGS en el BKG, sin cuenta).
