@@ -33,13 +33,14 @@ from __future__ import annotations
 import json
 import math
 import shutil
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from xml.sax.saxutils import escape
 
 from ..crs import api as crs
+from ..crs import localizacion
 from ..errors import UserError
 from ..model import (CoordinateChoice, Ecef, Enu, ObservationSet, PointsResult, ProcessedPoint, Solution,
                      StaticResult, Station, TransformedCoordinate)
@@ -121,6 +122,8 @@ def _elevation_value(c: TransformedCoordinate | None, choice: CoordinateChoice) 
     aplicar, ninguna (otra clase de altura con el mismo nombre sería peor que nada)."""
     if c is None:
         return None
+    if c.localized:                 # la cota local, o ninguna (nunca otra altura en su lugar)
+        return c.orthometric_height_m
     if c.orthometric_height_m is not None:
         return c.orthometric_height_m
     if choice.geoid_id:
@@ -166,7 +169,7 @@ def _fixed_choice(reference: Ecef, choice: CoordinateChoice) -> CoordinateChoice
     if choice.crs_id not in crs.FAMILIES or choice.zone.strip():
         return choice
     zone = crs.transform(reference, CoordinateChoice(choice.crs_id, "", None)).zone
-    return CoordinateChoice(choice.crs_id, zone, choice.geoid_id, choice.label)
+    return replace(choice, zone=zone)       # con la localización en uso, si la hay
 
 
 def _app_time(moment: datetime) -> str:
@@ -609,7 +612,22 @@ def _ppk_metadata(result: PointsResult, choice: CoordinateChoice, sample: Transf
         meta["licencia_geoide"] = list(sample.attribution)
     if skipped:
         meta["puntos_sin_posproceso"] = skipped
+    _localization_metadata(meta, choice, sample, pos.frame)
     return _sorted(meta)
+
+
+def _localization_metadata(meta: dict, choice: CoordinateChoice, sample: TransformedCoordinate | None,
+                           frame: str) -> None:
+    """En locales, como las apps (`SurveyExport.metadata`): el sistema y la cota se dicen como son y la localización
+    entera va con el archivo."""
+    if sample is None or not sample.localized:
+        return
+    base = sample.base_crs_code or "transversa de Mercator local"
+    d = crs.definition(sample.base_crs_code) if sample.base_crs_code else None
+    meta["sistema"] = f"LOCAL: {sample.label} (cuadricula base {base}{' ' + d.name if d else ''})"
+    meta["cota"] = ("local de la localizacion; altura base " + localizacion.height_base_text(choice.geoid_id)
+                    + "; la geometría lleva la altura elipsoidal del punto en el suelo")
+    meta["localizacion"] = localizacion.declaration_lines(choice, frame)
 
 
 def _ppk_features(rows: list[_Row], result: PointsResult, choice: CoordinateChoice):
@@ -665,6 +683,7 @@ def _static_features(row: _Row, result: StaticResult, choice: CoordinateChoice):
     }
     if c.attribution:
         meta["licencia_geoide"] = list(c.attribution)
+    _localization_metadata(meta, choice, c, result.position.frame)
     coords = [c.receiver_longitude_deg, c.receiver_latitude_deg, _round(c.ellipsoidal_height_m, 3)]
     return _sorted(meta), [(result.point_name, _sorted(props), coords)]
 
@@ -743,6 +762,8 @@ def _epsg_name(c: TransformedCoordinate) -> str:
 
 
 def _height_line(choice: CoordinateChoice, c: TransformedCoordinate) -> str:
+    if c.localized:
+        return "cota local de la localizacion; altura base " + localizacion.height_base_text(choice.geoid_id)
     if c.orthometric_height_m is not None:
         line = f"{c.height_kind} (H)   modelo: {c.geoid_name}"
         if c.height_kind == "normal":
@@ -768,7 +789,20 @@ def _declaration(c: TransformedCoordinate, choice: CoordinateChoice, origin: lis
         lines.append("capa SIN_COTA: puntos sin cota, sin Z")
     if options.point_names and options.elevation_labels and any(r.elevation is not None for r in rows):
         lines.append("capa COTA: la cota de cada punto como rotulo")
+    if c.localized:
+        lines.append("capa LOCALIZACION: la localizacion entera, junto al primer punto")
+        lines += localizacion.declaration_lines(choice, _frame_of(rows))
     return lines
+
+
+def _frame_of(rows: list[_Row]) -> str:
+    """El marco de lo exportado, para comprobar el del geoide de la localización."""
+    for r in rows:
+        comp = getattr(r, "computed", None)
+        position = getattr(getattr(comp, "pp", None), "position", None) if comp is not None else None
+        if position is not None:
+            return position.frame
+    return localizacion.OFFICIAL_FRAME
 
 
 def _require_projected(rows: list[_Row], message: str) -> None:
@@ -780,7 +814,11 @@ def _dxf(rows: list[_Row], choice: CoordinateChoice, origin: list[str], skipped:
          options: dxf.DxfOptions) -> bytes:
     _require_projected(rows, DXF_NOT_PROJECTED)
     points = [dxf.DxfPoint(r.name, r.code, r.c.easting_m, r.c.northing_m, r.elevation, r.description) for r in rows]
-    return dxf.write(points, _declaration(rows[0].c, choice, origin, rows, skipped, options), options)
+    # En locales, la localización entera también **dentro del dibujo** (capa LOCALIZACION, como las apps): los
+    # comentarios 999 se pierden al guardar el archivo en otro programa.
+    local = localizacion.declaration_lines(choice, _frame_of(rows)) if rows[0].c.localized else []
+    return dxf.write(points, _declaration(rows[0].c, choice, origin, rows, skipped, options), options,
+                     localization=local)
 
 
 def _landxml(rows: list[_Row], choice: CoordinateChoice, project: str, now: datetime | None) -> bytes:
@@ -789,6 +827,8 @@ def _landxml(rows: list[_Row], choice: CoordinateChoice, project: str, now: date
     d = crs.definition(c.crs_code)
     vertical = (choice.geoid_id.upper() if c.orthometric_height_m is not None and choice.geoid_id else
                 ("" if choice.geoid_id else f"elipsoidal {c.frame_text.split(',')[0]}"))
+    if c.localized:
+        vertical = "cota local"
     epsg = c.crs_code.split(":", 1)[1] if c.crs_code.upper().startswith("EPSG:") else ""
     system = landxml.CoordinateSystem(name=_epsg_name(c), epsg_code=epsg, horizontal_datum=d.datum if d else "",
                                       vertical_datum=vertical, wkt=esri_wkt(c.crs_code))

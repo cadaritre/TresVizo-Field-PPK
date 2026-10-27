@@ -1,0 +1,4275 @@
+{
+ "version": 1,
+ "about": "Vectores de la localización de proyecto. Generados por localization_reference.py; las apps iOS y Android deben reproducirlos.",
+ "conventions": {
+  "rotation": "rotationRadians = theta, antihorario en el plano (este, norte); azimuthRotationArcsec = -theta: acimut local = acimut de cuadrícula + giro.",
+  "residuals": "control menos calculado (dE, dN, dZ); dH = hypot(dE, dN).",
+  "scalePpm": "(escala - 1) * 1e6; distancia local = escala * distancia de cuadrícula.",
+  "slopes": "slopeNorth/slopeEast adimensionales (m/m); *Ppm = *1e6."
+ },
+ "tolerances": {
+  "gridMeters": 1e-06,
+  "ratio": 1e-11,
+  "ppm": 1e-05,
+  "arcsec": 1e-05,
+  "pipelineMeters": 0.001,
+  "note": "Los casos con baseGrid usan la proyección de cada app: compárense con pipelineMeters y, en parámetros, 0.01 ppm y 0.01 segundos."
+ },
+ "thresholds": {
+  "minimumHorizontalSpreadMeters": 1.0,
+  "aPrioriHorizontalSigmaMeters": 0.01,
+  "weakScalePpm": 200.0,
+  "unusualScalePpm": 1500.0,
+  "minimumVerticalSpreadMeters": 10.0,
+  "largeSlopePpm": 50.0,
+  "defaultHorizontalToleranceMeters": 0.02,
+  "defaultVerticalToleranceMeters": 0.04
+ },
+ "cases": [
+  {
+   "name": "similarity_6pts_plane",
+   "description": "Seis pares, semejanza y plano inclinado por mínimos cuadrados.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 394089.9731919983,
+      "n": 3167997.8878260944
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5522.037832146271,
+      "n": 9922.740321512632,
+      "z": 1393.1995584357821
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C6",
+     "grid": {
+      "e": 393443.6166278636,
+      "n": 3168268.03557191
+     },
+     "baseHeight": 1419.902,
+     "local": {
+      "e": 4882.157763729627,
+      "n": 10208.390145164545,
+      "z": 1398.461324704681
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 1.000003359404773,
+     "b": -0.023985343760316094,
+     "scale": 1.000290965437623,
+     "scalePpm": 290.9654376230808,
+     "rotationRadians": -0.023980665254292693,
+     "azimuthRotationArcsec": 4946.367272353158,
+     "gridCentroid": {
+      "e": 393966.3379145027,
+      "n": 3168013.531718282
+     },
+     "localCentroid": {
+      "e": 5398.776554180051,
+      "n": 9941.347528466578
+     },
+     "translationE": -464554.77844831464,
+     "translationN": -3148633.408784723,
+     "redundancy": 8,
+     "sigma0Meters": 0.003348887062132039,
+     "scaleSigmaPpm": 2.4920843180936205,
+     "rotationSigmaArcsec": 0.5138797677714926
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "plane",
+     "origin": {
+      "e": 393966.3379145027,
+      "n": 3168013.531718282
+     },
+     "constantMeters": -21.439888390569195,
+     "slopeNorth": 4.803818037396477e-06,
+     "slopeEast": -4.144796870395696e-06,
+     "slopeNorthPpm": 4.803818037396478,
+     "slopeEastPpm": -4.144796870395696,
+     "redundancy": 3,
+     "sigma0Meters": 0.009179978229720403
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.006025879662956868,
+      "dN": -0.00313991211442044,
+      "dH": 0.006794871139228573,
+      "dZ": 0.006994990219709507,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.009140032149406634,
+      "leaveOneOutDZ": 0.010453460467942932
+     },
+     {
+      "name": "C2",
+      "dE": -0.001743856582834269,
+      "dN": 0.001645075290070963,
+      "dH": 0.0023973544776474914,
+      "dZ": -0.006306496018851249,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0038273923170245826,
+      "leaveOneOutDZ": -0.016794608570535274
+     },
+     {
+      "name": "C3",
+      "dE": 0.0003204869080946082,
+      "dN": 0.0008925910005928017,
+      "dH": 0.0009483831254294336,
+      "dZ": 0.00023046768637868809,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0016696112946712944,
+      "leaveOneOutDZ": 0.000655827745276838
+     },
+     {
+      "name": "C4",
+      "dE": -0.0053015748471807456,
+      "dN": -0.0018285118148924084,
+      "dH": 0.005608043448250082,
+      "dZ": -0.006777313255497575,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.009484288310423267,
+      "leaveOneOutDZ": -0.022946521722360558
+     },
+     {
+      "name": "C5",
+      "dE": 0.0008092615462373942,
+      "dN": 0.002172419479393284,
+      "dH": 0.00231825594891201,
+      "dZ": 0.010034419873818479,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0028109164764664107,
+      "leaveOneOutDZ": 0.012272508366322654
+     },
+     {
+      "name": "C6",
+      "dE": -0.00011019652538379887,
+      "dN": 0.0002583376863185549,
+      "dH": 0.00028085874453021096,
+      "dZ": -0.004176068505557851,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0004346609750562274,
+      "leaveOneOutDZ": -0.008506342048804072
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.332342506088,
+       "n": 9840.344421246593,
+       "z": 1390.5589781110546
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.121567143145,
+       "n": 10598.766905486884,
+       "z": 1408.8111853136274
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.393415873739,
+       "n": 9292.345405280676,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.332342506088,
+       "n": 9840.344421246593,
+       "z": 1390.5589781110546
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.121567143145,
+       "n": 10598.766905486884,
+       "z": 1408.8111853136274
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.393415873739,
+       "n": 9292.345405280676,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "similarity_4pts_check",
+   "description": "Cuatro pares en el ajuste, C5 solo como comprobación horizontal y vertical, C6 solo vertical.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 394089.9731919983,
+      "n": 3167997.8878260944
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5522.037832146271,
+      "n": 9922.740321512632,
+      "z": 1393.1995584357821
+     },
+     "useH": false,
+     "useV": false
+    },
+    {
+     "name": "C6",
+     "grid": {
+      "e": 393443.6166278636,
+      "n": 3168268.03557191
+     },
+     "baseHeight": 1419.902,
+     "local": {
+      "e": 4882.157763729627,
+      "n": 10208.390145164545,
+      "z": 1398.461324704681
+     },
+     "useH": false,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 1.0000031700016399,
+     "b": -0.02398526508043641,
+     "scale": 1.0002907742023353,
+     "scalePpm": 290.77420233525334,
+     "rotationRadians": -0.023980591160157712,
+     "azimuthRotationArcsec": 4946.351989340762,
+     "gridCentroid": {
+      "e": 394066.10941678856,
+      "n": 3167953.8167279223
+     },
+     "localCentroid": {
+      "e": 5497.115932301102,
+      "n": 9879.238676030573
+     },
+     "translationE": -464554.4547315,
+     "translationN": -3148632.8403771077,
+     "redundancy": 4,
+     "sigma0Meters": 0.004544475532460042,
+     "scaleSigmaPpm": 3.8432496287771545,
+     "rotationSigmaArcsec": 0.7924967024424389
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "plane",
+     "origin": {
+      "e": 393941.61085900356,
+      "n": 3168016.6604967196
+     },
+     "constantMeters": -21.44177775583944,
+     "slopeNorth": 4.947475999562184e-06,
+     "slopeEast": -5.684996928775353e-06,
+     "slopeNorthPpm": 4.947475999562184,
+     "slopeEastPpm": -5.6849969287753535,
+     "redundancy": 2,
+     "sigma0Meters": 0.00805197177842923
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.00611455469061184,
+      "dN": -0.002472301923262421,
+      "dH": 0.006595457214192987,
+      "dZ": 0.008417351418302133,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.011716233792138406,
+      "leaveOneOutDZ": 0.012895666991653343
+     },
+     {
+      "name": "C2",
+      "dE": -0.001489405752181483,
+      "dN": 0.0023550342266389634,
+      "dH": 0.002786488059057901,
+      "dZ": -0.00392840405129391,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.006002679080323423,
+      "leaveOneOutDZ": -0.011919279375661063
+     },
+     {
+      "name": "C3",
+      "dE": 0.0005921290485275676,
+      "dN": 0.0014310370188468369,
+      "dH": 0.0015487038966245951,
+      "dZ": 0.0033282204678926064,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0030431907317735726,
+      "leaveOneOutDZ": 0.012169371488425895
+     },
+     {
+      "name": "C4",
+      "dE": -0.005217277905103401,
+      "dN": -0.0013137683945387835,
+      "dH": 0.00538014647882092,
+      "dZ": -0.004844860529374273,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.011596355799009694,
+      "leaveOneOutDZ": -0.01828055171813503
+     },
+     {
+      "name": "C5",
+      "dE": 0.0009920151624100981,
+      "dN": 0.002786578726954758,
+      "dH": 0.002957890309657938,
+      "dZ": 0.012272508366322654,
+      "usedH": false,
+      "usedV": false,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C6",
+      "dE": -2.8609673790924717e-05,
+      "dN": 0.0009745190200192155,
+      "dH": 0.00097493888721993,
+      "dZ": -0.0029723073057539295,
+      "usedH": false,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": -0.006203043739105851
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1390.556670941986
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1408.8084394106006
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1390.556670941986
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1408.8084394106006
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "rigid_5pts",
+   "description": "Escala fija en 1: giro y traslación.",
+   "options": {
+    "horizontalMethod": "rigid",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 394089.9731919983,
+      "n": 3167997.8878260944
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5522.037832146271,
+      "n": 9922.740321512632,
+      "z": 1393.1995584357821
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "rigid",
+     "method": "rigid",
+     "a": 0.9997124797628698,
+     "b": -0.02397827780249601,
+     "scale": 1.0,
+     "scalePpm": 0.0,
+     "rotationRadians": -0.023980576146866304,
+     "azimuthRotationArcsec": 4946.348892627118,
+     "gridCentroid": {
+      "e": 394070.8821718305,
+      "n": 3167962.6309475563
+     },
+     "localCentroid": {
+      "e": 5502.100312270135,
+      "n": 9887.939005126984
+     },
+     "translationE": -464417.7665388589,
+     "translationN": -3147714.697488969,
+     "redundancy": 7,
+     "sigma0Meters": 0.1301345266278654,
+     "scaleSigmaPpm": null,
+     "rotationSigmaArcsec": 22.684052852046257
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "plane",
+     "origin": {
+      "e": 394070.8821718305,
+      "n": 3167962.6309475563
+     },
+     "constantMeters": -21.43973100961921,
+     "slopeNorth": 7.172121121720049e-06,
+     "slopeEast": -8.563609851433687e-06,
+     "slopeNorthPpm": 7.172121121720049,
+     "slopeEastPpm": -8.563609851433686,
+     "redundancy": 2,
+     "sigma0Meters": 0.010423361592366568
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": -0.14003810117446847,
+      "dN": 0.02955290101999708,
+      "dH": 0.14312247810616058,
+      "dZ": 0.003693757307019041,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.17891168943655547,
+      "leaveOneOutDZ": 0.010193471832053547
+     },
+     {
+      "name": "C2",
+      "dE": 0.04981453392247204,
+      "dN": 0.17528554248019645,
+      "dH": 0.1822265326248894,
+      "dZ": -0.00784532159104856,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.22780376607566685,
+      "leaveOneOutDZ": -0.02540199171767199
+     },
+     {
+      "name": "C3",
+      "dE": 0.16248296283447416,
+      "dN": -0.04356668116270157,
+      "dH": 0.168222379364345,
+      "dZ": 0.0022041258621356974,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.21028134261845247,
+      "leaveOneOutDZ": 0.009117048379494008
+     },
+     {
+      "name": "C4",
+      "dE": -0.07884893048594677,
+      "dN": -0.1736164620542695,
+      "dH": 0.19068253652345635,
+      "dZ": -0.007252628424566865,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.2384424850352993,
+      "leaveOneOutDZ": -0.0250962433578934
+     },
+     {
+      "name": "C5",
+      "dE": 0.006589534941667807,
+      "dN": 0.012344698785454966,
+      "dH": 0.013993339803316228,
+      "dZ": 0.009200066846460686,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.01749169771366181,
+      "leaveOneOutDZ": 0.011528371339181831
+     }
+    ],
+    "warnings": [
+     {
+      "code": "horizontalResidualAboveTolerance",
+      "pair": "C1",
+      "valueMeters": 0.14312247810616058,
+      "isCheck": false
+     },
+     {
+      "code": "horizontalResidualAboveTolerance",
+      "pair": "C2",
+      "valueMeters": 0.1822265326248894,
+      "isCheck": false
+     },
+     {
+      "code": "horizontalResidualAboveTolerance",
+      "pair": "C3",
+      "valueMeters": 0.168222379364345,
+      "isCheck": false
+     },
+     {
+      "code": "horizontalResidualAboveTolerance",
+      "pair": "C4",
+      "valueMeters": 0.19068253652345635,
+      "isCheck": false
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.316302841593,
+       "n": 9840.35821886503,
+       "z": 1390.5594548465972
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5931.996440927225,
+       "n": 10598.560125952119,
+       "z": 1408.8119036323244
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.469907355587,
+       "n": 9292.518576969547,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.316302841593,
+       "n": 9840.35821886503,
+       "z": 1390.5594548465972
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5931.996440927225,
+       "n": 10598.560125952119,
+       "z": 1408.8119036323244
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.469907355587,
+       "n": 9292.518576969547,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "translation_3pts",
+   "description": "Solo traslación con tres pares (desplazamiento medio).",
+   "options": {
+    "horizontalMethod": "translation",
+    "verticalMethod": "constant",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5667.229254858139,
+      "n": 10500.769787130057,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6065.45306395271,
+      "n": 9760.646438252785,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "translation",
+     "method": "translation",
+     "a": 1.0,
+     "b": 0.0,
+     "scale": 1.0,
+     "scalePpm": 0.0,
+     "rotationRadians": 0.0,
+     "azimuthRotationArcsec": -0.0,
+     "gridCentroid": {
+      "e": 394143.9444107488,
+      "n": 3168149.727540558
+     },
+     "localCentroid": {
+      "e": 5577.562106270282,
+      "n": 10087.13774179428
+     },
+     "translationE": -388566.3823044785,
+     "translationN": -3158062.589798764,
+     "redundancy": 4,
+     "sigma0Meters": 0.0036514837167600576,
+     "scaleSigmaPpm": null,
+     "rotationSigmaArcsec": null
+    },
+    "vertical": {
+     "requestedMethod": "constant",
+     "method": "constant",
+     "origin": {
+      "e": 394143.9444107488,
+      "n": 3168149.727540558
+     },
+     "constantMeters": -21.439663952842313,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 2,
+     "sigma0Meters": 0.007532659919618129
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.0023333333538175793,
+      "dN": -0.004333333488830249,
+      "dH": 0.004921607833366585,
+      "dZ": 0.008663952842425715,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.007382411543386058,
+      "leaveOneOutDZ": 0.01299592926375226
+     },
+     {
+      "name": "C2",
+      "dE": -0.003666666646495287,
+      "dN": 0.0036666665109805763,
+      "dH": 0.00518544960435134,
+      "dZ": -0.004997488496201186,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.007778174592707316,
+      "leaveOneOutDZ": -0.007496232744188092
+     },
+     {
+      "name": "C3",
+      "dE": 0.0013333333536138525,
+      "dN": 0.0006666665121883852,
+      "dH": 0.0014907119340545271,
+      "dZ": -0.003666464346451903,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.002236068003173117,
+      "leaveOneOutDZ": -0.005499696519564168
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5560.840887519819,
+       "n": 9853.79802733048,
+       "z": 1390.5603360471578
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5917.2329215247855,
+       "n": 10620.766120463546,
+       "z": 1408.8103360471578
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5256.222130429404,
+       "n": 9298.49449124926,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5560.840887519819,
+       "n": 9853.79802733048,
+       "z": 1390.5603360471578
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5917.2329215247855,
+       "n": 10620.766120463546,
+       "z": 1408.8103360471578
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5256.222130429404,
+       "n": 9298.49449124926,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "single_point",
+   "description": "Un solo par: traslación y desplazamiento vertical, sin comprobación.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "translation",
+     "a": 1.0,
+     "b": 0.0,
+     "scale": 1.0,
+     "scalePpm": 0.0,
+     "rotationRadians": 0.0,
+     "azimuthRotationArcsec": -0.0,
+     "gridCentroid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "localCentroid": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329
+     },
+     "translationE": -388572.1231226893,
+     "translationN": -3158088.14608973,
+     "redundancy": 0,
+     "sigma0Meters": null,
+     "scaleSigmaPpm": null,
+     "rotationSigmaArcsec": null
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "constant",
+     "origin": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "constantMeters": -21.44333041718869,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 0,
+     "sigma0Meters": null
+    },
+    "residuals": [
+     {
+      "name": "C3",
+      "dE": 0.0,
+      "dN": 0.0,
+      "dH": 0.0,
+      "dZ": 0.0,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": null
+     }
+    ],
+    "warnings": [
+     {
+      "code": "noHorizontalRedundancy"
+     },
+     {
+      "code": "noVerticalRedundancy"
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5555.100069308997,
+       "n": 9828.241736364536,
+       "z": 1390.5566695828113
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5911.4921033139635,
+       "n": 10595.209829497602,
+       "z": 1408.8066695828113
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5250.481312218582,
+       "n": 9272.938200283315,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5555.100069308997,
+       "n": 9828.241736364536,
+       "z": 1390.5566695828113
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5911.4921033139635,
+       "n": 10595.209829497602,
+       "z": 1408.8066695828113
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5250.481312218582,
+       "n": 9272.938200283315,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "two_points_exact",
+   "description": "Dos pares: semejanza exacta, sin redundancia; vertical constante (media).",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 0.9999974523513119,
+     "b": -0.02398288600362973,
+     "scale": 1.0002850011522604,
+     "scalePpm": 285.0011522603779,
+     "rotationRadians": -0.023978350505467542,
+     "azimuthRotationArcsec": 4945.889821135228,
+     "gridCentroid": {
+      "e": 394099.1090031215,
+      "n": 3167942.913351224
+     },
+     "localCentroid": {
+      "e": 5529.857456204267,
+      "n": 9867.543240310164
+     },
+     "translationE": -464544.6612777483,
+     "translationN": -3148615.6652999525,
+     "redundancy": 0,
+     "sigma0Meters": null,
+     "scaleSigmaPpm": null,
+     "rotationSigmaArcsec": null
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "constant",
+     "origin": {
+      "e": 394099.1090031215,
+      "n": 3167942.913351224
+     },
+     "constantMeters": -21.43716520859425,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 1,
+     "sigma0Meters": 0.00871892160911453
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.0,
+      "dN": 0.0,
+      "dH": 0.0,
+      "dZ": 0.006165208594438809,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": 0.012330417188877618
+     },
+     {
+      "name": "C3",
+      "dE": 9.094947017729282e-13,
+      "dN": 0.0,
+      "dH": 9.094947017729282e-13,
+      "dZ": -0.006165208594438809,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": -0.012330417188877618
+     }
+    ],
+    "warnings": [
+     {
+      "code": "noHorizontalRedundancy"
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.335414810644,
+       "n": 9840.343523371566,
+       "z": 1390.5628347914057
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.120649199943,
+       "n": 10598.762353015232,
+       "z": 1408.8128347914057
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.399652378557,
+       "n": 9292.347038934537,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.335414810644,
+       "n": 9840.343523371566,
+       "z": 1390.5628347914057
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.120649199943,
+       "n": 10598.762353015232,
+       "z": 1408.8128347914057
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.399652378557,
+       "n": 9292.347038934537,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "three_points_plane_exact",
+   "description": "Tres pares verticales: plano exacto.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 1.000002961844629,
+     "b": -0.023986511493487676,
+     "scale": 1.0002905959928132,
+     "scalePpm": 290.5959928132251,
+     "rotationRadians": -0.023981841842645995,
+     "azimuthRotationArcsec": 4946.609961121884,
+     "gridCentroid": {
+      "e": 393877.5345440188,
+      "n": 3167997.3437804463
+     },
+     "localCentroid": {
+      "e": 5309.5842722652915,
+      "n": 9927.288407833987
+     },
+     "translationE": -464558.32157374173,
+     "translationN": -3148631.6904791626,
+     "redundancy": 2,
+     "sigma0Meters": 0.0062408345285327824,
+     "scaleSigmaPpm": 6.40720359881978,
+     "rotationSigmaArcsec": 1.321196674436951
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "plane",
+     "origin": {
+      "e": 393877.5345440188,
+      "n": 3167997.3437804463
+     },
+     "constantMeters": -21.44162768889646,
+     "slopeNorth": 1.4248230741852113e-05,
+     "slopeEast": -3.1168284491517065e-05,
+     "slopeNorthPpm": 14.248230741852113,
+     "slopeEastPpm": -31.168284491517067,
+     "redundancy": 0,
+     "sigma0Meters": null
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.006165837714434019,
+      "dN": -0.0023695300242252415,
+      "dH": 0.006605469495534879,
+      "dZ": 0.0,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.011792656139573109,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C2",
+      "dE": -0.001923393630022474,
+      "dN": 0.0033936895706574433,
+      "dH": 0.0039008424677241366,
+      "dZ": 0.0,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.019969028997022468,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C4",
+      "dE": -0.004242444005285506,
+      "dN": -0.0010241586169286165,
+      "dH": 0.00436431346383507,
+      "dZ": 0.0,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.017848403881384842,
+      "leaveOneOutDZ": null
+     }
+    ],
+    "warnings": [
+     {
+      "code": "noVerticalRedundancy"
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.331808854265,
+       "n": 9840.343054078545,
+       "z": 1390.5494364651715
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.1217874181375,
+       "n": 10598.76481723209,
+       "z": 1408.7992562752277
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.392354879834,
+       "n": 9292.34461459261,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.331808854265,
+       "n": 9840.343054078545,
+       "z": 1390.5494364651715
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.1217874181375,
+       "n": 10598.76481723209,
+       "z": 1408.7992562752277
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.392354879834,
+       "n": 9292.34461459261,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "vertical_only",
+   "description": "Solo vertical: dos bancos de nivel, sin ajuste horizontal.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": false,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": false,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "none",
+     "a": 1.0,
+     "b": 0.0,
+     "scale": 1.0,
+     "scalePpm": 0.0,
+     "rotationRadians": 0.0,
+     "azimuthRotationArcsec": -0.0,
+     "gridCentroid": {
+      "e": 0.0,
+      "n": 0.0
+     },
+     "localCentroid": {
+      "e": 0.0,
+      "n": 0.0
+     },
+     "translationE": 0.0,
+     "translationN": 0.0,
+     "redundancy": 0,
+     "sigma0Meters": null,
+     "scaleSigmaPpm": null,
+     "rotationSigmaArcsec": null
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "constant",
+     "origin": {
+      "e": 394033.1098304556,
+      "n": 3167964.7201046203
+     },
+     "constantMeters": -21.446941533344784,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 1,
+     "sigma0Meters": 0.003224537038670241
+    },
+    "residuals": [
+     {
+      "name": "C2",
+      "dE": null,
+      "dN": null,
+      "dH": null,
+      "dZ": 0.002280092006230916,
+      "usedH": false,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": 0.004560184012689206
+     },
+     {
+      "name": "C4",
+      "dE": null,
+      "dN": null,
+      "dH": null,
+      "dZ": -0.002280092006230916,
+      "usedH": false,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": -0.004560184012689206
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944,
+       "z": 1390.5530584666553
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275,
+       "z": 1408.8030584666553
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944,
+       "z": 1390.5530584666553
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275,
+       "z": 1408.8030584666553
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "no_vertical",
+   "description": "Sin cotas de control: solo horizontal; la cota local es la de la base.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": null
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": null
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": null
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": null
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 1.0000031700016399,
+     "b": -0.02398526508043641,
+     "scale": 1.0002907742023353,
+     "scalePpm": 290.77420233525334,
+     "rotationRadians": -0.023980591160157712,
+     "azimuthRotationArcsec": 4946.351989340762,
+     "gridCentroid": {
+      "e": 394066.10941678856,
+      "n": 3167953.8167279223
+     },
+     "localCentroid": {
+      "e": 5497.115932301102,
+      "n": 9879.238676030573
+     },
+     "translationE": -464554.4547315,
+     "translationN": -3148632.8403771077,
+     "redundancy": 4,
+     "sigma0Meters": 0.004544475532460042,
+     "scaleSigmaPpm": 3.8432496287771545,
+     "rotationSigmaArcsec": 0.7924967024424389
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "none",
+     "origin": {
+      "e": 0.0,
+      "n": 0.0
+     },
+     "constantMeters": 0.0,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 0,
+     "sigma0Meters": null
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.00611455469061184,
+      "dN": -0.002472301923262421,
+      "dH": 0.006595457214192987,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.011716233792138406,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C2",
+      "dE": -0.001489405752181483,
+      "dN": 0.0023550342266389634,
+      "dH": 0.002786488059057901,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.006002679080323423,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C3",
+      "dE": 0.0005921290485275676,
+      "dN": 0.0014310370188468369,
+      "dH": 0.0015487038966245951,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.0030431907317735726,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C4",
+      "dE": -0.005217277905103401,
+      "dN": -0.0013137683945387835,
+      "dH": 0.00538014647882092,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.011596355799009694,
+      "leaveOneOutDZ": null
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1412.0
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1430.25
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1412.0
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1430.25
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "vertical_method_none",
+   "description": "Ajuste vertical desactivado aunque haya cotas.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "none",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 1.0000031700016399,
+     "b": -0.02398526508043641,
+     "scale": 1.0002907742023353,
+     "scalePpm": 290.77420233525334,
+     "rotationRadians": -0.023980591160157712,
+     "azimuthRotationArcsec": 4946.351989340762,
+     "gridCentroid": {
+      "e": 394066.10941678856,
+      "n": 3167953.8167279223
+     },
+     "localCentroid": {
+      "e": 5497.115932301102,
+      "n": 9879.238676030573
+     },
+     "translationE": -464554.4547315,
+     "translationN": -3148632.8403771077,
+     "redundancy": 4,
+     "sigma0Meters": 0.004544475532460042,
+     "scaleSigmaPpm": 3.8432496287771545,
+     "rotationSigmaArcsec": 0.7924967024424389
+    },
+    "vertical": {
+     "requestedMethod": "none",
+     "method": "none",
+     "origin": {
+      "e": 0.0,
+      "n": 0.0
+     },
+     "constantMeters": 0.0,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 0,
+     "sigma0Meters": null
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.00611455469061184,
+      "dN": -0.002472301923262421,
+      "dH": 0.006595457214192987,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.011716233792138406,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C2",
+      "dE": -0.001489405752181483,
+      "dN": 0.0023550342266389634,
+      "dH": 0.002786488059057901,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.006002679080323423,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C3",
+      "dE": 0.0005921290485275676,
+      "dN": 0.0014310370188468369,
+      "dH": 0.0015487038966245951,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.0030431907317735726,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C4",
+      "dE": -0.005217277905103401,
+      "dN": -0.0013137683945387835,
+      "dH": 0.00538014647882092,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.011596355799009694,
+      "leaveOneOutDZ": null
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1412.0
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1430.25
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1412.0
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1430.25
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "vertical_constant_forced",
+   "description": "Cinco pares con plano posible, pero el usuario pidió solo desplazamiento.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "constant",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 394089.9731919983,
+      "n": 3167997.8878260944
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5522.037832146271,
+      "n": 9922.740321512632,
+      "z": 1393.1995584357821
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 1.0000032536922345,
+     "b": -0.023985252065793876,
+     "scale": 1.0002908575567984,
+     "scalePpm": 290.8575567983629,
+     "rotationRadians": -0.023980576146866304,
+     "azimuthRotationArcsec": 4946.348892627118,
+     "gridCentroid": {
+      "e": 394070.8821718305,
+      "n": 3167962.6309475563
+     },
+     "localCentroid": {
+      "e": 5502.100312270135,
+      "n": 9887.939005126984
+     },
+     "translationE": -464554.44628322223,
+     "translationN": -3148633.11007716,
+     "redundancy": 6,
+     "sigma0Meters": 0.0038643299987908717,
+     "scaleSigmaPpm": 3.2657067737571097,
+     "rotationSigmaArcsec": 0.6734045101582787
+    },
+    "vertical": {
+     "requestedMethod": "constant",
+     "method": "constant",
+     "origin": {
+      "e": 394070.8821718305,
+      "n": 3167962.6309475563
+     },
+     "constantMeters": -21.43973100961921,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 4,
+     "sigma0Meters": 0.008512652400937556
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.0059596743503789185,
+      "dN": -0.00303141790391237,
+      "dH": 0.0066863452551244205,
+      "dZ": 0.00873100961939599,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.010941622484228156,
+      "leaveOneOutDZ": 0.010913762024301832
+     },
+     {
+      "name": "C2",
+      "dE": -0.001693609799076512,
+      "dN": 0.001745325167576084,
+      "dH": 0.0024319691799244638,
+      "dZ": -0.00493043171923091,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.004646823498025198,
+      "leaveOneOutDZ": -0.006163039648981794
+     },
+     {
+      "name": "C3",
+      "dE": 0.00034496543139539426,
+      "dN": 0.0008780863954598317,
+      "dH": 0.0009434176523414487,
+      "dZ": -0.0035994075694816274,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0016804891962672616,
+      "leaveOneOutDZ": -0.004499259461908878
+     },
+     {
+      "name": "C4",
+      "dE": -0.005403503181696578,
+      "dN": -0.0018180580664193258,
+      "dH": 0.00570115617813417,
+      "dZ": -0.009490615731920116,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.011282739234623392,
+      "leaveOneOutDZ": -0.011863269664900145
+     },
+     {
+      "name": "C5",
+      "dE": 0.0007924732381070498,
+      "dN": 0.002226063477792195,
+      "dH": 0.0023629160882850148,
+      "dZ": 0.009289445401236662,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.002957890309657938,
+      "leaveOneOutDZ": 0.011611806751488984
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.332362829706,
+       "n": 9840.344379633787,
+       "z": 1390.5602689903808
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.121479464883,
+       "n": 10598.766815475132,
+       "z": 1408.8102689903808
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.393519317672,
+       "n": 9292.345394438546,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.332362829706,
+       "n": 9840.344379633787,
+       "z": 1390.5602689903808
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.121479464883,
+       "n": 10598.766815475132,
+       "z": 1408.8102689903808
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.393519317672,
+       "n": 9292.345394438546,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "vertical_collinear_fallback",
+   "description": "Tres pares verticales casi en línea: el plano no se define de lado; se usa la constante.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 394089.9731919983,
+      "n": 3167997.8878260944
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5522.037832146271,
+      "n": 9922.740321512632,
+      "z": 1393.1995584357821
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C7",
+     "grid": {
+      "e": 394616.5624128515,
+      "n": 3167931.1845200914
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6047.025688035513,
+      "n": 9843.402682868375,
+      "z": 1388.106071871564
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 0.9999952544979029,
+     "b": -0.023984816154591686,
+     "scale": 1.000282850210027,
+     "scalePpm": 282.85021002694145,
+     "rotationRadians": -0.02398033223689127,
+     "azimuthRotationArcsec": 4946.298582583377,
+     "gridCentroid": {
+      "e": 394090.97319199826,
+      "n": 3167997.221159428
+     },
+     "localCentroid": {
+      "e": 5523.022506727261,
+      "n": 9922.046668127003
+     },
+     "translationE": -464549.9114534975,
+     "translationN": -3148607.94121365,
+     "redundancy": 2,
+     "sigma0Meters": 0.0026662185438691955,
+     "scaleSigmaPpm": 3.5626509382069207,
+     "rotationSigmaArcsec": 0.7346417119327718
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "constant",
+     "origin": {
+      "e": 394090.97319199826,
+      "n": 3167997.221159428
+     },
+     "constantMeters": -21.435789897551256,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 2,
+     "sigma0Meters": 0.008784404176414577
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.0003379100971869775,
+      "dN": -0.00150660202234576,
+      "dH": 0.0015440313751725534,
+      "dZ": 0.004789897551518152,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.009207999921602253,
+      "leaveOneOutDZ": 0.007184846327163541
+     },
+     {
+      "name": "C5",
+      "dE": -0.000669203983306943,
+      "dN": 0.0030050666337047005,
+      "dH": 0.003078678197584018,
+      "dZ": 0.0053483333333588234,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.004618034914404114,
+      "leaveOneOutDZ": 0.008022499999924548
+     },
+     {
+      "name": "C7",
+      "dE": 0.00033129372241091914,
+      "dN": -0.0014984641420596745,
+      "dH": 0.0015346498999926725,
+      "dZ": -0.010138230884649602,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.009264289836732716,
+      "leaveOneOutDZ": -0.01520734632708809
+     }
+    ],
+    "warnings": [
+     {
+      "code": "verticalCollinearFallback",
+      "valueMeters": 0.3799621700748404
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.333562063702,
+       "n": 9840.344268802663,
+       "z": 1390.5642101024487
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.119493519758,
+       "n": 10598.760724872462,
+       "z": 1408.8142101024487
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.397397319335,
+       "n": 9292.34959280159,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.333562063702,
+       "n": 9840.344268802663,
+       "z": 1390.5642101024487
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.119493519758,
+       "n": 10598.760724872462,
+       "z": 1408.8142101024487
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.397397319335,
+       "n": 9292.34959280159,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "blunder_detected",
+   "description": "C4 con 8 cm de error en el este y 9 cm en la cota: residuos fuera de tolerancia.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.588074611742,
+      "n": 9297.103740128281,
+      "z": 1382.7467783746488
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 394089.9731919983,
+      "n": 3167997.8878260944
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5522.037832146271,
+      "n": 9922.740321512632,
+      "z": 1393.1995584357821
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C6",
+     "grid": {
+      "e": 393443.6166278636,
+      "n": 3168268.03557191
+     },
+     "baseHeight": 1419.902,
+     "local": {
+      "e": 4882.157763729627,
+      "n": 10208.390145164545,
+      "z": 1398.461324704681
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 0.9999974348653604,
+     "b": -0.02395666113111888,
+     "scale": 1.000284355245973,
+     "scalePpm": 284.3552459730336,
+     "rotationRadians": -0.023952141043777797,
+     "azimuthRotationArcsec": 4940.483731597952,
+     "gridCentroid": {
+      "e": 393966.3379145027,
+      "n": 3168013.531718282
+     },
+     "localCentroid": {
+      "e": 5398.789887513384,
+      "n": 9941.347528466578
+     },
+     "translationE": -464461.56408846314,
+     "translationN": -3148625.939754081,
+     "redundancy": 8,
+     "sigma0Meters": 0.019447935004342037,
+     "scaleSigmaPpm": 14.472238969076907,
+     "rotationSigmaArcsec": 2.9842649755171635
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "plane",
+     "origin": {
+      "e": 393966.3379145027,
+      "n": 3168013.531718282
+     },
+     "constantMeters": -21.42488839056921,
+     "slopeNorth": -6.672597357599923e-05,
+     "slopeEast": -1.989622009101759e-05,
+     "slopeNorthPpm": -66.72597357599923,
+     "slopeEastPpm": -19.89622009101759,
+     "redundancy": 3,
+     "sigma0Meters": 0.021796445516548166
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": -0.008269843594462145,
+      "dN": 0.008622472969364026,
+      "dH": 0.011947273880860011,
+      "dZ": -0.01079564396400201,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.01607071935054261,
+      "leaveOneOutDZ": -0.016133237339772677
+     },
+     {
+      "name": "C2",
+      "dE": 0.0022767087293686927,
+      "dN": -0.0027636855811579153,
+      "dH": 0.003580692758375643,
+      "dZ": 0.022232312549476774,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.005716599671320236,
+      "leaveOneOutDZ": 0.059206092537579025
+     },
+     {
+      "name": "C3",
+      "dE": -0.014528282277751714,
+      "dN": -0.019323004486068385,
+      "dH": 0.024175390137713464,
+      "dZ": -0.01789886507299343,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.04256032617276311,
+      "leaveOneOutDZ": -0.05093370143936227
+     },
+     {
+      "name": "C4",
+      "dE": 0.04200228803892969,
+      "dN": -0.0018285118148924084,
+      "dH": 0.042042070072278996,
+      "dZ": 0.019804414484042354,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0711012884965387,
+      "leaveOneOutDZ": 0.06705347827755759
+     },
+     {
+      "name": "C5",
+      "dE": -0.012240297673088207,
+      "dN": -0.0014664481950603658,
+      "dH": 0.012327828577434244,
+      "dZ": -0.004137152893463281,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.014947657340590637,
+      "leaveOneOutDZ": -0.005059908209432251
+     },
+     {
+      "name": "C6",
+      "dE": -0.009240573059287271,
+      "dN": 0.016759176634877804,
+      "dH": 0.01913787323458539,
+      "dZ": -0.009205065103060406,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.029618047075201496,
+      "leaveOneOutDZ": -0.018750035408402255
+     }
+    ],
+    "warnings": [
+     {
+      "code": "slopeLarge",
+      "valuePpm": 69.62912554079047
+     },
+     {
+      "code": "horizontalResidualAboveTolerance",
+      "pair": "C3",
+      "valueMeters": 0.024175390137713464,
+      "isCheck": false
+     },
+     {
+      "code": "horizontalResidualAboveTolerance",
+      "pair": "C4",
+      "valueMeters": 0.042042070072278996,
+      "isCheck": false
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.347509010492,
+       "n": 9840.349611392168,
+       "z": 1390.5783926213235
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.112623527476,
+       "n": 10598.777773960324,
+       "z": 1408.7701250742602
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.426314669393,
+       "n": 9292.345148077082,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.347509010492,
+       "n": 9840.349611392168,
+       "z": 1390.5783926213235
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.112623527476,
+       "n": 10598.777773960324,
+       "z": 1408.7701250742602
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.426314669393,
+       "n": 9292.345148077082,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "unusual_scale_feet",
+   "description": "Coordenadas de control en pies: escala ≈ 3.28, aviso de escala.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "none",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 16404.212598425194,
+      "n": 32808.38910761155,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 18632.679600341635,
+      "n": 34398.833606869026,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 19880.941313676292,
+      "n": 31939.26994954176,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 17222.79552037973,
+      "n": 30502.308858688586,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 3.2808502952809704,
+     "b": -0.07869181456836248,
+     "scale": 3.2817938786165857,
+     "scalePpm": 2281793.878616586,
+     "rotationRadians": -0.02398059116015819,
+     "azimuthRotationArcsec": 4946.351989340861,
+     "gridCentroid": {
+      "e": 394066.10941678856,
+      "n": 3167953.8167279223
+     },
+     "localCentroid": {
+      "e": 18035.157258205712,
+      "n": 32412.20038067773
+     },
+     "translationE": -1524128.788489178,
+     "translationN": -10330160.237457702,
+     "redundancy": 4,
+     "sigma0Meters": 0.014909696629815943,
+     "scaleSigmaPpm": 12.609086709440644,
+     "rotationSigmaArcsec": 0.792496702496125
+    },
+    "vertical": {
+     "requestedMethod": "none",
+     "method": "none",
+     "origin": {
+      "e": 0.0,
+      "n": 0.0
+     },
+     "constantMeters": 0.0,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 0,
+     "sigma0Meters": null
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.020060874969203724,
+      "dN": -0.008111226779874414,
+      "dH": 0.02163863915325029,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.0384390872406922,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C2",
+      "dE": -0.004886501814326039,
+      "dN": 0.0077264902502065524,
+      "dH": 0.009142021197084843,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.01969382900551968,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C3",
+      "dE": 0.0019426806065894198,
+      "dN": 0.004695003342931159,
+      "dH": 0.005081049530299168,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.009984221558525769,
+      "leaveOneOutDZ": null
+     },
+     {
+      "name": "C4",
+      "dE": -0.017117053495894652,
+      "dN": -0.004310263760999078,
+      "dH": 0.017651399209997524,
+      "dZ": null,
+      "usedH": true,
+      "usedV": false,
+      "leaveOneOutDH": 0.03804578673831104,
+      "leaveOneOutDZ": null
+     }
+    ],
+    "warnings": [
+     {
+      "code": "scaleUnusual",
+      "valuePpm": 2281793.878616586
+     },
+     {
+      "code": "horizontalResidualAboveTolerance",
+      "pair": "C1",
+      "valueMeters": 0.02163863915325029,
+      "isCheck": false
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 18232.71705744624,
+       "n": 32284.59260319726,
+       "z": 1412.0
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 19462.340078411897,
+       "n": 34772.8549621704,
+       "z": 1430.25
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 17189.61067540757,
+       "n": 30486.695835621624,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 18232.71705744624,
+       "n": 32284.59260319726,
+       "z": 1412.0
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 19462.340078411897,
+       "n": 34772.8549621704,
+       "z": 1430.25
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 17189.61067540757,
+       "n": 30486.695835621624,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "weak_geometry",
+   "description": "Dos pares a 36 m: giro y escala poco determinados.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 393596.38397114514,
+      "n": 3168082.5911320974
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5030.479723536565,
+      "n": 10019.280372408599,
+      "z": 1393.1930300000004
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 0.999953195591493,
+     "b": -0.02385638344101328,
+     "scale": 1.000237731944023,
+     "scalePpm": 237.7319440229897,
+     "rotationRadians": -0.02385297521594013,
+     "azimuthRotationArcsec": 4920.0293113326825,
+     "gridCentroid": {
+      "e": 393581.38397114514,
+      "n": 3168072.5911320974
+     },
+     "localCentroid": {
+      "e": 5015.241861768282,
+      "n": 10009.6386862043
+     },
+     "translationE": -464126.4752685125,
+     "translationN": -3148525.2442708975,
+     "redundancy": 0,
+     "sigma0Meters": null,
+     "scaleSigmaPpm": null,
+     "rotationSigmaArcsec": null
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "constant",
+     "origin": {
+      "e": 393581.38397114514,
+      "n": 3168072.5911320974
+     },
+     "constantMeters": -21.43398499999978,
+     "slopeNorth": 0.0,
+     "slopeEast": 0.0,
+     "slopeNorthPpm": 0.0,
+     "slopeEastPpm": 0.0,
+     "redundancy": 1,
+     "sigma0Meters": 0.004221427483636922
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.0,
+      "dN": -1.8189894035458565e-12,
+      "dH": 1.8189894035458565e-12,
+      "dZ": 0.002984999999853244,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": 0.0059699999999338615
+     },
+     {
+      "name": "C5",
+      "dE": 0.0,
+      "dN": 0.0,
+      "dH": 0.0,
+      "dZ": -0.0029850000000806176,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": -0.0059699999999338615
+     }
+    ],
+    "warnings": [
+     {
+      "code": "horizontalGeometryWeak",
+      "valuePpm": 392.23227027636807
+     },
+     {
+      "code": "noHorizontalRedundancy"
+     }
+    ],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.329088976822,
+       "n": 9840.420941454819,
+       "z": 1390.5660150000003
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.001527180245,
+       "n": 10598.850912081396,
+       "z": 1408.8160150000003
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.477055304249,
+       "n": 9292.41049789962,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.329088976822,
+       "n": 9840.420941454819,
+       "z": 1390.5660150000003
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.001527180245,
+       "n": 10598.850912081396,
+       "z": 1408.8160150000003
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.477055304249,
+       "n": 9292.41049789962,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "benchmark_without_planar",
+   "description": "Cuatro pares completos y un banco de nivel BN1 sin norte ni este: solo cuenta en la vertical.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 394631.83403509785,
+      "n": 3167823.23557035
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": 393832.6044349079,
+      "n": 3167366.084290013
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "BN1",
+     "grid": {
+      "e": 394089.9731919983,
+      "n": 3167997.8878260944
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": null,
+      "n": null,
+      "z": 1393.1995584357821
+     },
+     "useH": false,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 1.0000031700016399,
+     "b": -0.02398526508043641,
+     "scale": 1.0002907742023353,
+     "scalePpm": 290.77420233525334,
+     "rotationRadians": -0.023980591160157712,
+     "azimuthRotationArcsec": 4946.351989340762,
+     "gridCentroid": {
+      "e": 394066.10941678856,
+      "n": 3167953.8167279223
+     },
+     "localCentroid": {
+      "e": 5497.115932301102,
+      "n": 9879.238676030573
+     },
+     "translationE": -464554.4547315,
+     "translationN": -3148632.8403771077,
+     "redundancy": 4,
+     "sigma0Meters": 0.004544475532460042,
+     "scaleSigmaPpm": 3.8432496287771545,
+     "rotationSigmaArcsec": 0.7924967024424389
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "plane",
+     "origin": {
+      "e": 394070.8821718305,
+      "n": 3167962.6309475563
+     },
+     "constantMeters": -21.43973100961921,
+     "slopeNorth": 7.172121121720049e-06,
+     "slopeEast": -8.563609851433687e-06,
+     "slopeNorthPpm": 7.172121121720049,
+     "slopeEastPpm": -8.563609851433686,
+     "redundancy": 2,
+     "sigma0Meters": 0.010423361592366568
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.00611455469061184,
+      "dN": -0.002472301923262421,
+      "dH": 0.006595457214192987,
+      "dZ": 0.003693757307019041,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.011716233792138406,
+      "leaveOneOutDZ": 0.010193471832053547
+     },
+     {
+      "name": "C2",
+      "dE": -0.001489405752181483,
+      "dN": 0.0023550342266389634,
+      "dH": 0.002786488059057901,
+      "dZ": -0.00784532159104856,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.006002679080323423,
+      "leaveOneOutDZ": -0.02540199171767199
+     },
+     {
+      "name": "C3",
+      "dE": 0.0005921290485275676,
+      "dN": 0.0014310370188468369,
+      "dH": 0.0015487038966245951,
+      "dZ": 0.0022041258621356974,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0030431907317735726,
+      "leaveOneOutDZ": 0.009117048379494008
+     },
+     {
+      "name": "C4",
+      "dE": -0.005217277905103401,
+      "dN": -0.0013137683945387835,
+      "dH": 0.00538014647882092,
+      "dZ": -0.007252628424566865,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.011596355799009694,
+      "leaveOneOutDZ": -0.0250962433578934
+     },
+     {
+      "name": "BN1",
+      "dE": null,
+      "dN": null,
+      "dH": null,
+      "dZ": 0.009200066846460686,
+      "usedH": false,
+      "usedV": true,
+      "leaveOneOutDH": null,
+      "leaveOneOutDZ": 0.011528371339181831
+     }
+    ],
+    "warnings": [],
+    "forward": [
+     {
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0,
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1390.5594548465972
+      }
+     },
+     {
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25,
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1408.8119036323244
+      }
+     },
+     {
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null,
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      }
+     }
+    ],
+    "inverse": [
+     {
+      "local": {
+       "e": 5557.332159109615,
+       "n": 9840.343825454527,
+       "z": 1390.5594548465972
+      },
+      "grid": {
+       "e": 394127.2231919983,
+       "n": 3167916.3878260944
+      },
+      "baseHeight": 1412.0
+     },
+     {
+      "local": {
+       "e": 5932.121255899946,
+       "n": 10598.766192469539,
+       "z": 1408.8119036323244
+      },
+      "grid": {
+       "e": 394483.6152260033,
+       "n": 3168683.3559192275
+      },
+      "baseHeight": 1430.25
+     },
+     {
+      "local": {
+       "e": 5239.393333864228,
+       "n": 9292.34489069747,
+       "z": null
+      },
+      "grid": {
+       "e": 393822.6044349079,
+       "n": 3167361.084290013
+      },
+      "baseHeight": null
+     }
+    ]
+   }
+  },
+  {
+   "name": "horizontal_pair_without_planar_error",
+   "description": "Un par marcado para la horizontal sin norte ni este de control.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": null,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expectedError": "horizontalPairWithoutLocalPlanar"
+  },
+  {
+   "name": "coincident_error",
+   "description": "Dos pares a 36 cm: no hay giro ni escala que calcular.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 393566.68397114513,
+      "n": 3168062.7911320976
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expectedError": "horizontalPointsCoincident"
+  },
+  {
+   "name": "control_coincident_error",
+   "description": "Dos pares con el mismo punto de control: escala cero, no hay ajuste que calcular.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 394233.6152260033,
+      "n": 3168563.3559192275
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expectedError": "horizontalPointsCoincident"
+  },
+  {
+   "name": "no_usable_pairs",
+   "description": "Ningún par en uso.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": 393566.38397114514,
+      "n": 3168062.5911320974
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": false,
+     "useV": false
+    }
+   ],
+   "expectedError": "noUsablePairs"
+  },
+  {
+   "name": "geographic_project_local_tm",
+   "description": "Proyecto en geográficas: la cuadrícula base es una transversa de Mercator local (meridiano central en la longitud media de los pares, k0 = 1, sin falso origen). Las coordenadas de control son las del primer caso.",
+   "options": {
+    "horizontalMethod": "similarity",
+    "verticalMethod": "automatic",
+    "horizontalToleranceMeters": 0.02,
+    "verticalToleranceMeters": 0.04
+   },
+   "pairs": [
+    {
+     "name": "C1",
+     "grid": {
+      "e": -400.4864462394664,
+      "n": 3168845.4076142567
+     },
+     "baseHeight": 1418.214,
+     "local": {
+      "e": 5000.004,
+      "n": 9999.997,
+      "z": 1396.7830000000001
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C2",
+     "grid": {
+      "e": 262.34594867169653,
+      "n": 3169352.3392434185
+     },
+     "baseHeight": 1422.871,
+     "local": {
+      "e": 5679.240742184131,
+      "n": 10484.76448337368,
+      "z": 1401.4263385586617
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C3",
+     "grid": {
+      "e": 667.3710185848835,
+      "n": 3168615.6697214553
+     },
+     "baseHeight": 1409.552,
+     "local": {
+      "e": 6059.710912408535,
+      "n": 9735.089480620329,
+      "z": 1388.1086695828112
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C4",
+     "grid": {
+      "e": -127.8862157431287,
+      "n": 3168151.1640875684
+     },
+     "baseHeight": 1404.106,
+     "local": {
+      "e": 5249.508074611742,
+      "n": 9297.103740128281,
+      "z": 1382.6567783746489
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C5",
+     "grid": {
+      "e": 123.80513267759426,
+      "n": 3168785.4425059827
+     },
+     "baseHeight": 1414.63,
+     "local": {
+      "e": 5522.037832146271,
+      "n": 9922.740321512632,
+      "z": 1393.1995584357821
+     },
+     "useH": true,
+     "useV": true
+    },
+    {
+     "name": "C6",
+     "grid": {
+      "e": -525.1454774590429,
+      "n": 3169049.782676418
+     },
+     "baseHeight": 1419.902,
+     "local": {
+      "e": 4882.157763729627,
+      "n": 10208.390145164545,
+      "z": 1398.461324704681
+     },
+     "useH": true,
+     "useV": true
+    }
+   ],
+   "expected": {
+    "horizontal": {
+     "requestedMethod": "similarity",
+     "method": "similarity",
+     "a": 0.9994832715166431,
+     "b": -0.033049896319567784,
+     "scale": 1.0000295524075005,
+     "scalePpm": 29.55240750046606,
+     "rotationRadians": -0.03305493877957808,
+     "azimuthRotationArcsec": 6818.070542879305,
+     "gridCentroid": {
+      "e": 0.0006600820893775486,
+      "n": 3168799.967641516
+     },
+     "localCentroid": {
+      "e": 5398.776554180051,
+      "n": 9941.347528466578
+     },
+     "translationE": -99329.7344935628,
+     "translationN": -3157221.210889893,
+     "redundancy": 8,
+     "sigma0Meters": 0.0031944107290903176,
+     "scaleSigmaPpm": 2.376509061004278,
+     "rotationSigmaArcsec": 0.49017569514062675
+    },
+    "vertical": {
+     "requestedMethod": "automatic",
+     "method": "plane",
+     "origin": {
+      "e": 0.0006600820893775486,
+      "n": 3168799.967641516
+     },
+     "constantMeters": -21.439888390569195,
+     "slopeNorth": 4.7647617527081245e-06,
+     "slopeEast": -4.187116527227548e-06,
+     "slopeNorthPpm": 4.764761752708124,
+     "slopeEastPpm": -4.187116527227548,
+     "redundancy": 3,
+     "sigma0Meters": 0.009179979668486634
+    },
+    "residuals": [
+     {
+      "name": "C1",
+      "dE": 0.005822658609758946,
+      "dN": -0.003078420229940093,
+      "dH": 0.006586351372186607,
+      "dZ": 0.006994993743319355,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.008859543115141165,
+      "leaveOneOutDZ": 0.010453462982241035
+     },
+     {
+      "name": "C2",
+      "dE": -0.0013634751867357409,
+      "dN": 0.0012637326017284067,
+      "dH": 0.001859054779589701,
+      "dZ": -0.00630649955746776,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.002967994523009029,
+      "leaveOneOutDZ": -0.016794627213585045
+     },
+     {
+      "name": "C3",
+      "dE": -0.0001238512022609939,
+      "dN": 0.001161385111117852,
+      "dH": 0.0011679702464650883,
+      "dZ": 0.00023046651904223836,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.0020561920084417717,
+      "leaveOneOutDZ": 0.0006558257823598979
+     },
+     {
+      "name": "C4",
+      "dE": -0.004796344738679181,
+      "dN": -0.0021376536697061965,
+      "dH": 0.005251141405814914,
+      "dZ": -0.006777317674504957,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.008880695548578444,
+      "leaveOneOutDZ": -0.02294651269176029
+     },
+     {
+      "name": "C5",
+      "dE": 0.0008328914800586062,
+      "dN": 0.002148011397366645,
+      "dH": 0.002303836187920318,
+      "dZ": 0.010034418914756316,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.002793432414510254,
+      "leaveOneOutDZ": 0.012272507085754114
+     },
+     {
+      "name": "C6",
+      "dE": -0.0003718790549100959,
+      "dN": 0.0006429419918276835,
+      "dH": 0.0007427438564782446,
+      "dZ": -0.004176061945145193,
+      "usedH": true,
+      "usedV": true,
+      "leaveOneOutDH": 0.001149481190377583,
+      "leaveOneOutDZ": -0.008506321026061414
+     }
+    ],
+    "warnings": [],
+    "forward": [],
+    "inverse": []
+   },
+   "baseGrid": {
+    "kind": "localTransverseMercator",
+    "centralMeridianDegrees": -106.08481616666666,
+    "scaleFactor": 1.0,
+    "falseEastingMeters": 0.0,
+    "falseNorthingMeters": 0.0,
+    "latitudeOfOriginDegrees": 0.0,
+    "ellipsoid": "WGS 84"
+   }
+  }
+ ],
+ "pipelineUTM13N": [
+  {
+   "name": "C1",
+   "latitudeDegrees": 28.635271,
+   "longitudeDegrees": -106.088912,
+   "ellipsoidalHeightMeters": 1418.214,
+   "utm13n": {
+    "e": 393566.38397114514,
+    "n": 3168062.5911320974
+   },
+   "localTransverseMercator": {
+    "e": -400.4864462394664,
+    "n": 3168845.4076142567
+   }
+  },
+  {
+   "name": "C2",
+   "latitudeDegrees": 28.639845,
+   "longitudeDegrees": -106.082133,
+   "ellipsoidalHeightMeters": 1422.871,
+   "utm13n": {
+    "e": 394233.6152260033,
+    "n": 3168563.3559192275
+   },
+   "localTransverseMercator": {
+    "e": 262.34594867169653,
+    "n": 3169352.3392434185
+   }
+  },
+  {
+   "name": "C3",
+   "latitudeDegrees": 28.633198,
+   "longitudeDegrees": -106.077991,
+   "ellipsoidalHeightMeters": 1409.552,
+   "utm13n": {
+    "e": 394631.83403509785,
+    "n": 3167823.23557035
+   },
+   "localTransverseMercator": {
+    "e": 667.3710185848835,
+    "n": 3168615.6697214553
+   }
+  },
+  {
+   "name": "C4",
+   "latitudeDegrees": 28.629007,
+   "longitudeDegrees": -106.086124,
+   "ellipsoidalHeightMeters": 1404.106,
+   "utm13n": {
+    "e": 393832.6044349079,
+    "n": 3167366.084290013
+   },
+   "localTransverseMercator": {
+    "e": -127.8862157431287,
+    "n": 3168151.1640875684
+   }
+  },
+  {
+   "name": "C5",
+   "latitudeDegrees": 28.63473,
+   "longitudeDegrees": -106.08355,
+   "ellipsoidalHeightMeters": 1414.63,
+   "utm13n": {
+    "e": 394089.9731919983,
+    "n": 3167997.8878260944
+   },
+   "localTransverseMercator": {
+    "e": 123.80513267759426,
+    "n": 3168785.4425059827
+   }
+  },
+  {
+   "name": "C6",
+   "latitudeDegrees": 28.637115,
+   "longitudeDegrees": -106.090187,
+   "ellipsoidalHeightMeters": 1419.902,
+   "utm13n": {
+    "e": 393443.6166278636,
+    "n": 3168268.03557191
+   },
+   "localTransverseMercator": {
+    "e": -525.1454774590429,
+    "n": 3169049.782676418
+   }
+  }
+ ]
+}

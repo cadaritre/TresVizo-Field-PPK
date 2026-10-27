@@ -33,6 +33,7 @@ NAME_LAYER = "TEXTO"
 DESCRIPTION_LAYER = "DESCRIPCION"
 NO_HEIGHT_LAYER = "SIN_COTA"
 ELEVATION_LAYER = "COTA"
+LOCALIZATION_LAYER = "LOCALIZACION"
 # Las capas fijas que las apps declaran siempre (DESPLAZAMIENTO_DE_BASE va aunque no haya desplazamiento).
 FIXED_LAYERS = (POINTS_LAYER, NAME_LAYER, DESCRIPTION_LAYER, "DESPLAZAMIENTO_DE_BASE")
 # Colores de AutoCAD (ACI) que se leen sobre fondo blanco y negro (`SurveyExport.codeLayerPalette`).
@@ -133,8 +134,11 @@ def declaration_chunks(lines: list[str]) -> list[str]:
     return out
 
 
-def write(points: list[DxfPoint], declaration: list[str], options: DxfOptions = DxfOptions()) -> bytes:
-    """El DXF de los puntos. `declaration`: las líneas de los comentarios `999` (sistema, marco, Z…)."""
+def write(points: list[DxfPoint], declaration: list[str], options: DxfOptions = DxfOptions(),
+          localization: list[str] = ()) -> bytes:
+    """El DXF de los puntos. `declaration`: las líneas de los comentarios `999` (sistema, marco, Z…).
+    `localization`: en locales, la declaración de la localización, que va también como `TEXT` en la capa
+    `LOCALIZACION` por debajo del primer punto (`SurveyExport.dxf` de las apps)."""
     out: list[str] = []
 
     def pair(code: int, value: str) -> None:
@@ -150,6 +154,8 @@ def write(points: list[DxfPoint], declaration: list[str], options: DxfOptions = 
         fixed.add(NO_HEIGHT_LAYER)
     if labels and any(p.elevation_m is not None for p in points):
         fixed.add(ELEVATION_LAYER)
+    if localization and points:
+        fixed.add(LOCALIZATION_LAYER)
     layers = sorted({layer_name(p.code) for p in points} | fixed)
 
     for line in declaration_chunks(declaration):
@@ -193,5 +199,11 @@ def write(points: list[DxfPoint], declaration: list[str], options: DxfOptions = 
             if z is not None:
                 pair(30, z)
             pair(40, height); pair(1, sanitized(p.description))
+    if localization and points:
+        anchor = points[0]
+        for index, line in enumerate(localization):
+            pair(0, "TEXT"); pair(8, LOCALIZATION_LAYER); pair(10, fmt(anchor.easting_m))
+            pair(20, fmt(anchor.northing_m - options.text_height_m * (index + 2) * 1.6))
+            pair(40, height); pair(1, sanitized(line))
     pair(0, "ENDSEC"); pair(0, "EOF")
     return windows1252(CRLF.join(out) + CRLF)

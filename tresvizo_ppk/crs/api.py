@@ -123,6 +123,8 @@ def reload() -> None:
     with _lock:
         _registry = None
         _geoids.clear()
+    from . import localizacion       # lo que se puede calcular depende de lo instalado
+    localizacion.clear_cache()
 
 
 def definition(code: str) -> Definition | None:
@@ -398,7 +400,7 @@ def transform(position: Ecef, choice: CoordinateChoice) -> TransformedCoordinate
                     applied = True
     label = d.name + (f" + {gid.upper()} height" if applied else "")
 
-    return TransformedCoordinate(
+    coordinate = TransformedCoordinate(
         latitude_deg=dlat, longitude_deg=dlon, ellipsoidal_height_m=h,
         northing_m=northing, easting_m=easting, orthometric_height_m=ortho, undulation_m=und, zone=zone,
         convergence_deg=conv, scale_factor=scale, receiver_latitude_deg=lat, receiver_longitude_deg=lon,
@@ -408,6 +410,11 @@ def transform(position: Ecef, choice: CoordinateChoice) -> TransformedCoordinate
         transformation=transformation_text, transformation_accuracy_m=accuracy, inside_transformation_area=inside,
         label=label, attribution=attribution, warnings=tuple(warnings),
     )
+    if choice.localization is not None:
+        # Con una localización en uso, norte, este y cota son los locales (`localizacion.apply`).
+        from . import localizacion
+        coordinate = localizacion.apply(coordinate, choice, position.frame)
+    return coordinate
 
 
 def enu_rotation(lat_deg: float, lon_deg: float) -> list[list[float]]:
@@ -440,9 +447,30 @@ def transform_sigma(position: Ecef, sigma_enu: Enu, choice: CoordinateChoice,
     else:
         c2 = [[sigma_enu.e ** 2, 0.0], [0.0, sigma_enu.n ** 2]]
         sigma_u = sigma_enu.u
+    localization = choice.localization
+    if localization is not None:
+        # En locales: la σ de la cuadrícula base, girada y escalada por la semejanza (E = … + a·e − b·n, N = … + b·e +
+        # a·n). La cuadrícula base es la guardada en la localización, no la del sistema elegido.
+        from dataclasses import replace
+        from . import localizacion
+        computed = localizacion.compute(localization, choice.geoid_id, position.frame)
+        base_choice = replace(choice, crs_id=computed.frame.crs_code or choice.crs_id, zone="", localization=None)
+        grid = _grid_covariance(position, c2, base_choice, lat, lon) if computed.frame.crs_code else c2
+        t = computed.solution.transform
+        rot = [[t.a, -t.b], [t.b, t.a]]
+        lc = [[sum(rot[i][k] * grid[k][j] for k in range(2)) for j in range(2)] for i in range(2)]
+        g = [[sum(lc[i][k] * rot[j][k] for k in range(2)) for j in range(2)] for i in range(2)]
+        return Enu(math.sqrt(max(g[0][0], 0.0)), math.sqrt(max(g[1][1], 0.0)), sigma_u)
     d, _ = resolve(choice, lat, lon)
     if not d.is_projected:
         return Enu(math.sqrt(max(c2[0][0], 0.0)), math.sqrt(max(c2[1][1], 0.0)), sigma_u)
+    g = _grid_covariance(position, c2, choice, lat, lon)
+    return Enu(math.sqrt(max(g[0][0], 0.0)), math.sqrt(max(g[1][1], 0.0)), sigma_u)
+
+
+def _grid_covariance(position: Ecef, c2: list[list[float]], choice: CoordinateChoice, lat: float,
+                     lon: float) -> list[list[float]]:
+    """La covarianza ENU (2×2) pasada a la cuadrícula de un sistema proyectado con el jacobiano de la conversión."""
     base = transform(position, choice)
     r = enu_rotation(lat, lon)
     step = 1.0
@@ -454,14 +482,17 @@ def transform_sigma(position: Ecef, sigma_enu: Enu, choice: CoordinateChoice,
         jac[0][col] = (moved.easting_m - base.easting_m) / step
         jac[1][col] = (moved.northing_m - base.northing_m) / step
     jc = [[sum(jac[i][k] * c2[k][j] for k in range(2)) for j in range(2)] for i in range(2)]
-    g = [[sum(jc[i][k] * jac[j][k] for k in range(2)) for j in range(2)] for i in range(2)]
-    return Enu(math.sqrt(max(g[0][0], 0.0)), math.sqrt(max(g[1][1], 0.0)), sigma_u)
+    return [[sum(jc[i][k] * jac[j][k] for k in range(2)) for j in range(2)] for i in range(2)]
 
 
 def height_sigma(sigma_u: float | None, coordinate: TransformedCoordinate) -> float | None:
     """σ de la cota: la del GNSS y la del geoide en cuadratura (domina la del geoide con una solución fija)."""
     if sigma_u is None or coordinate.orthometric_height_m is None:
         return None
+    if coordinate.localized:
+        # La cota local está ajustada al control: el error del geoide lo absorbe el ajuste vertical (sus residuos lo
+        # miden en el informe). Queda la del GNSS.
+        return sigma_u
     if coordinate.geoid_uncertainty_m is None:
         return None
     return math.sqrt(sigma_u ** 2 + coordinate.geoid_uncertainty_m ** 2)
