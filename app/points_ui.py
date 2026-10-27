@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, ttk
@@ -16,7 +17,8 @@ from app.components import DropZone, FileList, LabeledEntry, ThinScrollbar, card
 from app.formatting import dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import PointsJob, classify
-from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text
+from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text,
+                           station_label)
 from app.static_ui import RECORDING_TYPES
 
 EXPORTS = [('field_csv', 'CSV de TresVizo Field…', '.csv', 'CSV de TresVizo Field'),
@@ -97,6 +99,7 @@ class PointsPage(WizardPage):
         self.source_row = FlowFrame(inner, style='Flat.Card.TFrame', gap=18)
         self.source_row.pack(fill='x')
         self.from_rinex = ttk.Label(inner, text='', style='Card.TLabel', justify='left', padding=(0, 10, 0, 0))
+        inner.bind('<Configure>', lambda e: self.from_rinex.configure(wraplength=max(200, e.width-20)), add='+')
         self.from_project = ttk.Frame(inner, style='Flat.Card.TFrame', padding=(0, 10, 0, 0))
         pick = ttk.Button(self.from_project, text='Elegir proyecto…', command=self.pick_static_project)
         self.app.icons.bind(pick, 'folder-open')
@@ -183,8 +186,18 @@ class PointsPage(WizardPage):
         self.autofill(self.own_name, self.own_name_field, getattr(obs, 'point_name', '') or obs.marker,
                       self.origin_text(obs, 'point_name', origin))
         pole = self.pole_from(obs)
-        self.autofill(self.own_height, self.own_height_field, f'{pole:.3f}' if pole is not None else None,
-                      self.origin_text(obs, 'pole_height_m', origin))
+        if origin.startswith('de la sesión') or pole is not None:
+            self.own_height_field.title.configure(text='Altura del bastón o trípode (m)')
+            self.own_height_field.hint.configure(text='Vertical, del punto a la rosca del receptor.')
+            self.autofill(self.own_height, self.own_height_field, f'{pole:.3f}' if pole is not None else None,
+                          self.origin_text(obs, 'pole_height_m', origin))
+        else:
+            # RINEX de otro receptor: la altura que cuenta es la de la marca a la ARP, y la trae el encabezado.
+            self.own_height_field.title.configure(text='Altura de la antena a la ARP (m)')
+            self.own_height_field.hint.configure(text='Vertical, del punto a la referencia de la antena (ARP), como '
+                                                      'en el encabezado RINEX.')
+            self.autofill(self.own_height, self.own_height_field, f'{obs.antenna_height_m:.4f}',
+                          self.origin_text(obs, 'antenna_height_m', origin))
         found = getattr(obs, 'ui_extra', None)
         if found is None:      # motor sin candidatas: la del encabezado
             self.job.candidates = []
@@ -348,7 +361,9 @@ class PointsPage(WizardPage):
         self.rover_info.pack_forget()
         if paths:
             def shown(obs, files=list(paths)):
-                self.rover_info.configure(text=f'{self.obs_summary(obs)} · {self.origin_of(files)}')
+                approx = self.approx_text(obs)
+                self.rover_info.configure(text=f'{self.obs_summary(obs)} · {self.origin_of(files)}'
+                                               + (f'\n{approx}' if approx else ''))
                 self.rover_info.pack(fill='x', pady=(8, 0))
             self.inspect('rover', paths, shown)
         if notify:
@@ -393,11 +408,18 @@ class PointsPage(WizardPage):
     def summary_lines(self):
         job = self.job
         if job.base_kind == 'rgna':
-            base = (f'Estación de referencia {job.base.station.id} ({job.base.name or job.base.station.name})'
+            base = (f'Estación de referencia '
+                    f'{station_label(replace(job.base.station, name=job.base.name or job.base.station.name))}'
                     if job.base.station else 'Estación de referencia: —')
         else:
-            origin = (f'del proyecto {Path(job.own_project).name}' if job.own_source == 'project' and job.own_project
-                      else 'escrita a mano')
+            if job.own_source == 'project' and job.own_project:
+                origin = f'del proyecto {Path(job.own_project).name}'
+            elif job.own_source == 'rinex':
+                chosen = job.candidates[min(job.candidate_index, len(job.candidates)-1)] if job.candidates else None
+                text = self.CANDIDATE_TEXT.get(getattr(chosen, 'coordinate_origin', ''), 'Aproximada (encabezado RINEX)')
+                origin = text[:1].lower()+text[1:]
+            else:
+                origin = 'escrita a mano'
             base = f'Base propia {job.own_name or "—"}, altura {job.own_height or "—"} m, coordenada {origin}'
         o = job.options
         lines = [base+f' · {plural(len(job.base.files), "archivo")}', f'Rover: {plural(len(job.rover_files), "archivo")}',
@@ -503,7 +525,7 @@ class PointsPage(WizardPage):
         wrap_label(inner, f'{fixed} FIJOS · {floating} FLOTANTES · {none} SIN SOLUCIÓN', style=kind+'.TLabel',
                    margin=40).pack(fill='x')
         lines = [f'Épocas fijas de la trayectoria: {result.fix_rate*100:.1f} %',
-                 f'Base: {result.base.id} · {result.base.name} ({"oficial" if result.base.official else result.base.source})',
+                 f'Base: {station_label(result.base)} ({"oficial" if result.base.official else result.base.source})',
                  f'{len(result.points)} puntos del CSV']
         q = result.rover_quality
         lines.append(f'Rover: {plural(q.epochs, "época")} · {plural(len(q.gaps), "hueco")} · '

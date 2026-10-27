@@ -241,7 +241,7 @@ def test_updates_in_settings(app, tmp_path, monkeypatch):
 
 
 def test_networks_page_lists_network_and_stations(app):
-    page = app.show('Redes y estaciones')
+    page = app.show('Estaciones de referencia')
     pump(app, lambda: page.networks)
     assert page.networks[0].id == 'rgna-inegi' and page.networks[0].frame_text == 'ITRF2008, época 2010'
     assert len(page.tree.get_children()) == len(dobles.STATIONS)
@@ -308,3 +308,79 @@ def test_dropping_files_fills_fields_with_their_origin(app, tmp_path):
     assert points.job.station().coordinate_origin == 'rinex-header' and points.job.station().approximate
     from app.wizard import errors
     assert errors(points.job.step_issues(0)) == []
+
+
+def test_nearby_stations_with_distance_and_network_notes(app, tmp_path, monkeypatch):
+    """Paso de las bases: las estaciones más cercanas al rover con su distancia y los avisos de su red; «Usar» la pone
+    en la primera ficha libre. El aviso también sale al elegir la estación y en «Estaciones de referencia»."""
+    f = files(tmp_path)
+    core = app.backend.core
+    ineg, uagu = dobles.STATIONS[0], dobles.STATIONS[1]
+    monkeypatch.setattr(core, 'nearest_stations', lambda position, count=3: [(uagu, 7_512.0), (ineg, 12_340.0)],
+                        raising=False)
+    monkeypatch.setattr(core, 'station_notes', lambda s: ['Hundimiento del terreno.'] if s.id == 'INEG' else [],
+                        raising=False)
+    page = app.show('Georreferenciar punto')
+    page.add_rover([f['S-20261024-150214.bin']])
+    pump(app, lambda: page.name_var.get() == 'LF-01')
+    assert 'Posición aproximada' in page.rover_info.cget('text')
+    page.next()
+    app.update()
+
+    def texts():
+        out, stack = [], list(page.nearby.winfo_children())
+        while stack:
+            w = stack.pop()
+            stack += w.winfo_children()
+            try:
+                out.append(str(w.cget('text')))
+            except tk.TclError:
+                pass
+        return out
+    assert '7.5 km' in texts() and '12.3 km' in texts()
+    assert any('Aviso de la red: Hundimiento' in t for t in texts())
+    page.use_station(uagu)
+    assert page.job.bases[0].station.id == 'UAGU' and texts().count('En uso') == 1
+    page.use_station(ineg)
+    assert [b.station.id for b in page.job.bases] == ['UAGU', 'INEG']
+    picker = page.base_panels.winfo_children()[1].picker
+    assert 'Hundimiento' in picker.notes.cget('text') and picker.notes.winfo_manager()
+    networks = app.show('Estaciones de referencia')
+    pump(app, lambda: networks.networks)
+    networks.tree.selection_set('INEG')
+    app.update()
+    assert 'Hundimiento' in networks.detail_notes.cget('text')
+
+
+def test_table_columns_stay_in_view(app):
+    """Sin barra horizontal, una tabla más ancha que su espacio reparte el ancho: ninguna columna queda fuera."""
+    from app.components import fit_columns
+    window = tk.Toplevel(app)
+    tree = tk.ttk.Treeview(window, columns=[f'c{i}' for i in range(8)], show='headings')
+    for i in range(8):
+        tree.heading(f'c{i}', text=f'Columna larga {i}')
+    tree.insert('', 'end', values=['valor bastante largo']*8)
+    tree.place(x=0, y=0, width=600, height=200)
+    fit_columns(tree, app, stretch='c0')
+    window.update()
+    tree.event_generate('<Configure>')
+    window.update()
+    assert sum(tree.column(f'c{i}', 'width') for i in range(8)) <= 600
+    window.destroy()
+
+
+def test_own_base_from_rinex_reads_arp_height_and_candidates_after_network_use(app, tmp_path):
+    """Los mismos RINEX ya leídos como estación de una red se vuelven a leer con sus candidatas al pasarlos a base
+    propia, y la altura de un RINEX es a la ARP (la del encabezado), no del bastón."""
+    f = files(tmp_path)
+    page = app.show('PPK de puntos')
+    page.rgna_panel.add([f['uagu2970.26o']])
+    pump(app, lambda: page.job.base.station is not None and page.rgna_panel.rinex.winfo_ismapped())
+    page.kind_var.set('own')
+    page.switch_base()
+    page.add_own_files([f['uagu2970.26o']])
+    pump(app, lambda: page.job.candidates)
+    assert page.job.candidates[0].id == 'UAGU'
+    assert page.own_height_field.title.cget('text') == 'Altura de la antena a la ARP (m)'
+    assert page.own_height.get() == '0.0083'
+    assert 'oficial (catálogo de su red)' in '\n'.join(page.summary_lines())

@@ -116,10 +116,13 @@ class StationPicker(ttk.Frame):
         self.name_var.trace_add('write', self.rename)
         self.info = ttk.Label(self, text='', style='Card.Subtitle.TLabel', justify='left')
         self.info.grid(row=2, column=0, columnspan=2, sticky='w', pady=(6, 0))
-        self.bind('<Configure>', lambda e: self.info.configure(wraplength=max(200, e.width-20)), add='+')
+        # Avisos de la red para la estación (p. ej. hundimiento): a la vista al elegirla, no solo en el informe.
+        self.notes = ttk.Label(self, text='', style='warning.TLabel', justify='left')
+        self.bind('<Configure>', lambda e: (self.info.configure(wraplength=max(200, e.width-20)),
+                                            self.notes.configure(wraplength=max(200, e.width-20))), add='+')
         self.fix = ttk.Button(self, text='Corregir coordenada…', style='Card.Link.TButton', command=self.correct)
         app.icons.bind(self.fix, 'pencil', 16)
-        self.fix.grid(row=3, column=0, sticky='w', pady=(4, 0))
+        self.fix.grid(row=4, column=0, sticky='w', pady=(4, 0))
         self.show()
         network_catalog(app, self.loaded)
 
@@ -141,7 +144,7 @@ class StationPicker(ttk.Frame):
         if not self.stations:
             self.info.configure(text='No hay redes de estaciones instaladas. ' + (
                 self.app.backend.missing_message('core') if self.app.backend.core is None else
-                'Bájalas en «Redes y estaciones».'))
+                'Bájalas en «Estaciones de referencia».'))
         self.propose()
         self.show()
 
@@ -193,11 +196,17 @@ class StationPicker(ttk.Frame):
 
     def show(self):
         s = self.entry.station
+        self.notes.grid_forget()
         if s is None:
             self.var.set('')
             self.info.configure(text='Escribe la clave o el nombre, o elige de la lista.')
             self.fix.state(['disabled'])
             return
+        from app.networks import station_notes
+        notes = station_notes(self.app.backend.core, s)
+        if notes:
+            self.notes.configure(text='\n'.join('Aviso de la red: '+n for n in notes))
+            self.notes.grid(row=3, column=0, columnspan=2, sticky='w', pady=(6, 0))
         self.var.set(self.label(s))
         from app.networks import network_of
         network = network_of(self.networks, s)
@@ -236,9 +245,13 @@ class CoordinateDialog(tk.Toplevel):
         self.resizable(False, False)
         body = ttk.Frame(self, padding=20)
         body.pack(fill='both', expand=True)
-        wrap_label(body, f'Coordenada de la estación en {station.position.frame}, época {station.position.epoch:g}. '
-                         'Cámbiala solo si tienes una más reciente de la red; el informe dirá que se corrigió y por '
-                         'qué.').pack(fill='x', pady=(0, 12))
+        # Ancho fijo y legible: el texto se envuelve en vez de estirar la ventana a lo ancho de la pantalla.
+        width = int(560*app.ui_scale*app.theme.text_scale())
+        ttk.Label(body, text=station_label(station), style='Section.TLabel').pack(anchor='w', pady=(0, 6))
+        ttk.Label(body, text=f'Coordenada de la estación en {station.position.frame}, época '
+                             f'{station.position.epoch:g}. Cámbiala solo si tienes una más reciente de la red; el '
+                             'informe dirá que se corrigió y por qué.', style='Subtitle.TLabel', justify='left',
+                  wraplength=width).pack(fill='x', pady=(0, 12))
         self.vars = []
         for axis, value in zip('XYZ', (station.position.x, station.position.y, station.position.z)):
             row = ttk.Frame(body)
@@ -709,7 +722,9 @@ class WizardPage(ttk.Frame):
             return
         key = tuple((str(p), p.stat().st_mtime_ns) for p in files)
         cache = self.__dict__.setdefault('_inspected', {})
-        if key in cache:
+        # Lo leído sin `extra` (p. ej. al soltar los mismos archivos como estación de una red) no sirve cuando ahora
+        # se piden las candidatas de la base: se vuelve a leer.
+        if key in cache and (extra is None or hasattr(cache[key], 'ui_extra')):
             callback(cache[key])
             return
         workers = self.__dict__.setdefault('_inspecting', {})
@@ -778,6 +793,19 @@ class WizardPage(ttk.Frame):
         if obs.epochs:
             parts.append(f'{obs.epochs:,} épocas'.replace(',', ' '))
         return ' · '.join(parts)
+
+    @staticmethod
+    def approx_text(obs) -> str:
+        """«Posición aproximada 19° 03′ 21.4″ N  98° 09′ 30.7″ O · del encabezado RINEX» (o vacío si no la trae)."""
+        p = getattr(obs, 'approx_position', None)
+        if p is None:
+            return ''
+        from app.charts import ecef_to_geodetic
+        from app.formatting import dms
+        lat, lon = ecef_to_geodetic(p)
+        source = (getattr(obs, 'approx_position_source', '') or 'encabezado RINEX').strip()
+        article = 'de la' if source.split()[0] in ('sesión', 'grabación', 'solución', 'media') else 'del'
+        return f'Posición aproximada {dms(lat, "N", "S", 1)}  {dms(lon, "E", "O", 1)} · {article} {source}'
 
     @staticmethod
     def pole_from(obs) -> float | None:

@@ -11,7 +11,7 @@ from app import tasks
 from app.components import Banner, ProgressPanel, ScrollFrame, card, scrolled, wrap_label
 
 KIND_TEXT = {'factory': 'Sistemas de fábrica', 'crs-package': 'Paquete de sistemas', 'geoid': 'Geoide',
-             'datum-grid': 'Rejilla de datum', 'cors-network': 'Red de estaciones (CORS)'}
+             'datum-grid': 'Transformación de datum', 'cors-network': 'Red de estaciones de referencia'}
 NO_GEOID = 'Sin geoide (solo altura elipsoidal)'
 AUTO_ZONE = 'Automática (por la longitud del punto)'
 MEXICO_ZONES = [f'{n}N' for n in range(11, 17)]
@@ -35,22 +35,24 @@ class CoordinateChooser(ttk.Frame):
         super().__init__(parent, style='Flat.Card.TFrame' if style_prefix else 'TFrame')
         self.app, self.changed = app, changed
         self.style_prefix = style_prefix
-        self.columnconfigure((0, 1, 2), weight=1, uniform='crs')
+        # El sistema ocupa todo el ancho (sus nombres son largos) y la zona y el geoide van debajo, a medias: así
+        # ninguno se corta a 1280 px ni con letra grande.
+        self.columnconfigure((0, 1), weight=1, uniform='crs')
         self.systems, self.geoids = [], []
         self.system_var, self.zone_var, self.geoid_var = tk.StringVar(), tk.StringVar(), tk.StringVar()
         label_style = style_prefix+'Strong.TLabel' if style_prefix else 'TLabel'
-        for column, text in enumerate(('Sistema de coordenadas', 'Zona', 'Geoide (cota)')):
-            ttk.Label(self, text=text, style=label_style).grid(row=0, column=column, sticky='w', padx=(0, 12),
-                                                               pady=(0, 4))
         self.system_box = ttk.Combobox(self, textvariable=self.system_var, state='readonly')
         self.zone_box = ttk.Combobox(self, textvariable=self.zone_var, state='readonly')
         self.geoid_box = ttk.Combobox(self, textvariable=self.geoid_var, state='readonly')
-        for column, box in enumerate((self.system_box, self.zone_box, self.geoid_box)):
-            box.grid(row=1, column=column, sticky='ew', padx=(0, 12))
+        for row, column, span, text, box in ((0, 0, 2, 'Sistema de coordenadas', self.system_box),
+                                             (2, 0, 1, 'Zona', self.zone_box), (2, 1, 1, 'Geoide (cota)', self.geoid_box)):
+            ttk.Label(self, text=text, style=label_style).grid(row=row, column=column, columnspan=span, sticky='w',
+                                                               padx=(0, 12), pady=(10 if row else 0, 4))
+            box.grid(row=row+1, column=column, columnspan=span, sticky='ew', padx=(0, 12))
             box.bind('<<ComboboxSelected>>', self.on_change)
         self.note = ttk.Label(self, text='', style=style_prefix+'Subtitle.TLabel' if style_prefix else
                               'Subtitle.TLabel', justify='left')
-        self.note.grid(row=2, column=0, columnspan=3, sticky='w', pady=(6, 0))
+        self.note.grid(row=4, column=0, columnspan=2, sticky='w', pady=(6, 0))
         self.bind('<Configure>', lambda e: self.note.configure(wraplength=max(200, e.width-20)), add='+')
         self.choice = choice
         self.reload()
@@ -106,7 +108,7 @@ class CoordinateChooser(ttk.Frame):
             return
         parts = [p for p in (display_name(system.datum), system.frame, system.accuracy_text) if p]
         if system.missing_grids:
-            parts.append('Falta la rejilla de transformación: bájala en Sistemas y geoides.')
+            parts.append('Falta la transformación de datum: bájala en Sistemas y geoides.')
         if self.geoid_var.get() == NO_GEOID:
             parts.append('Sin geoide no hay cota: el resultado lleva altura elipsoidal.')
         self.note.configure(text=' · '.join(parts))
@@ -151,7 +153,7 @@ class CrsPage(ttk.Frame):
         self.entries, self.worker, self.cls, self.state = [], None, 'projected', 'all'
         self.loaded_groups: set[str] = set()
         ttk.Label(self, text='Sistemas y geoides', style='Title.TLabel').pack(anchor='w')
-        wrap_label(self, 'El catálogo firmado de TresVizo Field: sistemas, geoides, rejillas y redes CORS. Lo de fábrica '
+        wrap_label(self, 'El catálogo firmado de TresVizo Field: sistemas, geoides y transformaciones de datum. Lo de fábrica '
                          'viene incluido; lo demás se baja de github.com/cadaritre/GNSS-TresVizo solo cuando lo pides y '
                          'se comprueba su firma antes de usarlo.').pack(anchor='w', fill='x', pady=(4, 10))
         # Todo lo de abajo se desplaza junto: en ventanas bajas la lista conserva un alto útil.
@@ -256,18 +258,14 @@ class CrsPage(ttk.Frame):
         crs = self.app.backend.crs
         if crs is None:
             return
-        from app.wizard_ui import network_catalog
-
-        def with_networks(found):
-            try:
-                self.entries = self.cv.build(crs, found)
-            except Exception as exc:  # noqa: BLE001
-                kind, message = tasks.classify(exc)
-                self.app.show_error(kind, message, repr(exc))
-                self.entries = []
-            self.paint_segments()
-            self.refresh_list()
-        network_catalog(self.app, with_networks)
+        try:
+            self.entries = self.cv.build(crs)
+        except Exception as exc:  # noqa: BLE001
+            kind, message = tasks.classify(exc)
+            self.app.show_error(kind, message, repr(exc))
+            self.entries = []
+        self.paint_segments()
+        self.refresh_list()
 
     def pick(self, cls):
         self.cls = cls

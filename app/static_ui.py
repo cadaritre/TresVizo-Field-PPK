@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 import math
 import tkinter as tk
 from tkinter import ttk
@@ -15,7 +16,8 @@ from app.components import DropZone, FileList, LabeledEntry, card, wrap_label
 from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import MAX_BASES, BaseEntry, StaticJob, classify
-from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text
+from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text,
+                           station_label)
 
 RECORDING_TYPES = [('Grabación del receptor o RINEX', '*.bin *.part *.obs *.nav *.rnx *.crx *.??o *.??d *.??n *.Z '
                     '*.gz *.zip'), ('Todos los archivos', '*')]
@@ -90,7 +92,10 @@ class StaticPage(WizardPage):
         files = self.job.rover_files
         origin = self.origin_of(files)
         recording = origin.startswith('de la sesión')
-        self.rover_info.configure(text=f'{self.obs_summary(obs)} · {origin}')
+        self.rover_obs = obs
+        approx = self.approx_text(obs)
+        self.rover_info.configure(text=f'{self.obs_summary(obs)} · {origin}'+(f'\n{approx}' if approx else ''))
+        self.render_nearby()
         self.rover_info.pack(fill='x', pady=(8, 0))
         self.autofill(self.name_var, self.name_field, getattr(obs, 'point_name', '') or obs.marker,
                       self.origin_text(obs, 'point_name', origin))
@@ -126,6 +131,9 @@ class StaticPage(WizardPage):
         elif not paths:
             self.rover_list.pack_forget()
         self.rover_info.pack_forget()
+        if not paths:
+            self.rover_obs = None
+            self.render_nearby()
         if paths:
             self.inspect('rover', paths, self.rover_inspected)
         if notify:
@@ -133,7 +141,7 @@ class StaticPage(WizardPage):
 
     def build_bases(self, body):
         self.bases_body = body
-        intro, inner = card(body, 'Estaciones de referencia', 'Una a tres, de las redes instaladas (Redes y estaciones). '
+        intro, inner = card(body, 'Estaciones de referencia', 'Una a tres, de las redes instaladas (pantalla «Estaciones de referencia»). '
                                                                'Con dos o más, la coordenada sale de un ajuste '
                                                            'por mínimos cuadrados y se comprueba cada línea base.')
         intro.pack(fill='x')
@@ -144,11 +152,100 @@ class StaticPage(WizardPage):
         self.add_base_button = ttk.Button(row, text='Agregar estación', command=self.add_base)
         self.app.icons.bind(self.add_base_button, 'plus')
         self.add_base_button.pack(side='left')
+        frame, self.nearby = card(body, 'Estaciones cercanas al punto',
+                                  'Por la posición aproximada del rover, en las redes instaladas. «Usar» la pone en '
+                                  'la primera estación libre; luego «¿Qué archivos bajo?» dice qué pedir a la red.')
+        frame.pack(fill='x', pady=(16, 0))
+        self.render_nearby()
         self.base_panels = ttk.Frame(body)
         self.base_panels.pack(fill='x')
         if not self.job.bases:
             self.job.bases.append(BaseEntry())
         self.render_bases()
+
+    NEARBY = 5
+
+    def render_nearby(self):
+        """Las estaciones de las redes instaladas más cercanas al rover, con su distancia y sus avisos."""
+        from app.networks import station_notes
+        holder = getattr(self, 'nearby', None)
+        if holder is None or not holder.winfo_exists():
+            return
+        for child in holder.winfo_children():
+            child.destroy()
+        core = self.app.backend.core
+        obs = getattr(self, 'rover_obs', None)
+        position = getattr(obs, 'approx_position', None) if obs is not None else None
+        if position is None or core is None or not callable(getattr(core, 'nearest_stations', None)):
+            ttk.Label(holder, text='Agrega la grabación del rover para ver las estaciones más cercanas.',
+                      style='Card.Subtitle.TLabel').pack(anchor='w')
+            return
+        cached = getattr(self, '_nearby_cache', None)
+        if cached and cached[0] == position:
+            found = cached[1]
+        else:
+            try:
+                found = list(core.nearest_stations(position, self.NEARBY))
+            except Exception as exc:  # noqa: BLE001 - es una ayuda: elegir a mano sigue disponible
+                ttk.Label(holder, text=tasks.classify(exc)[1], style='Card.Subtitle.TLabel').pack(anchor='w')
+                return
+            self._nearby_cache = (position, found)
+        if not found:
+            ttk.Label(holder, text='No hay estaciones en las redes instaladas.', style='Card.Subtitle.TLabel').pack(
+                anchor='w')
+            return
+        chosen = {b.station.id for b in self.job.bases if b.station}
+        self._nearby_chosen = chosen
+        grid = ttk.Frame(holder, style='Flat.Card.TFrame')
+        grid.pack(fill='x')
+        grid.columnconfigure(1, weight=1)
+        prefs = self.app.settings.values
+        row, notes = 0, []
+        for station, distance in found:
+            ttk.Label(grid, text=f'{distance/1000:.1f} km' if prefs.units == 'm' else format_length(distance, prefs, 0),
+                      style='Card.Strong.TLabel').grid(row=row, column=0, sticky='w', pady=3, padx=(0, 16))
+            network = getattr(station, 'network_name', '')
+            ttk.Label(grid, text=station_label(station)+(f' · {network}' if network else ''),
+                      style='Card.TLabel').grid(row=row, column=1, sticky='w', pady=3)
+            use = ttk.Button(grid, text='En uso' if station.id in chosen else 'Usar', style='Card.Link.TButton',
+                             command=lambda s=station: self.use_station(s))
+            use.state(['disabled'] if station.id in chosen or len(chosen) >= MAX_BASES else ['!disabled'])
+            use.grid(row=row, column=2, sticky='e', pady=3)
+            row += 1
+            for text in station_notes(core, station):
+                note = ttk.Label(grid, text='Aviso de la red: '+text, style='Card.Subtitle.TLabel', justify='left',
+                                 wraplength=600)
+                note.grid(row=row, column=1, sticky='w', pady=(0, 4))
+                notes.append(note)
+                row += 1
+
+        def wrap(event):
+            # Lo que queda entre la distancia y «Usar».
+            room = event.width-grid.grid_bbox(0, 0)[2]-grid.grid_bbox(2, 0)[2]-24
+            for note in notes:
+                if note.winfo_exists():
+                    note.configure(wraplength=max(200, room))
+        grid.bind('<Configure>', wrap, add='+')
+        self.app.theme.walk(holder)
+
+    def changed(self):
+        super().changed()
+        # Al elegir o quitar una estación en su ficha, la lista de cercanas dice cuál ya está en uso.
+        if {b.station.id for b in self.job.bases if b.station} != getattr(self, '_nearby_chosen', None):
+            self.render_nearby()
+
+    def use_station(self, station):
+        """Pone la estación en la primera ficha libre (o agrega una), sin archivos todavía."""
+        entry = next((b for b in self.job.bases if b.station is None), None)
+        if entry is None:
+            if len(self.job.bases) >= MAX_BASES:
+                return
+            entry = BaseEntry()
+            self.job.bases.append(entry)
+        entry.station, entry.name = station, station.name
+        self.render_bases()
+        self.render_nearby()
+        self.changed()
 
     def render_bases(self):
         for child in self.base_panels.winfo_children():
@@ -169,17 +266,22 @@ class StaticPage(WizardPage):
     def remove_base(self, index):
         del self.job.bases[index]
         self.render_bases()
+        self.render_nearby()
         self.changed()
 
     # --- Proceso ------------------------------------------------------------------------------------------------
 
     def summary_lines(self):
         job = self.job
-        lines = [f'Punto: {job.point_name.strip() or "—"} · altura del bastón o trípode {job.pole_height or "—"} m',
+        # La altura dice lo que de verdad es: del bastón (grabación del receptor) o a la ARP (RINEX).
+        height = self.height_field.title.cget('text').replace(' (m)', '') if hasattr(self, 'height_field') \
+            else 'Altura del bastón o trípode'
+        height = height[:1].lower()+height[1:]
+        lines = [f'Punto: {job.point_name.strip() or "—"} · {height} {job.pole_height or "—"} m',
                  f'Rover: {plural(len(job.rover_files), "archivo")}']
         for base in job.bases:
             if base.station:
-                lines.append(f'Estación {base.station.id} ({base.name or base.station.name}): '
+                lines.append(f'Estación {station_label(replace(base.station, name=base.name or base.station.name))}: '
                              f'{plural(len(base.files), "archivo")} · coordenada {"oficial" if base.station.official else "corregida"}')
         o = job.options
         eph = 'precisas' if o.ephemeris is Ephemeris.PRECISE else 'difundidas'
@@ -314,7 +416,7 @@ class StaticPage(WizardPage):
             tree.column(key, width=width, minwidth=60, anchor='w', stretch=key == 'base')
         for b in result.baselines:
             sh, sv = enu_sigma(b.base.position, b.covariance_ecef)
-            tree.insert('', 'end', values=(f'{b.base.id} · {b.base.name}', format_length(b.length_m, prefs),
+            tree.insert('', 'end', values=(station_label(b.base), format_length(b.length_m, prefs),
                                            solution_text(b.solution), '—' if b.ratio is None else f'{b.ratio:.1f}',
                                            '—' if b.rms_m is None else format_length(b.rms_m, prefs),
                                            f'{format_length(sh, prefs)} / {format_length(sv, prefs)}', b.epochs_used, len(b.satellites)))
@@ -341,7 +443,7 @@ class StaticPage(WizardPage):
         frame.pack(fill='x', pady=(16, 0))
         completeness = f'{q.epochs/q.expected_epochs*100:.1f} %' if q.expected_epochs else '—'
         text = (f'{q.epochs} épocas de {q.expected_epochs or "—"} esperadas ({completeness}) · {plural(len(q.gaps), "hueco")} · '
-                f'{len(q.satellites)} satélites · {sum(q.cycle_slips.values())} saltos de ciclo')
+                f'{len(q.satellites)} satélites · {plural(sum(q.cycle_slips.values()), "salto de ciclo", "saltos de ciclo")}')
         if q.multipath_m:
             text += ' · MP '+', '.join(f'{k} {v:.2f} m' for k, v in q.multipath_m.items())
         wrap_label(inner, text, style='Card.TLabel', margin=40).pack(fill='x')

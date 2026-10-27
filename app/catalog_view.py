@@ -1,7 +1,7 @@
 """Modelo (sin Tk) del catálogo de «Sistemas y geoides»: clases, regiones y países, búsqueda y filtros.
 
-Junta lo instalado (cada sistema, con su definición) y lo que ofrece el índice firmado (paquetes, geoides, rejillas y
-redes CORS) en entradas homogéneas. Pensado para cientos de sistemas: la pantalla pide solo los grupos que abre.
+Junta lo instalado (cada sistema, con su definición) y lo que ofrece el índice firmado (paquetes, geoides y
+transformaciones de datum) en entradas homogéneas. Pensado para cientos de sistemas: la pantalla pide solo los grupos que abre.
 """
 from __future__ import annotations
 
@@ -14,10 +14,10 @@ CLASSES = {  # clave → (título, icono Lucide, token de color)
     'projected': ('Sistemas proyectados', 'map', 'chart1'),
     'geographic': ('Sistemas geográficos', 'globe', 'chart2'),
     'geoid': ('Geoides', 'mountain', 'chart3'),
-    'grid': ('Rejillas de transformación', 'layers', 'chart4'),
-    'cors': ('Redes CORS', 'radio-tower', 'chart6'),
+    'grid': ('Transformaciones de datum', 'layers', 'chart4'),
 }
-SHORT = {'projected': 'Proyectado', 'geographic': 'Geográfico', 'geoid': 'Geoide', 'grid': 'Rejilla', 'cors': 'Red CORS'}
+# Las redes CORS no son parte de este catálogo: se bajan, instalan y actualizan en «Estaciones de referencia» (como en TBC).
+SHORT = {'projected': 'Proyectado', 'geographic': 'Geográfico', 'geoid': 'Geoide', 'grid': 'Transformación de datum'}
 REGIONS = ['Norteamérica', 'Centroamérica y Caribe', 'Sudamérica', 'Europa', 'Mundo']
 COUNTRIES = {
     'MX': ('México', 'Norteamérica'), 'US': ('Estados Unidos', 'Norteamérica'), 'CA': ('Canadá', 'Norteamérica'),
@@ -67,7 +67,7 @@ class Entry:
     bundled: bool = False
     update: bool = False
     downloadable: bool = False
-    item_id: str = ''                          # unidad que se instala o se quita (paquete, geoide, rejilla, red)
+    item_id: str = ''                          # unidad que se instala o se quita (paquete, geoide, transformación)
     package: str = ''                          # nombre del paquete que lo trae
     size: str = ''
     details: list[tuple[str, str]] = field(default_factory=list)
@@ -141,7 +141,7 @@ def system_details(info, definition) -> list[tuple[str, str]]:
         if info.accuracy_text:
             rows.append(('Exactitud', info.accuracy_text))
         if info.missing_grids:
-            rows.append(('Falta', 'rejilla '+', '.join(info.missing_grids)))
+            rows.append(('Falta', 'transformación de datum '+', '.join(info.missing_grids)))
         rows.append(('Fuente', definition.source or '—'))
     else:
         rows += [('Clave', info.code), ('Datum', info.datum or '—'), ('Área de uso', info.area or '—')]
@@ -167,7 +167,7 @@ def _system_countries(info, packages) -> tuple[str, ...]:
     return ('MX',) if 'mexico' in text else ()
 
 
-def build(crs, networks=()) -> list[Entry]:
+def build(crs) -> list[Entry]:
     """Todas las entradas: lo instalado sistema por sistema y lo del índice por unidad de instalación."""
     items = list(crs.catalog())
     packages = {i.id: i for i in items}
@@ -201,7 +201,7 @@ def build(crs, networks=()) -> list[Entry]:
                     downloadable=item.downloadable, item_id=item.id, package=item.title, size=item.size_text,
                     details=item_details(item)))
             continue
-        cls = {'geoid': 'geoid', 'datum-grid': 'grid', 'cors-network': 'cors'}.get(item.kind)
+        cls = {'geoid': 'geoid', 'datum-grid': 'grid'}.get(item.kind)
         if cls is None:
             continue
         entries.append(Entry(cls=cls, key=f'item:{item.id}', title=item.title, subtitle=item.region,
@@ -209,19 +209,6 @@ def build(crs, networks=()) -> list[Entry]:
                              installed=item.installed, bundled=item.bundled, update=item.update_available,
                              downloadable=item.downloadable, item_id='' if item.bundled else item.id,
                              package=item.title, size=item.size_text, details=item_details(item)))
-    known = {e.item_id for e in entries if e.cls == 'cors'}
-    for network in networks:
-        if network.id in known:
-            continue
-        entries.append(Entry(cls='cors', key='net:'+network.id, title=network.name,
-                             subtitle=f'{len(network.stations)} estaciones · {network.frame_text}',
-                             countries=tuple(c.strip() for c in network.country.split(',') if c.strip()),
-                             installed=True, bundled=network.origin == 'incluida', item_id='' if
-                             network.origin == 'incluida' else network.id, package=network.name,
-                             details=[(k, v) for k, v in (('Marco y época oficial', network.frame_text),
-                                                          ('Fuente', network.source), ('Licencia', network.license),
-                                                          ('Atribución', network.attribution),
-                                                          ('Página', network.url)) if v]))
     return entries
 
 

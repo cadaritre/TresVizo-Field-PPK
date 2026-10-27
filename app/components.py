@@ -461,14 +461,20 @@ class LabeledEntry(ttk.Frame):
         # Origen del valor («del RINEX», «del catálogo…», «escrito por ti»): discreto, a la derecha del título.
         self.origin = ttk.Label(head, text='', style=style_prefix+'Subtitle.TLabel' if style_prefix else
                                 'Subtitle.TLabel')
-        self.origin.pack(side='left', padx=(8, 0))
+        self.origin.configure(justify='left')
+        self.origin.pack(side='left', padx=(8, 0), fill='x', expand=True)
         self.entry = ttk.Entry(self, textvariable=variable, width=width)
         self.entry.pack(fill='x')
         self.hint = ttk.Label(self, text=hint, style=style_prefix+'Subtitle.TLabel' if style_prefix else
                               'Subtitle.TLabel', justify='left')
         if hint:
             self.hint.pack(anchor='w', pady=(4, 0))
-        self.bind('<Configure>', lambda e: self.hint.configure(wraplength=max(140, e.width-8)), add='+')
+
+        def fit(event):
+            # El origen largo («del catálogo RGNA — INEGI, México») se envuelve junto al título en vez de cortarse.
+            self.hint.configure(wraplength=max(140, event.width-8))
+            self.origin.configure(wraplength=max(100, event.width-self.title.winfo_reqwidth()-16))
+        self.bind('<Configure>', fit, add='+')
 
     def set_origin(self, text):
         self.origin.configure(text=f'· {text}' if text else '')
@@ -602,15 +608,31 @@ def fit_columns(tree, app, stretch=None, limit=400, maximum=520):
     tree.fit_natural = {c: tree.column(c, 'width') for c in columns}
     tree.fit_stretch = stretch
     if not getattr(tree, 'fit_bound', False):
-        # Las demás columnas conservan su ancho natural; la elástica toma lo que queda (y no menos de 160 px).
+        # Las demás columnas conservan su ancho natural y la elástica toma lo que queda. Si no cabe todo y la tabla no
+        # tiene barra horizontal, la elástica baja hasta 120 px y las demás se reparten el resto en proporción: ninguna
+        # columna queda fuera de la vista (lo cortado se lee en la ayuda de la celda).
         def fit(event=None):
             natural = getattr(tree, 'fit_natural', {})
             column = getattr(tree, 'fit_stretch', None)
             if not natural or column not in natural:
                 return
-            others = sum(w for c, w in natural.items() if c != column)
-            room = tree.winfo_width()-others-4
-            tree.column(column, width=max(160, min(room, max(room, natural[column]))))
+            total = tree.winfo_width()-4
+            if total <= 1:
+                return
+            others = {c: w for c, w in natural.items() if c != column}
+            room = total-sum(others.values())
+            if room >= natural[column]:
+                widths = {**others, column: room}
+            elif str(tree.cget('xscrollcommand')):
+                # Con barra horizontal nada se corta: cada columna con su ancho natural y se desplaza.
+                widths = dict(natural)
+            else:
+                stretch = max(min(natural[column], 120), room)
+                factor = min(1.0, (total-stretch)/max(1, sum(others.values())))
+                widths = {c: max(48, int(w*factor)) for c, w in others.items()}
+                widths[column] = max(stretch, total-sum(widths.values()))
+            for c, w in widths.items():
+                tree.column(c, width=w, minwidth=min(w, 40))
         tree.bind('<Configure>', fit, add='+')
         tree.fit_bound = True
     tree.after_idle(lambda: tree.winfo_exists() and tree.event_generate('<Configure>'))

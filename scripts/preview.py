@@ -140,10 +140,10 @@ def main():
         def start():
             v = args.view
             if v in ('home', 'crs', 'networks', 'settings', 'about'):
-                app.show({'home': 'Inicio', 'crs': 'Sistemas y geoides', 'networks': 'Redes y estaciones',
+                app.show({'home': 'Inicio', 'crs': 'Sistemas y geoides', 'networks': 'Estaciones de referencia',
                           'settings': 'Ajustes', 'about': 'Acerca de'}[v])
                 if v == 'networks':
-                    app.after(600, lambda: app.pages['Redes y estaciones'].tree.selection_set('INEG'))
+                    app.after(600, lambda: app.pages['Estaciones de referencia'].tree.selection_set('INEG'))
                 done()
             elif v.startswith('static-'):
                 step = {'rover': 0, 'bases': 1, 'options': 2, 'process': 3}.get(v.split('-')[1], 3)

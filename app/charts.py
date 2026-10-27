@@ -161,16 +161,28 @@ class PlanChart(_Chart):
         self.create_line(pad_l, y, pad_l+bar, y, fill=t['text'], width=2)
         for x in (pad_l, pad_l+bar):
             self.create_line(x, y-4, x, y+4, fill=t['text'], width=2)
-        self.create_text(pad_l+bar+8, y, text=distance_text(step), anchor='w', fill=t['text'], font=self.font(-3))
-        x = width-pad_r
-        for name, (shape, color) in reversed(list(legend.items())):
-            label = self.create_text(x, y, text=name, anchor='e', fill=t['text'], font=self.font(-3))
-            left = self.bbox(label)[0]
-            if shape == 'base':
-                self.create_polygon(left-12, y-6, left-6, y+5, left-18, y+5, fill=color, outline='')
-            else:
-                self.create_oval(left-16, y-5, left-6, y+5, fill=color, outline='')
-            x = left-28
+        scale_text = self.create_text(pad_l+bar+8, y, text=distance_text(step), anchor='w', fill=t['text'],
+                                      font=self.font(-3))
+        scale_right = self.bbox(scale_text)[2]
+
+        def draw_legend(y):
+            items, x = [], width-pad_r
+            for name, (shape, color) in reversed(list(legend.items())):
+                label = self.create_text(x, y, text=name, anchor='e', fill=t['text'], font=self.font(-3))
+                left = self.bbox(label)[0]
+                if shape == 'base':
+                    mark = self.create_polygon(left-12, y-6, left-6, y+5, left-18, y+5, fill=color, outline='')
+                else:
+                    mark = self.create_oval(left-16, y-5, left-6, y+5, fill=color, outline='')
+                items += [label, mark]
+                x = left-28
+            return items, x+28-18
+        items, left = draw_legend(y)
+        if left < scale_right+12:
+            # En gráficas angostas la leyenda no cabe junto a la escala: va en su propio renglón, encima.
+            for item in items:
+                self.delete(item)
+            draw_legend(y-22)
 
 
 class BarChart(_Chart):

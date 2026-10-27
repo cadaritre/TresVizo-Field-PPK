@@ -92,3 +92,18 @@ def network_of(networks: list[Network], station: Station) -> Network | None:
         if any(s.id == station.id for s in network.stations):
             return network
     return None
+
+
+def station_notes(core, station: Station) -> list[str]:
+    """Avisos que el paquete de la red da para la estación (hundimientos, desplazamientos…), si el motor los publica."""
+    if core is None or station is None:
+        return []
+    notes = getattr(core, 'station_notes', None)
+    if not callable(notes):
+        notes = getattr(getattr(core, 'networks', None), 'station_notes', None)
+    if not callable(notes):
+        return []
+    try:
+        return [str(n) for n in notes(station) or []]
+    except Exception:  # noqa: BLE001 - un aviso que no se puede leer no impide trabajar
+        return []

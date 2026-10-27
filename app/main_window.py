@@ -25,7 +25,7 @@ from app.ui_theme import ThemeManager
 
 APP_USER_MODEL_ID = 'TresVizo.FieldPPK.Desktop'
 NAV = [('Inicio', 'house'), ('Georreferenciar punto', 'map-pin'), ('PPK de puntos', 'route'),
-       ('Sistemas y geoides', 'globe'), ('Redes y estaciones', 'radio-tower')]
+       ('Sistemas y geoides', 'globe'), ('Estaciones de referencia', 'radio-tower')]
 NAV_BOTTOM = [('Ajustes', 'settings'), ('Acerca de', 'info')]
 
 
@@ -230,7 +230,7 @@ class Application(TkinterDnD.Tk):
         from app.networks_ui import NetworksPage
         from app.settings_ui import SettingsPage, AboutPage
         return {'Inicio': HomePage, 'Georreferenciar punto': StaticPage, 'PPK de puntos': PointsPage,
-                'Sistemas y geoides': CrsPage, 'Redes y estaciones': NetworksPage, 'Ajustes': SettingsPage,
+                'Sistemas y geoides': CrsPage, 'Estaciones de referencia': NetworksPage, 'Ajustes': SettingsPage,
                 'Acerca de': AboutPage}
 
     def page(self, name):

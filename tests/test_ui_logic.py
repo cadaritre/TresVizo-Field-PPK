@@ -305,7 +305,7 @@ def test_catalog_view_classes_search_and_groups():
     items = [item(id='crs-br', kind='crs-package', title='Brasil', countries=('BR',), systems=40),
              item(id='ggm10', kind='geoid', title='GGM10 · Geoide Gravimétrico Mexicano', countries=('MX',),
                   bundled=True, installed=True, downloadable=False),
-             item(id='ntv2-es', kind='datum-grid', title='Rejilla ED50 → ETRS89', countries=('ES',)),
+             item(id='ntv2-es', kind='datum-grid', title='ED50 → ETRS89 · España', countries=('ES',)),
              item(id='rbmc', kind='cors-network', title='RBMC — IBGE, Brasil', countries=('BR',))]
     systems = [N(code='EPSG:6369', name='Mexico ITRF2008 / UTM zona 14N', kind='projected', datum='Mexico ITRF2008',
                  countries=(), frame='', legacy=False, accuracy_text='', missing_grids=(), geoid_model_id=None,
@@ -315,11 +315,14 @@ def test_catalog_view_classes_search_and_groups():
                  origin='fábrica', area='Mundo')]
     crs = N(catalog=lambda: items, systems=lambda: systems, definition=lambda code: None)
     entries = cv.build(crs)
-    assert cv.counts(entries) == {'projected': 2, 'geographic': 2, 'geoid': 1, 'grid': 1, 'cors': 1}
+    # Las redes de estaciones viven en «Estaciones de referencia», no en este catálogo.
+    assert cv.counts(entries) == {'projected': 2, 'geographic': 2, 'geoid': 1, 'grid': 1}
+    assert not any(e.item_id == 'rbmc' or e.cls == 'cors' for e in entries)
+    assert cv.CLASSES['grid'][0] == 'Transformaciones de datum' and cv.SHORT['grid'] == 'Transformación de datum'
     assert [e.title for e in cv.select(entries, 'projected', 'méxico')] == ['México ITRF2008 / UTM zona 14N']
     assert [e.title for e in cv.select(entries, None, 'EPSG:6369')] == ['México ITRF2008 / UTM zona 14N']
     assert ('Nombre EPSG', 'Mexico ITRF2008 / UTM zona 14N') in cv.select(entries, None, 'EPSG:6369')[0].details
-    assert [e.cls for e in cv.select(entries, None, 'brasil')] == ['projected', 'geographic', 'cors']
+    assert [e.cls for e in cv.select(entries, None, 'brasil')] == ['projected', 'geographic']
     assert all(not e.installed for e in cv.select(entries, None, state='available'))
     assert {e.title for e in cv.select(entries, None, state='installed')} >= {'WGS 84', 'GGM10 · Geoide Gravimétrico Mexicano'}
     groups = cv.grouped(cv.select(entries, 'projected'))

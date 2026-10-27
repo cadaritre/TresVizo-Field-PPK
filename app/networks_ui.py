@@ -1,4 +1,4 @@
-"""Redes y estaciones (§3.0): las redes CORS instaladas (país, marco y época oficial, fuente y licencia), las que se
+"""Estaciones de referencia (§3.0): las redes CORS instaladas (país, marco y época oficial, fuente y licencia), las que se
 pueden bajar del índice firmado, y las estaciones de cada red con su coordenada oficial y su antena."""
 from __future__ import annotations
 
@@ -15,10 +15,12 @@ class NetworksPage(ttk.Frame):
         super().__init__(parent)
         self.app = app
         self.networks, self.available, self.worker = [], [], None
-        ttk.Label(self, text='Redes y estaciones', style='Title.TLabel').pack(anchor='w')
-        wrap_label(self, 'Redes de estaciones de referencia (CORS) con sus coordenadas oficiales, cada una en su marco y '
-                         'época. Al elegir una estación en un trabajo se proponen estos datos; si corriges alguno, el '
-                         'informe lo dice. Las redes nuevas se bajan del catálogo firmado sin cambiar de versión.').pack(
+        ttk.Label(self, text='Estaciones de referencia', style='Title.TLabel').pack(anchor='w')
+        wrap_label(self, 'Redes de estaciones GNSS de operación continua (CORS), como la RGNA del INEGI.').pack(
+            anchor='w', fill='x', pady=(4, 0))
+        wrap_label(self, 'Cada red trae las coordenadas oficiales de sus estaciones, en su marco y época. Al elegir una '
+                         'estación en un trabajo se proponen estos datos; si corriges alguno, el informe lo dice. Las '
+                         'redes nuevas se bajan del catálogo firmado sin cambiar de versión.').pack(
             anchor='w', fill='x', pady=(4, 14))
         if app.backend.core is None:
             Banner(self, app, 'error', app.backend.missing_message('core')).pack(fill='x', pady=(0, 12))
@@ -68,7 +70,7 @@ class NetworksPage(ttk.Frame):
         panes.columnconfigure(0, weight=3)
         panes.columnconfigure(1, weight=2)
         table = ttk.Frame(panes, style='Flat.Card.TFrame')
-        table.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
+        table.grid(row=0, column=0, rowspan=2, sticky='nsew', padx=(0, 12))
         self.tree = ttk.Treeview(table, columns=('id', 'name', 'antenna', 'source'), show='headings', height=12,
                                  selectmode='browse')
         for key, title, width, stretch in [('id', 'Clave', 70, False), ('name', 'Nombre', 220, True),
@@ -81,7 +83,9 @@ class NetworksPage(ttk.Frame):
         self.tree.bind('<<TreeviewSelect>>', lambda e: self.details())
         self.detail_text = ttk.Label(panes, text='Elige una estación.', style='Card.TLabel', justify='left')
         self.detail_text.grid(row=0, column=1, sticky='nw')
-        panes.bind('<Configure>', lambda e: self.detail_text.configure(wraplength=max(200, e.width*2//5-10)),
+        self.detail_notes = ttk.Label(panes, text='', style='warning.TLabel', justify='left')
+        panes.bind('<Configure>', lambda e: (self.detail_text.configure(wraplength=max(200, e.width*2//5-10)),
+                                             self.detail_notes.configure(wraplength=max(200, e.width*2//5-10))),
                    add='+')
         self.sort_key = 'id'
 
@@ -218,3 +222,10 @@ class NetworksPage(ttk.Frame):
             f'Antena: {s.antenna_type or "—"} {s.radome if s.radome and s.radome != "NONE" else ""}',
             f'Altura de antena: {s.antenna_height_m:.4f} m', f'Receptor: {s.receiver or "—"}', '',
             f'Fuente: {s.source or "—"}']))
+        from app.networks import station_notes
+        notes = station_notes(self.app.backend.core, s)
+        self.detail_notes.configure(text='\n\n'.join('Aviso de la red: '+n for n in notes))
+        if notes:
+            self.detail_notes.grid(row=1, column=1, sticky='nw', pady=(10, 0))
+        else:
+            self.detail_notes.grid_forget()
