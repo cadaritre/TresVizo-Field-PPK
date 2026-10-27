@@ -51,41 +51,46 @@
   (lo hace `core.api`): si la biblioteca instala una red antes de cargarse el motor, solo se comprueba el JSON.
 - Compilación de RTKLIB en Windows (MinGW/MSVC) y Linux sin probar aquí.
 
-## Interfaz y distribución (§1.4, §6, §2 y §7)
+## Interfaz y distribución (§1.4, §3.0, §3.5, §6, §2 y §7)
 
-**Hecho y verificado (macOS 26 arm64, Python 3.13.18, Tk 9.1, tkdnd 2.10.3):**
-- Ventana con barra lateral e iconos Lucide (Inicio, Georreferenciar punto, PPK de puntos, Sistemas y geoides,
-  Estaciones RGNA, Ajustes, Acerca de) con el sistema visual de TresVizo Med: tokens y contraste (4.5:1 texto, 3:1 bordes,
-  foco, series y estados de solución, comprobado en las pruebas para los temas Claro y Oscuro), letra del sistema,
-  casillas, opciones y barras de desplazamiento propias, transición de 150 ms que respeta «Reducir movimiento», atajos
-  (Ctrl/⌘+1…5, Ctrl/⌘+O, Ctrl/⌘+S, Ctrl/⌘+⇧+S, Alt+←/→ en los asistentes), menú nativo de macOS y apertura de `.tvppk`
-  por doble clic o arrastrándolo a la ventana.
-- Asistentes por pasos con arrastrar y soltar y botón equivalente: validación al momento (errores tras tocar el paso,
-  avisos siempre, con icono y texto), proceso en un hilo aparte con progreso por etapas, tiempo y Cancelar, resultado con
-  esquema en planta y barras de precisión, «Ver informe» (vista previa con pypdfium2 y «Guardar PDF…») y «Exportar»
-  (estático: copiar coordenadas y PDF; PPK: CSV de TresVizo Field, CSV simple, GeoJSON y KML).
-- Proyectos `.tvppk` (`tresvizo_ppk/project.py`): rutas relativas y SHA-256, escritura atómica, recientes, aviso al abrir
-  si un archivo falta o cambió, coordenada final del estático para encadenar la base propia, número de proyecto.
-- Pruebas: 43 de la interfaz (`tests/test_ui_logic.py`, `tests/test_project.py` sin ventanas; `tests/test_ui_widgets.py`
-  con los widgets reales ocultos y los dobles del motor de `tests/dobles.py`: flujo completo de los dos asistentes,
-  guardar, procesar, cancelar, error del motor, informe, exportar y reabrir).
-- Revisión visual de cada pantalla con `python scripts/preview.py --view …` (datos sintéticos, carpeta temporal).
-- PyInstaller: `TresVizo Field PPK.app` armada aquí (106 MB) con RTKLIB en `bin/`; su autoprueba `--self-test` pasa
-  interfaz, tkdnd, binarios de RTKLIB, sistemas y geoides, PDF, gráficas y recursos. DMG de arm64 armado y montado
-  (app, acceso a Aplicaciones y «Cómo abrirla.txt»).
+**Hecho y verificado (macOS arm64, Python 3.13.18, Tk 9.1, tkdnd 2.10.3):**
+- Ventana con barra lateral e iconos Lucide (Inicio, Georreferenciar punto, PPK de puntos, Sistemas y geoides, Redes y
+  estaciones, Ajustes, Acerca de) con el sistema visual de TresVizo Med; temas Claro y Oscuro con contraste comprobado
+  en pruebas; tamaño de letra de accesibilidad (normal, grande, muy grande); «Reducir movimiento»; atajos de teclado;
+  menú nativo de macOS; abrir `.tvppk` con doble clic o arrastrándolo.
+- Todo se acomoda al tamaño: barra lateral completa, angosta o solo iconos; botones del encabezado solo con icono en
+  páginas angostas; cápsulas, filtros y acciones que se envuelven; dos columnas que pasan a una; catálogo con lista y
+  detalle lado a lado o uno sobre otro. Revisado con capturas de las 14 pantallas a 1024×640, 1280×820, 1600×1000 y
+  1920×1080 y de 11 con letra «muy grande» (en el scratch del agente, fuera de git).
+- Asistentes por pasos con arrastrar y soltar: al soltar los archivos se llenan solos (con `ObservationSet` y
+  `field_sources`) nombre, altura del bastón o a la ARP, receptor, antena y sesión, con su origen y editables; la
+  estación se propone por la clave del encabezado; la base propia no pide su coordenada (candidatas de
+  `base_coordinate_candidates()`: oficial, encabezado RINEX o autónoma, más proyecto georreferenciado o punto conocido).
+  Validación al momento, proceso en hilo con progreso y Cancelar, resultado con esquema y barras, «Ver informe» con
+  vista previa y «Exportar».
+- Recorrido real de punta a punta por la interfaz con el motor real y datos públicos de la RGNA (ICEP como rover contra
+  ITLA y UQRO): proceso en 4 s, ajuste aprobado, coordenada en UTM 14N con cota GGM10 e informe PDF de 11 páginas.
+- Sistemas y geoides como catálogo: clases con icono, color y conteo; búsqueda sin acentos; filtro de estado; región y
+  país; lista perezosa; todo el índice visible e instalable; detalle completo. Redes y estaciones: redes de
+  `cors_networks()` con su marco y época, estaciones, guía de `station_download_guide()` con el enlace a la página de
+  la red (la descarga directa solo aparece si `can_download_station()` lo permite; hoy la RGNA no).
+- Actualizaciones desde GitHub Releases (`app/updates.py`) con manifiesto firmado Ed25519 y `scripts/firmar_version.py`.
+- Proyectos `.tvppk` con rutas relativas, SHA-256, aviso de archivos cambiados, número de proyecto y coordenada final.
+- Pruebas: la suite completa pasa (212, 3 omitidas), entre ellas 81 de la interfaz, proyectos y actualizaciones.
+- PyInstaller: `TresVizo Field PPK.app` con RTKLIB y datos incluidos; su autoprueba pasa entera (interfaz, tkdnd,
+  motor, sistemas, informe, exportación, binarios, datos); DMG de arm64 armado (51.7 MB).
 
 **Pendiente o sin verificar:**
-- La autoprueba exige `tresvizo_ppk.core.api` y `tresvizo_ppk.export.api` (agentes del motor y de exportación); hasta
-  que existan falla en «modulos» y `scripts/distribuir.py` no entrega el instalador. La interfaz ya llama a esas
-  funciones con las firmas de la §8 (y usa los mismos valores de `ionosphere` y `ambiguity_mode` que
-  `core/baseline.py`) y se probó contra dobles; falta repetir el recorrido con el motor real y datos de la RGNA.
-- La descarga de RINEX de la RGNA aparece solo si el motor ofrece `download_rgna`; si no, el asistente guía al usuario
-  al sitio del INEGI.
-- MSI de Windows y DMG de x86_64: solo los arma la CI (`.github/workflows/ci.yml`), que no ha corrido todavía (falta el
-  push). No se ha probado en Windows real la instalación, actualización, reparación y desinstalación del MSI, ni el
-  escalado de DPI de Windows (125/150/200 %).
-- Instaladores sin firma de código (Authenticode / Developer ID y notarización): ver `docs/distribucion.md`.
-- Sin lector de pantalla certificado: Tk no expone un árbol de accesibilidad completo; el uso con teclado sí se revisó.
+- **Llave de publicación de las actualizaciones:** `PUBLIC_KEY_HEX` en `app/updates.py` está vacía (marcador); el
+  propietario la crea con `scripts/firmar_version.py --nueva-llave` (ver `docs/distribucion.md`). Hasta entonces la app
+  avisa de versiones nuevas pero no instala.
+- MSI de Windows y DMG de x86_64: solo los arma la CI (`.github/workflows/ci.yml`), que aún no corre (falta el push); no
+  se probó en Windows real el ciclo del MSI ni los DPI de Windows (125/150/200 %).
+- Al soltar una grabación grande se convierte para leer sus datos y se vuelve a convertir al procesar (la copia de la
+  lectura se borra); un lector solo de encabezado en el motor evitaría el doble trabajo.
+- PPK de puntos de punta a punta con datos reales del MeridianV y su CSV: probado solo con los dobles.
+- Instaladores sin firma de código (Authenticode / Developer ID y notarización).
+- Sin lector de pantalla certificado (Tk no expone un árbol de accesibilidad completo); el teclado sí se revisó.
 
 ## Sistemas, informes y exportación (§1.3, §5, §1.2.5)
 
