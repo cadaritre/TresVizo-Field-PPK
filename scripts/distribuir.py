@@ -3,10 +3,12 @@
     python scripts/distribuir.py                 # pruebas, RTKLIB, PyInstaller, autoprueba e instalador
     python scripts/distribuir.py --skip-tests    # solo si esta misma revisión ya pasó las pruebas
     python scripts/distribuir.py --replace-unpublished   # rehacer artefactos locales que aún no se entregaron
+    python scripts/distribuir.py --solo-este-equipo      # macOS: probar con un Python que pide un macOS más nuevo
 
 Salida en dist/installer/:
 - Windows: TresVizo-Field-PPK-<versión>-x64.msi (WiX 4.0.6, por usuario).
-- macOS:   TresVizo-Field-PPK-<versión>-macos-<arm64|x86_64>.dmg con la app y «Cómo abrirla.txt» (sin firma).
+- macOS:   TresVizo-Field-PPK-<versión>-macos-<arm64|x86_64>.dmg con la app y «Cómo abrirla.txt» (sin firma), para
+           macOS 14 (Apple) o 15 (Intel) en adelante: ningún binario puede pedir más (scripts/macos_minimo.py).
 - Linux:   TresVizo-Field-PPK-<versión>-linux-x86_64.tar.gz (carpeta lista para ejecutar).
 Cada uno con su .sha256 y un .json con versiones de dependencias, huellas de las fuentes y la autoprueba.
 """
@@ -44,7 +46,7 @@ eso, la primera vez macOS dice que no puede comprobar al desarrollador. Para abr
 1. Abre la app desde Aplicaciones una vez; macOS la bloqueará. Cierra el aviso.
 2. Ve a Ajustes del Sistema → Privacidad y seguridad; abajo aparece «Se bloqueó TresVizo Field PPK…».
    Pulsa «Abrir de todos modos» y confirma con tu contraseña.
-   (En macOS 14 o anterior también funciona: clic derecho sobre la app → Abrir → Abrir.)
+   (En macOS 14 también funciona: clic derecho sobre la app → Abrir → Abrir.)
 3. Desde entonces se abre normalmente.
 
 Comprueba antes que el archivo es el original: su SHA-256 está publicado junto a la descarga en
@@ -66,13 +68,13 @@ def arch_name() -> str:
     return {'amd64': 'x86_64', 'aarch64': 'arm64'}.get(machine, machine)
 
 
-def output_name() -> Path:
+def output_name(local: bool = False) -> Path:
     arch = arch_name()
     folder = ROOT/'dist'/'installer'
     if sys.platform == 'win32':
         return folder/f'{NAME}-{VERSION}-{arch}.msi'
     if sys.platform == 'darwin':
-        return folder/f'{NAME}-{VERSION}-macos-{arch}.dmg'
+        return folder/f'{NAME}-{VERSION}-macos-{arch}{"-solo-este-equipo" if local else ""}.dmg'
     return folder/f'{NAME}-{VERSION}-linux-{arch}.tar.gz'
 
 
@@ -141,6 +143,34 @@ def make_dmg(app: Path, output: Path):
             '-format', 'UDZO', '-fs', 'HFS+', output)
 
 
+def check_macos_minimum(app: Path, arch: str, local: bool) -> str:
+    """Que ningún binario de la app pida un macOS más nuevo que el que declara su Info.plist. Con `local` (solo para
+    probar en este equipo) la app declara lo que de verdad piden sus binarios, para que un macOS anterior diga que no
+    la puede abrir en vez de cerrarla al arrancar."""
+    import plistlib
+    from scripts.macos_minimo import MINIMUM, check, version_tuple
+    info = app/'Contents'/'Info.plist'
+    plist = plistlib.loads(info.read_bytes())
+    declared = plist['LSMinimumSystemVersion']
+    if declared != MINIMUM[arch]:
+        raise SystemExit(f'Info.plist declara macOS {declared} y el mínimo de {arch} es {MINIMUM[arch]}.')
+    above = check(app, arch, declared)
+    if not above:
+        return declared
+    if not local:
+        lines = '\n'.join(f'  {path} pide macOS {needed}' for path, needed in above[:12])
+        more = f'\n  … y {len(above) - 12} más' if len(above) > 12 else ''
+        raise SystemExit(f'La app declara macOS {declared} o posterior, pero hay binarios que piden uno más nuevo:\n'
+                         f'{lines}{more}\nSuele ser el Python (el de Homebrew está compilado para el macOS del '
+                         f'equipo): los DMG que se entregan los arma la CI. Para probar solo en este equipo, '
+                         f'--solo-este-equipo.')
+    needed = max((n for _, n in above), key=version_tuple)
+    plist['LSMinimumSystemVersion'] = needed
+    info.write_bytes(plistlib.dumps(plist))
+    print(f'Solo para este equipo: la app pide macOS {needed} o posterior (no se entrega).', flush=True)
+    return needed
+
+
 def sources_hash() -> dict:
     paths = [ROOT/'main.py', ROOT/f'{NAME}.spec', ROOT/'requirements.txt', *(ROOT/'app').rglob('*.py'),
              *(ROOT/'tresvizo_ppk').rglob('*.py'), *(ROOT/'scripts').rglob('*.py'), *(ROOT/'scripts'/'installer').glob('*'),
@@ -155,10 +185,14 @@ def main():
     parser.add_argument('--replace-unpublished', action='store_true',
                         help='Reemplazar artefactos locales que todavía no se han entregado.')
     parser.add_argument('--skip-rtklib', action='store_true', help='Usar los binarios ya compilados.')
+    parser.add_argument('--solo-este-equipo', action='store_true',
+                        help='macOS: armar aunque algún binario pida un macOS más nuevo que el mínimo (un Python de '
+                             'Homebrew, por ejemplo). La app declara lo que de verdad pide y el DMG no se entrega.')
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 13):
         parser.error('Compila con Python 3.13.')
-    output = output_name()
+    local = args.solo_este_equipo and sys.platform == 'darwin'
+    output = output_name(local)
     if output.exists() and not args.replace_unpublished:
         parser.error(f'Ya existe {output.name}. Sube tresvizo_ppk/version.py: no se reutiliza una versión entregada.')
     if sys.platform == 'win32':
@@ -196,6 +230,8 @@ def main():
         build_info['wix'] = subprocess.check_output(['wix', '--version'], text=True).strip()
     (payload/'build-info.json').write_text(json.dumps(build_info, indent=2), encoding='utf-8')
     if sys.platform == 'darwin':
+        build_info['macos_minimum'] = check_macos_minimum(app, arch, local)
+        (payload/'build-info.json').write_text(json.dumps(build_info, indent=2), encoding='utf-8')
         # Copiar archivos dentro de la app invalida la firma ad hoc de PyInstaller: se vuelve a firmar (ad hoc).
         run('codesign', '--force', '--deep', '--sign', '-', app)
     report = ROOT/'build'/f'autoprueba-{arch}.json'
@@ -217,8 +253,8 @@ def main():
             archive.add(payload, arcname=f'{NAME}-{VERSION}')
         manifest = {'file': output.name, 'version': VERSION, 'architecture': arch}
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
-    manifest.update(sha256=digest, bytes=output.stat().st_size, signed=False, build_info=build_info,
-                    self_test=checked)
+    manifest.update(sha256=digest, bytes=output.stat().st_size, signed=False, distributable=not local,
+                    build_info=build_info, self_test=checked)
     output.with_name(output.name+'.json').write_text(json.dumps(manifest, indent=2, ensure_ascii=False),
                                                      encoding='utf-8')
     output.with_name(output.name+'.sha256').write_text(f'{digest}  {output.name}\n', encoding='ascii')

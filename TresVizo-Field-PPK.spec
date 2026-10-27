@@ -1,6 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller: un programa en carpeta (Windows: TresVizo-Field-PPK.exe + _internal; macOS: TresVizo Field PPK.app).
 # Lo arma scripts/distribuir.py; los binarios de RTKLIB los compila antes scripts/build_rtklib.py.
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ ROOT = Path(SPECPATH)
 sys.path.insert(0, str(ROOT))
 from tresvizo_ppk.version import __version__  # noqa: E402
 from tresvizo_ppk.core.tools import platform_tag  # noqa: E402
+from scripts.macos_minimo import MINIMUM as MACOS_MINIMUM  # noqa: E402
 
 NAME = 'TresVizo-Field-PPK'
 BIN = ROOT/'third_party'/'bin'/platform_tag()
@@ -57,7 +59,8 @@ if sys.platform == 'darwin':
                      'CFBundleName': 'TresVizo Field PPK', 'CFBundleDisplayName': 'TresVizo Field PPK',
                      'CFBundleShortVersionString': __version__, 'CFBundleVersion': __version__,
                      'CFBundleDevelopmentRegion': 'es', 'NSHighResolutionCapable': True,
-                     'LSMinimumSystemVersion': '11.0', 'NSHumanReadableCopyright': 'Licencia MIT · TresVizo',
+                     'LSMinimumSystemVersion': os.environ.get('TVPPK_MACOS_MINIMO') or
+                                               MACOS_MINIMUM[platform_tag().split('-')[1]], 'NSHumanReadableCopyright': 'Licencia MIT · TresVizo',
                      'CFBundleDocumentTypes': [{
                          'CFBundleTypeName': 'Proyecto de TresVizo Field PPK', 'CFBundleTypeRole': 'Editor',
                          'LSHandlerRank': 'Owner', 'CFBundleTypeExtensions': ['tvppk'],

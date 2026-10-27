@@ -23,6 +23,11 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from scripts.macos_minimo import MINIMUM as _MACOS_MINIMUM  # noqa: E402
+
+MACOS_MINIMUM = _MACOS_MINIMUM.get({"aarch64": "arm64"}.get(platform.machine().lower(), platform.machine().lower()),
+                                   "14.0")
 RTKLIB = ROOT / "third_party" / "rtklib"
 RNXCMP = ROOT / "third_party" / "rnxcmp"
 
@@ -81,6 +86,10 @@ def build_program(cc: str, name: str, main_c: Path, modules: list[str], out_dir:
         # sin esto busca cabeceras de Unix (sys/select.h). Los makefiles de RTKLIB para MinGW lo ponen igual.
         if sys.platform == "win32":
             cmd.append("-DWIN32")
+        # En macOS, para la versión mínima que declara la app (scripts/macos_minimo.py) y no para la del equipo que
+        # compila: si no, el programa pide el macOS del equipo de la CI y no abre en uno anterior.
+        if sys.platform == "darwin":
+            cmd.append(f"-mmacosx-version-min={MACOS_MINIMUM}")
         cmd += [f"-D{d}" for d in DEFINES] if include else []
         if include:
             cmd.append(f"-I{include}")

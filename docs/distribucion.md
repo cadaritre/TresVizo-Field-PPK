@@ -8,11 +8,14 @@ asocia los proyectos `.tvppk` (doble clic los abre). Para actualizar, cerrar el 
 hace falta desinstalar. Un MSI de una versión inferior se rechaza. Si el programa está abierto, el instalador se detiene
 sin cambiar nada.
 
-**macOS 11 o posterior.** Abrir `TresVizo-Field-PPK-<versión>-macos-<arm64|x86_64>.dmg` (arm64 para Apple M1 o
-posterior, x86_64 para Mac con Intel) y arrastrar la app a Aplicaciones. La app **no está firmada ni notarizada por
+**macOS 14 o posterior en Mac con Apple (M1 o posterior), macOS 15 o posterior en Mac con Intel.** Es lo que piden
+las ruedas de pyproj 3.8.0, la versión fijada para que los sistemas coincidan con los vectores de las apps; ningún
+binario de la app puede pedir más que lo que declara (lo comprueba `scripts/distribuir.py` con
+`scripts/macos_minimo.py`, y RTKLIB se compila para ese mínimo). Abrir
+`TresVizo-Field-PPK-<versión>-macos-<arm64|x86_64>.dmg` (arm64 para Apple, x86_64 para Intel) y arrastrar la app a
+Aplicaciones. La app **no está firmada ni notarizada por
 Apple** (requiere una cuenta de desarrollador de pago; ver «Pendiente»): la primera vez macOS la bloquea. Se abre así:
-Ajustes del Sistema → Privacidad y seguridad → «Abrir de todos modos» (en macOS 14 o anterior también con clic derecho →
-Abrir). El DMG trae estas instrucciones en «Cómo abrirla.txt». Comprobar antes la SHA-256 publicada junto al archivo.
+Ajustes del Sistema → Privacidad y seguridad → «Abrir de todos modos» (en macOS 14 también con clic derecho → Abrir). El DMG trae estas instrucciones en «Cómo abrirla.txt». Comprobar antes la SHA-256 publicada junto al archivo.
 
 **Datos del usuario.** Los proyectos van donde el usuario los guarde (por omisión `Documentos/TresVizo Field PPK/
 Proyectos`); las descargas en la carpeta de datos de Ajustes; las preferencias en `%APPDATA%\TresVizo Field PPK`
@@ -73,10 +76,15 @@ firma válida no instala nada y lo dice. En Linux enlaza la página de versiones
 
 `.github/workflows/ci.yml` corre en cada push a `main` y en cada pull request (gratis en el repositorio público):
 
-- **Pruebas** en Ubuntu 24.04 (Tk con xvfb), Windows Server 2022 (RTKLIB con MinGW) y macOS 14.
-- **Instaladores** (si las pruebas pasan): MSI de Windows x64, DMG de macOS arm64 y DMG de macOS x86_64, como
+- **Pruebas** en Ubuntu 24.04 (Tk con xvfb), Windows Server 2022 (RTKLIB con MinGW) y macOS 15 (Apple).
+- **Instaladores** (si las pruebas pasan): MSI de Windows x64, DMG de macOS arm64 (`macos-15`) y DMG de macOS x86_64
+  (`macos-15-intel`), como
   artefactos descargables durante 30 días. Para publicar una versión se suben esos archivos y sus `.sha256` a un
   release de GitHub.
+- **Un DMG armado en un equipo propio no se entrega.** El Python de Homebrew está compilado para el macOS de ese equipo
+  (macOS 26 en el del propietario), así que la app solo abriría ahí: `scripts/distribuir.py` se niega a armarlo, y con
+  `--solo-este-equipo` lo arma para probar, declarando lo que de verdad pide y con «-solo-este-equipo» en el nombre.
+  Los DMG que se entregan son los de la CI (Python de `actions/setup-python`).
 
 ## Pendiente
 

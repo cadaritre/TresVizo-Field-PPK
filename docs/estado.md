@@ -37,11 +37,10 @@
 - **Líneas largas solo flotantes:** RTKLIB no resuelve ambigüedades a 100+ km (su ionosfera estimada no fijó nunca).
   La solución profesional es una resolución propia ancha/estrecha sobre la libre de ionosfera, como TBC; hoy da
   1–3 cm con 1–2 h y ≤ 1 cm con 4 h o más (validado), pero sin el «fijo» que muestran los programas comerciales.
-- **Descarga directa de la RGNA (§3.2): no se automatiza.** La página del INEGI es un formulario para personas sin
-  servicio documentado para programas, y su SFTP público (geodesia2.inegi.org.mx) usa un usuario y contraseña
-  publicados en la página: meterlos en el programa es decisión del propietario (técnicamente es sencillo con un
-  cliente SFTP; habría que elegir uno con licencia compatible). Hoy la app guía con fechas, horas y nombres de
-  archivo exactos (`station_download_guide`).
+- **Descarga de la RGNA (§3.2): la hace el usuario (decisión del propietario, 26-10-2026).** La página del INEGI es un
+  formulario para personas, sin servicio documentado para programas; su SFTP público (geodesia2.inegi.org.mx) usa un
+  usuario y contraseña publicados en la página, y el propietario decidió no meterlos en el programa. La app guía con
+  fechas, horas y nombres de archivo exactos (`station_download_guide`) y el usuario arrastra lo que bajó.
 - La resolución de ambigüedades de GLONASS y BeiDou está apagada (impidió fijar en las pruebas); sus satélites
   entran flotantes. Probar de nuevo con datos Meridian–Meridian (mismo receptor).
 - No hay transformación de época ni de marco (§3.4): el resultado queda en el marco de la base. Con estaciones que
@@ -78,14 +77,17 @@
 - Proyectos `.tvppk` con rutas relativas, SHA-256, aviso de archivos cambiados, número de proyecto y coordenada final.
 - Pruebas: la suite completa pasa (212, 3 omitidas), entre ellas 81 de la interfaz, proyectos y actualizaciones.
 - PyInstaller: `TresVizo Field PPK.app` con RTKLIB y datos incluidos; su autoprueba pasa entera (interfaz, tkdnd,
-  motor, sistemas, informe, exportación, binarios, datos); DMG de arm64 armado (51.7 MB).
+  motor, sistemas, informe, exportación, binarios, datos); DMG de arm64 armado (51.7 MB) en este equipo, con el
+  Python de Homebrew: solo abre en macOS 26, así que no se entrega (`docs/distribucion.md`).
 
 **Pendiente o sin verificar:**
 - **Llave de publicación de las actualizaciones:** `PUBLIC_KEY_HEX` en `app/updates.py` está vacía (marcador); el
   propietario la crea con `scripts/firmar_version.py --nueva-llave` (ver `docs/distribucion.md`). Hasta entonces la app
   avisa de versiones nuevas pero no instala.
-- MSI de Windows y DMG de x86_64: solo los arma la CI (`.github/workflows/ci.yml`), que aún no corre (falta el push); no
-  se probó en Windows real el ciclo del MSI ni los DPI de Windows (125/150/200 %).
+- La CI ya corre: pruebas en Ubuntu, Windows y macOS y el MSI de Windows salen bien. El DMG de x86_64 espera su primera
+  corrida en `macos-15-intel` (el `macos-13` de antes ya no existe en GitHub). Mínimo de macOS declarado y comprobado
+  en el armado: 14 en Apple, 15 en Intel (lo fija pyproj 3.8.0). No se probó en Windows real el ciclo del MSI ni los
+  DPI de Windows (125/150/200 %).
 - Al soltar una grabación grande se convierte para leer sus datos y se vuelve a convertir al procesar (la copia de la
   lectura se borra); un lector solo de encabezado en el motor evitaría el doble trabajo.
 - PPK de puntos de punta a punta con datos reales del MeridianV y su CSV: probado solo con los dobles.
