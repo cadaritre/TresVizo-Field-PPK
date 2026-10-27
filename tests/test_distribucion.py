@@ -115,3 +115,10 @@ def test_lee_igual_que_vtool():
     expected = next((line.split()[1] for line in out.splitlines()
                      if line.strip().startswith(('minos', 'version'))), None)
     assert macos_minimo.minimum_of(binary.read_bytes(), arch) == expected
+
+
+def test_las_licencias_llevan_la_fuente_del_iers(tmp_path):
+    """La licencia del software de las Convenciones del IERS pide la fuente de lo derivado y su aviso íntegro."""
+    distribuir.copy_licenses(tmp_path)
+    fuente = (tmp_path/'IERS-convenciones-fuente-iers.py').read_text(encoding='utf-8')
+    assert 'IERS Conventions Software License' in fuente and 'def ' in fuente

@@ -121,6 +121,9 @@ def copy_licenses(destination: Path):
     shutil.copyfile(ROOT/'LICENSE', destination/'TresVizo-Field-PPK-LICENSE.txt')
     shutil.copyfile(ROOT/'third_party'/'LICENCIAS.md', destination/'LICENCIAS.md')
     shutil.copyfile(ROOT/'assets'/'icons'/'LICENSE.txt', destination/'Lucide-LICENSE.txt')
+    # El software de las Convenciones del IERS pide distribuir el código fuente de lo que se deriva de él, con su aviso
+    # íntegro (lo lleva el encabezado): la app empaquetada solo trae bytecode, así que va aquí la fuente.
+    shutil.copyfile(ROOT/'tresvizo_ppk'/'core'/'larga'/'iers.py', destination/'IERS-convenciones-fuente-iers.py')
     for folder in ('rtklib', 'rnxcmp'):
         for path in (ROOT/'third_party'/folder).glob('*'):
             if path.is_file() and path.suffix.lower() in ('.txt', '.md', '') and path.stat().st_size < 200_000:

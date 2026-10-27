@@ -361,7 +361,11 @@ def _ambiguity_section(r: Report, b) -> None:
             ("RMS de los residuos de fase", num(a.rms_phase_m, 4, "m")),
             ("Troposfera", f"retardo húmedo cenital de cada estación cada {num(a.troposphere_interval_h, 1)} h y "
                            f"gradientes cada {num(a.gradient_interval_h, 1)} h"),
-            ("Observaciones", f"{a.observations} ({a.rejected} descartadas por aberrantes)")]
+            ("Observaciones", f"{a.observations} ({a.rejected} descartadas por aberrantes)"),
+            # La licencia del software de las Convenciones del IERS pide reconocer su uso en los resultados publicados.
+            ("Modelos del IERS", "marea terrestre sólida y función de mapeo GMF: obra derivada del software de las "
+                                 "Convenciones del IERS 2010, que ni lo distribuye ni lo avala (aviso en las licencias "
+                                 "del programa)")]
     r.fields(rows, columns=1, label_width=150)
     if a.fixed and a.float_position is not None:
         fp = a.float_position

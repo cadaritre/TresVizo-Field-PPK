@@ -44,7 +44,8 @@ def test_fixed_long_line(tmp_path):
     for needle in ("Resultado: Aprobado", "Líneas largas fijas", "FIJA con el procesador de líneas largas",
                    "21 combinaciones enteras de 24 candidatas", "razón 4.6 (mínimo 3)", "tasa de éxito 99.96 %",
                    "Resolución de ambigüedades (procesador de líneas largas)", "Ancho de carril fijo 24 de 25",
-                   "Fija − flotante", "FIJA (todas las líneas base)", "comprobación libre de ionosfera de RTKLIB"):
+                   "Fija − flotante", "FIJA (todas las líneas base)", "comprobación libre de ionosfera de RTKLIB",
+                   "obra derivada del software de las Convenciones del IERS 2010"):
         assert needle in t, needle
     assert "Líneas largas con solución flotante" not in t
 
