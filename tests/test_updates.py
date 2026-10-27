@@ -103,7 +103,9 @@ def test_signing_script_with_test_key(tmp_path):
     out = subprocess.run([sys.executable, str(ROOT/'scripts/firmar_version.py'), '--nueva-llave', str(key)],
                          capture_output=True, text=True, check=True)
     public = out.stdout.strip().splitlines()[-1]
-    assert len(bytes.fromhex(public)) == 32 and oct(key.stat().st_mode & 0o777) == '0o600'
+    assert len(bytes.fromhex(public)) == 32
+    if sys.platform != 'win32':  # en Windows la protege la ACL de la carpeta del usuario, no el modo POSIX
+        assert oct(key.stat().st_mode & 0o777) == '0o600'
     folder = tmp_path/'dist'
     folder.mkdir()
     files = [folder/'TresVizo-Field-PPK-3.0.0-x64.msi', folder/'TresVizo-Field-PPK-3.0.0-macos-arm64.dmg']

@@ -46,7 +46,8 @@ def new_key(path: Path) -> None:
     with os.fdopen(descriptor, 'w', encoding='ascii') as out:
         out.write(secret.hex()+'\n')
     public = ed25519.public_key(secret).hex()
-    print(f'Llave privada guardada en {path} (solo lectura para tu usuario). Respáldala fuera de este equipo.')
+    acceso = 'solo tu usuario puede leerla' if os.name == 'posix' else 'guárdala dentro de tu carpeta de usuario'
+    print(f'Llave privada guardada en {path} ({acceso}). Respáldala fuera de este equipo.')
     print(f'Llave pública (ponla en app/updates.py, PUBLIC_KEY_HEX):\n{public}')
 
 

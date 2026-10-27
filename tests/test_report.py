@@ -185,6 +185,13 @@ def test_nombres_en_espanol():
 
 def test_carpeta_sin_permiso(tmp_path):
     result = s.static_result(tmp_path)
+    # Una «carpeta» que es un archivo: no se puede escribir ahí en ningún sistema.
+    blocked = tmp_path / "archivo"
+    blocked.write_text("")
+    with pytest.raises(UserError):
+        api.static_report(result, s.static_project(tmp_path), s.user(), blocked / "x.pdf")
+    if sys.platform == "win32":
+        return  # En Windows el permiso lo dan las ACL: chmod no le quita la escritura a una carpeta.
     locked = tmp_path / "cerrada"
     locked.mkdir()
     locked.chmod(0o500)
