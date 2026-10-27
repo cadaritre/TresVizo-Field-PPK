@@ -1,6 +1,55 @@
 # Estado
 
-0.1.0 — esqueleto: especificación, reglas y contrato común (`tresvizo_ppk/model.py`). Nada procesa todavía.
+0.1.0 — en desarrollo. Cada sección dice lo verificado y lo pendiente.
+
+## Motor (§1.1, §1.2, §2, §3.0–3.3, §4, §8): `tresvizo_ppk/core/`
+
+**Hecho y verificado (macOS 26 arm64, Python 3.13.18, RTKLIB-EX 2.5.1 compilado aquí):**
+- RTKLIB-EX 2.5.1 (sucesor de demo5 b34L, BSD-2) y crx2rnx (RNXCMP 4.2.0) como fuente fija en `third_party/` con su
+  origen y SHA-256; `scripts/build_rtklib.py` compila `rnx2rtkp`, `convbin` y `crx2rnx` con cc/gcc/clang/MinGW/MSVC
+  sin más dependencias (probado aquí con clang; Windows y Linux solo por la CI, que no ha corrido).
+- RINEX 2.11/3.x/4: cabecera, épocas, unión de archivos horarios o diarios (sin repetir épocas, sin perder valores,
+  unión de tipos si difieren, canales GLONASS unidos) y recorte; **RTKLIB da exactamente la misma solución con los
+  archivos sueltos que con el unido** (prueba). Descompresión .zip/.gz/.Z (LZW propio, igual byte a byte a
+  `compress`) y Hatanaka v2/v3.
+- Grabaciones `.bin`/`.part` del Meridian con el convertidor del repo MeridianV copiado (commit 48e80e6, sus 43
+  pruebas pasan aquí); altura del bastón y nombre del punto de la sesión por omisión; todo lo del encabezado (o del
+  catálogo de la red, que gana y avisa) llega en el `ObservationSet` con su origen (`field_sources`).
+- Control de calidad tipo TEQC (épocas, huecos, saltos de ciclo, multitrayectoria MP, señales, traslape).
+- Redes CORS como paquetes `cors-network` (formato en `docs/formato-red-cors.md`, comprobación registrada en
+  `tresvizo_ppk/datos/`): la RGNA incluida (31 estaciones del INEGI, ITRF2008 2010.0, con atribución), redes de otros
+  países instalables del índice firmado con su marco y época, descarga por plantilla https documentada o guía.
+- Coordenada de la base sin pedirla a mano: la oficial de su red; base propia: encabezado RINEX o media autónoma
+  de la sesión, marcadas aproximadas con su origen (`base_coordinate_candidates`).
+- ANTEX igs20 (satélites y antenas de la RGNA) y órbitas SP3 a petición (ESA o IGS en el BKG, sin cuenta).
+- Estático: estrategia por longitud, modelo de error calibrado, ajuste por mínimos cuadrados con chi², prueba w y
+  exclusión automática de una línea que no cuadra con tres bases. PPK de puntos: trayectoria combinada, promedio por
+  ocupación, todo plomeado, σ con mínimos realistas. Línea de órdenes `python -m tresvizo_ppk estatico|puntos`.
+- **Validación con datos reales de la RGNA** (`docs/validacion.md`): líneas de 100–141 km, error del vector frente a
+  una referencia PPP del día de 2–3 cm (1 h), 1.5 cm (2 h), ≤ 1 cm (4 h) y ≤ 6 mm (24 h); 30 km fija dentro de 2 cm.
+  Detectó el hundimiento de INEG (0.74 m desde 2010.0).
+- Pruebas: 110 en `tests/core` (más las 43 del convertidor), con muestras reales pequeñas de la RGNA.
+
+**Pendiente o sin verificar:**
+- **Ninguna grabación real de MeridianV/MeridianVI** ni jornada real con el CSV de TresVizo Field: falta una muestra
+  del propietario (base + rover + CSV) para validar el PPK de puntos y la resolución de ambigüedades en cinemático.
+  Con una estación de la RGNA como rover a 30 km y 20 min, los puntos salen flotantes (0.1–0.5 m).
+- **Líneas largas solo flotantes:** RTKLIB no resuelve ambigüedades a 100+ km (su ionosfera estimada no fijó nunca).
+  La solución profesional es una resolución propia ancha/estrecha sobre la libre de ionosfera, como TBC; hoy da
+  1–3 cm con 1–2 h y ≤ 1 cm con 4 h o más (validado), pero sin el «fijo» que muestran los programas comerciales.
+- **Descarga directa de la RGNA (§3.2): no se automatiza.** La página del INEGI es un formulario para personas sin
+  servicio documentado para programas, y su SFTP público (geodesia2.inegi.org.mx) usa un usuario y contraseña
+  publicados en la página: meterlos en el programa es decisión del propietario (técnicamente es sencillo con un
+  cliente SFTP; habría que elegir uno con licencia compatible). Hoy la app guía con fechas, horas y nombres de
+  archivo exactos (`station_download_guide`).
+- La resolución de ambigüedades de GLONASS y BeiDou está apagada (impidió fijar en las pruebas); sus satélites
+  entran flotantes. Probar de nuevo con datos Meridian–Meridian (mismo receptor).
+- No hay transformación de época ni de marco (§3.4): el resultado queda en el marco de la base. Con estaciones que
+  se mueven (INEG, COL2) la coordenada oficial ya no es su posición: el paquete de red lleva avisos por estación.
+- El ANTEX incluido solo trae las antenas de la RGNA; otra red puede traer las suyas en su paquete.
+- La comprobación completa de los paquetes `cors-network` se registra al importar `tresvizo_ppk.core.networks`
+  (lo hace `core.api`): si la biblioteca instala una red antes de cargarse el motor, solo se comprueba el JSON.
+- Compilación de RTKLIB en Windows (MinGW/MSVC) y Linux sin probar aquí.
 
 ## Interfaz y distribución (§1.4, §6, §2 y §7)
 
