@@ -328,6 +328,20 @@ def test_catalog_view_classes_search_and_groups():
     assert cv.normalize('Ñandú México') == 'nandu mexico'
 
 
+
+def test_every_country_of_the_bundled_index_has_its_name_and_region():
+    """Un país nuevo en el índice firmado no puede salir como código suelto bajo «Mundo» en el catálogo."""
+    import base64
+    from app import catalog_view as cv
+    from tresvizo_ppk.datos import biblioteca
+    envelope = json.loads(Path(biblioteca.BUNDLED_INDEX).read_text(encoding='utf-8'))
+    payload = json.loads(base64.b64decode(envelope['payload']))
+    countries = {c for item in payload['items'] for c in item.get('countries', [])}
+    assert len(countries) >= 33
+    for code in countries:
+        name, region = cv.country_region(code)
+        assert name != code and region in cv.REGIONS and region != 'Mundo', code
+
 def test_spanish_display_names_and_plurals():
     from tresvizo_ppk.nombres import display_name
     from app.formatting import plural

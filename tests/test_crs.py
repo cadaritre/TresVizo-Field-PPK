@@ -150,7 +150,7 @@ def test_paquetes_de_prueba_son_los_publicados():
     payload = indice.verify(INDEX.read_bytes())
     items = {i["id"]: i for i in payload["items"]}
     files = sorted((APPS / "paquetes").glob("*.json.gz"))
-    assert len(files) == 9
+    assert len(files) == 34
     for p in files:
         data = gzip.decompress(p.read_bytes())
         item = items[p.name[: -len(".json.gz")]]
@@ -171,8 +171,8 @@ def test_definiciones_de_fabrica_son_las_de_las_apps(reference, registry):
 def test_todos_los_vectores_de_crs_reference(reference, registry):
     """La prueba de las apps: ida ≤ 1 µm, vuelta ≤ 1e-10°, escala ≤ 1e-9, convergencia ≤ 1e-7°; en los heredados la
     misma región y el punto del datum viejo ≤ 1e-10°."""
-    assert len(reference["systems"]) == 262
-    points = legacy = 0
+    assert len(reference["systems"]) == 1255
+    points = legacy = only = 0
     worst = dict(e=0.0, back=0.0, k=0.0, conv=0.0, datum=0.0)
     for s in reference["systems"]:
         d = registry[s["code"]]
@@ -183,6 +183,16 @@ def test_todos_los_vectores_de_crs_reference(reference, registry):
             if "e" not in p:
                 continue
             points += 1
+            if p.get("projectionOnly"):
+                # Datum por rejilla NTv2 real, que las pruebas no llevan: la proyección sola, desde el datum.
+                only += 1
+                e, n, conv, k = motor.project(d, p["datumLat"], p["datumLon"])
+                worst["e"] = max(worst["e"], abs(e - p["e"]), abs(n - p["n"]))
+                worst["conv"] = max(worst["conv"], abs(conv - p["convergence_deg"]))
+                worst["k"] = max(worst["k"], abs(k - p["scale"]))
+                b_lat, b_lon = motor.unproject(d, e, n)
+                worst["back"] = max(worst["back"], abs(b_lat - p["datumLat"]), abs(b_lon - p["datumLon"]))
+                continue
             lat, lon, t, _ = motor.datum_point(d, p["lat"], p["lon"])
             if "transformation" in p:
                 legacy += 1
@@ -199,14 +209,14 @@ def test_todos_los_vectores_de_crs_reference(reference, registry):
             worst["k"] = max(worst["k"], abs(k - p["scale"]))
             b_lat, b_lon = motor.unproject(d, e, n)
             worst["back"] = max(worst["back"], abs(b_lat - lat), abs(b_lon - lon))
-    assert points == 1316 and legacy == 458
+    assert points == 10904 and legacy == 628 and only == 8
     assert worst["e"] <= 1e-6 and worst["back"] <= 1e-10 and worst["k"] <= 1e-9 and worst["conv"] <= 1e-7
     assert worst["datum"] <= 1e-10
 
 
 def test_proyecciones_con_el_registro_epsg(registry):
     projected = [d for d in registry.values() if d.is_projected]
-    assert len(projected) == 246
+    assert len(projected) == 1223
     assert all(motor.uses_epsg_registry(d) for d in projected)
 
 

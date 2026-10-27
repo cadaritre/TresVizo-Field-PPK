@@ -27,11 +27,16 @@ COUNTRIES = {
     'PA': ('Panamá', 'Centroamérica y Caribe'), 'CU': ('Cuba', 'Centroamérica y Caribe'),
     'DO': ('República Dominicana', 'Centroamérica y Caribe'), 'HT': ('Haití', 'Centroamérica y Caribe'),
     'JM': ('Jamaica', 'Centroamérica y Caribe'), 'PR': ('Puerto Rico', 'Centroamérica y Caribe'),
-    'TT': ('Trinidad y Tobago', 'Centroamérica y Caribe'),
+    'TT': ('Trinidad y Tobago', 'Centroamérica y Caribe'), 'BB': ('Barbados', 'Centroamérica y Caribe'),
+    'AG': ('Antigua y Barbuda', 'Centroamérica y Caribe'), 'KN': ('San Cristóbal y Nieves', 'Centroamérica y Caribe'),
+    'DM': ('Dominica', 'Centroamérica y Caribe'), 'LC': ('Santa Lucía', 'Centroamérica y Caribe'),
+    'VC': ('San Vicente y las Granadinas', 'Centroamérica y Caribe'), 'GD': ('Granada', 'Centroamérica y Caribe'),
+    'MQ': ('Martinica', 'Centroamérica y Caribe'), 'GP': ('Guadalupe', 'Centroamérica y Caribe'),
     'AR': ('Argentina', 'Sudamérica'), 'BO': ('Bolivia', 'Sudamérica'), 'BR': ('Brasil', 'Sudamérica'),
     'CL': ('Chile', 'Sudamérica'), 'CO': ('Colombia', 'Sudamérica'), 'EC': ('Ecuador', 'Sudamérica'),
     'GY': ('Guyana', 'Sudamérica'), 'PY': ('Paraguay', 'Sudamérica'), 'PE': ('Perú', 'Sudamérica'),
     'SR': ('Surinam', 'Sudamérica'), 'UY': ('Uruguay', 'Sudamérica'), 'VE': ('Venezuela', 'Sudamérica'),
+    'GF': ('Guayana Francesa', 'Sudamérica'),
     'ES': ('España', 'Europa'), 'PT': ('Portugal', 'Europa'), 'FR': ('Francia', 'Europa'),
 }
 WORLD = ('', 'Mundo')
