@@ -112,6 +112,47 @@ class DataQuality:
     warnings: list[str] = field(default_factory=list)
 
 
+# --- Antenas: la que eligió el usuario y la que se usó ----------------------------------------------------------------
+
+# Método con que se midió la altura de la antena (especificación §1.1.1):
+#   «arp»    vertical de la marca a la ARP (la del RINEX);
+#   «mount»  vertical de la marca a la rosca o al gancho; la ARP queda `mount_offset_m` arriba (el desplazamiento del
+#            case en los Meridian, 0 en las antenas cuya ARP es la base de la rosca);
+#   «slant»  inclinada, de la marca al borde de la antena: h_ARP = √(s² − r²) − d, con r el radio horizontal del eje
+#            al punto del borde y d lo que ese punto está arriba de la ARP.
+HEIGHT_METHODS = ("arp", "mount", "slant")
+
+
+@dataclass
+class AntennaSelection:
+    """Antena, radomo y altura que eligió el usuario para un extremo («rover» o «base:<clave>»). Lo vacío o None
+    deja lo que traen los datos (encabezado RINEX, producto Meridian o catálogo de la red)."""
+    antenna_type: str = ""                     # tipo IGS («CHCI80»); vacío: el de los datos
+    radome: str = ""                           # «NONE», «SCIT»…; vacío: el de los datos
+    height_method: str = "arp"                 # uno de HEIGHT_METHODS
+    measured_m: float | None = None            # lo medido con ese método; None: la altura de los datos
+    mount_offset_m: float | None = None        # «mount»: rosca o gancho → ARP
+    slant_radius_m: float | None = None        # «slant»: r
+    slant_offset_m: float | None = None        # «slant»: d (positivo si el borde está arriba de la ARP)
+    dimensions_source: str = ""                # de dónde salen r y d (tabla con su fuente, o «escritos por el usuario»)
+
+
+@dataclass
+class AntennaInfo:
+    """La antena que se usó de verdad en un extremo, para el informe y los avisos."""
+    role: str                                  # «Rover», «Base INEG»
+    antenna_type: str = ""
+    radome: str = "NONE"
+    model_type: str = ""                       # el modelo del ANTEX que se aplicó (vacío: sin modelo)
+    model_radome: str = ""                     # su radomo («NONE» si se tomó el tipo sin radomo)
+    source: str = ""                           # «IGS (igs20_2437)», «NGS (ngs20.atx)», «importado (lab.atx)», «red …»
+    calibrated: bool = False                   # hubo modelo de centro de fase (PCO/PCV)
+    height_m: float | None = None              # vertical a la ARP usada
+    height_text: str = ""                      # cómo salió la altura («inclinada 1.523 m, r 0.120, d 0.036»)
+    level: str = "ok"                          # «ok», «warning» (sin modelo, línea corta) o «error» (sin modelo, > 5 km)
+    note: str = ""
+
+
 # --- Opciones de proceso ---------------------------------------------------------------------------------------------
 
 class Ephemeris(str, Enum):
@@ -131,6 +172,10 @@ class ProcessingOptions:
     combined: bool = True                      # adelante y atrás
     min_ratio: float = 3.0
     interval_s: float | None = None            # None: el de los datos
+    # Añadido por las antenas (§1.1.1): ANTEX importados (calibración individual de laboratorio, del NGS…), que
+    # ganan sobre el incluido, y la antena y la altura elegidas por extremo («rover», «base:<clave>»).
+    antex_files: list[Path] = field(default_factory=list)
+    antennas: dict[str, AntennaSelection] = field(default_factory=dict)
 
 
 # --- Resultados: estático --------------------------------------------------------------------------------------------
@@ -238,6 +283,7 @@ class StaticResult:
     ephemeris: Ephemeris = Ephemeris.BROADCAST
     precise_files: list[str] = field(default_factory=list)              # nombres de los SP3 usados
     rtklib_version: str = ""
+    antennas: list[AntennaInfo] = field(default_factory=list)           # rover y cada base: modelo y fuente
 
 
 # --- Resultados: PPK de puntos ---------------------------------------------------------------------------------------
@@ -294,6 +340,7 @@ class PointsResult:
     precise_files: list[str] = field(default_factory=list)
     rtklib_version: str = ""
     trajectory: list[tuple[datetime, Ecef, Solution]] = field(default_factory=list)   # para la gráfica
+    antennas: list[AntennaInfo] = field(default_factory=list)          # rover y base: modelo y fuente
 
 
 # --- Sistemas de coordenadas, usuario y proyecto ---------------------------------------------------------------------
