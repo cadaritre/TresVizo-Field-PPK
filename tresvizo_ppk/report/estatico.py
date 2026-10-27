@@ -21,6 +21,11 @@ def is_long_float(b) -> bool:
     return b.solution == Solution.FLOAT and b.length_m >= LONG_LINE_M
 
 
+def _is_long_float_warning(w: str, b) -> bool:
+    """El aviso «quedó FLOTANTE» del motor no es un fallo en una línea larga: lo sustituye la explicación."""
+    return is_long_float(b) and "FLOTANTE" in w and b.base.id in w
+
+
 def long_float_text(b) -> str:
     lat, lon, _ = calculos.geodetic(b.base.position)
     ce = calculos.cov_enu(b.covariance_ecef, lat, lon)
@@ -62,8 +67,10 @@ def _status(result: StaticResult, min_ratio: float) -> tuple[str, str, list[str]
     if len(result.baselines) == 1:
         reasons.append("Con una sola base no hay redundancia: la coordenada sale de esa línea base y no se puede "
                        "comprobar con otra.")
-    reasons += [w for w in result.warnings if w not in reasons and not any(
-        w.startswith(f"La línea base con {bid}") for bid in excluded)]
+    longs = {b.base.id for b in result.baselines if is_long_float(b)}
+    reasons += [w for w in result.warnings if w not in reasons
+                and not any(w.startswith(f"La línea base con {bid}") for bid in excluded)
+                and not any(w.startswith(f"La línea base {bid} quedó FLOTANTE") for bid in longs)]
     reasons = list(dict.fromkeys(reasons))
     usable = [b for b in result.baselines if b.solution == Solution.FIXED or is_long_float(b)]
     if usable and not [
@@ -88,7 +95,7 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
     r.h1(f"Resumen · {result.point_name}")
     solution = _overall_solution(result)
     summary = [("Punto", result.point_name), ("Solución", solution),
-               ("Bases", ", ".join(f"{b.id} ({b.name})" for b in result.bases) or "—"),
+               ("Bases", ", ".join(secciones.station_label(b) for b in result.bases) or "—"),
                ("Cálculo", "ajuste por mínimos cuadrados de las líneas base" if result.adjustment else
                 "una sola línea base, sin ajuste")]
     r.fields(summary, columns=2, label_width=70)
@@ -221,7 +228,8 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
         r.callout("info", "Gráficas que faltan", chart_notes)
 
     # 8. Avisos y anexo -----------------------------------------------------------------------------------------------
-    all_warnings = list(result.warnings) + [w for b in result.baselines for w in b.warnings]
+    all_warnings = [w for w in result.warnings if not any(_is_long_float_warning(w, b) for b in result.baselines)]
+    all_warnings += [w for b in result.baselines for w in b.warnings if not _is_long_float_warning(w, b)]
     if c is not None:
         all_warnings += list(c.warnings)
     if problem:
@@ -268,7 +276,7 @@ def _baseline(r: Report, b, options) -> None:
     vec = (b.vector_ecef.x, b.vector_ecef.y, b.vector_ecef.z)
     az, zen = b.azimuth_deg, b.zenith_deg
     sigma_len = calculos.length_sigma(vec, b.covariance_ecef)
-    r.fields([("Base", f"{b.base.id} · {b.base.name}"), ("Rover", b.rover_marker),
+    r.fields([("Base", secciones.station_label(b.base)), ("Rover", b.rover_marker),
               ("Inicio", estilo.utc_text(b.start)), ("Fin", estilo.utc_text(b.end)),
               ("Duración", estilo.duration_text(duration)), ("Épocas usadas", str(b.epochs_used)),
               ("Solución", secciones.SOLUTION_NAMES[b.solution]),
@@ -290,5 +298,6 @@ def _baseline(r: Report, b, options) -> None:
               ("Distancia cenital", f"{estilo.azimuth_dms(zen)} ({num(zen, 6)}°)"),
               ("Desnivel elipsoidal", signed(b.vector_enu.u, 4, "m"))], columns=2, label_width=90)
     _covariance(r, b.covariance_ecef, "Matriz de covarianza del vector (ECEF, m²)")
-    if b.warnings:
-        r.callout("warning", "Avisos de la línea base", b.warnings)
+    shown = [w for w in b.warnings if not _is_long_float_warning(w, b)]
+    if shown:
+        r.callout("warning", "Avisos de la línea base", shown)

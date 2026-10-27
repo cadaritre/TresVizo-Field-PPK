@@ -174,13 +174,13 @@ def test_base_aproximada_en_el_informe_de_puntos(tmp_path):
     assert "media de la solución autónoma de la sesión" in t
 
 
-def test_nombres_en_espanol():
-    from tresvizo_ppk.report.secciones import spanish_name
-    assert spanish_name("Mexico ITRF2008 / UTM zona 13N") == "México ITRF2008 / UTM zona 13N"
-    assert spanish_name("NAD27 / UTM zone 13N") == "NAD27 / UTM zona 13N (NAD27 / UTM zone 13N)"
-    assert spanish_name("Mexico ITRF92 / UTM zone 12N") == "México ITRF92 / UTM zona 12N (Mexico ITRF92 / UTM zone 12N)"
-    assert spanish_name("MAGNA-SIRGAS 2018 / Origen-Nacional") == "MAGNA-SIRGAS 2018 / Origen-Nacional"
-    assert spanish_name("WGS 84") == "WGS 84"
+def test_nombres_en_espanol(tmp_path):
+    """El informe dice el nombre de la pantalla (`nombres.display_name`) y el original en «Nombre EPSG»."""
+    result = s.static_result(tmp_path)
+    _, t = _read(api.static_report(result, s.static_project(tmp_path), s.user(), tmp_path / "x.pdf"))
+    assert "México ITRF2008 / UTM zona 13N" in t
+    assert "Nombre EPSG Mexico ITRF2008 / UTM zona 13N" in t
+    assert "(Mexico ITRF2008" not in t
 
 
 def test_carpeta_sin_permiso(tmp_path):

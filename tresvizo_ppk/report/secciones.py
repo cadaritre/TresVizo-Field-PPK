@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..crs import api as crs
 from ..errors import UserError
+from ..nombres import display_name
 from ..model import (CoordinateChoice, DataQuality, Ecef, Ephemeris, ObservationSet, ProcessingOptions, Project,
                      Solution, Station, TransformedCoordinate)
 from . import estilo, graficas
@@ -32,30 +33,10 @@ def transform_or_none(position: Ecef | None, choice: CoordinateChoice) -> tuple[
         return None, str(error)
 
 
-_SPANISH = [(re.compile(r"\bMexico\b"), "México"), (re.compile(r"\bUTM zone\b"), "UTM zona"),
-            (re.compile(r"\bzone\b"), "zona")]
-
-
-def spanish_name(name: str) -> str:
-    """El nombre de un sistema en el informe. El de las apps («Mexico ITRF2008 / UTM zona 13N») es español salvo el
-    acento: se escribe «México». Un nombre del registro EPSG en inglés se deja tal cual entre paréntesis, con el
-    nombre en español delante: «NAD27 / UTM zona 13N (NAD27 / UTM zone 13N)»."""
-    if not name:
-        return name
-    spanish = name
-    for pattern, repl in _SPANISH:
-        spanish = pattern.sub(repl, spanish)
-    if spanish == name:
-        return name
-    if "zona" in name and "zone" not in name:      # nombre de las apps: solo el acento
-        return spanish
-    return f"{spanish} ({name})"
-
-
 def system_name(c: TransformedCoordinate | None, choice: CoordinateChoice) -> str:
     if c is None:
-        return choice.label or choice.crs_id
-    return choice.label or spanish_name(c.crs_name)
+        return display_name(choice.label) or choice.crs_id
+    return display_name(choice.label or c.crs_name)
 
 
 ORIGIN_NAMES = {"official": "coordenada oficial de su red", "rinex-header": "posición del encabezado RINEX",
@@ -150,13 +131,15 @@ def system_section(r: Report, c: TransformedCoordinate | None, choice: Coordinat
     r.h1("Sistema de coordenadas")
     pairs = [("Sistema elegido", system_name(c, choice))]
     if c is not None:
+        if c.crs_name and display_name(c.crs_name) != c.crs_name:
+            pairs.append(("Nombre EPSG", c.crs_name))
         pairs += [("Código", c.crs_code or "—"), ("Marco del sistema", c.frame_text or "—"),
                   ("Marco del resultado", result_frame)]
         definition = crs.definition(c.crs_code)
         if definition is not None:
             if definition.is_projected:
                 pairs.append(("Proyección", definition.projection_name))
-            pairs.append(("Datum y elipsoide", f"{definition.datum} · {definition.ellipsoid.name}"))
+            pairs.append(("Datum y elipsoide", f"{display_name(definition.datum)} · {definition.ellipsoid.name}"))
         if c.transformation:
             pairs.append(("Transformación de datum", c.transformation))
         if choice.geoid_id:
@@ -180,7 +163,7 @@ def options_section(r: Report, options: ProcessingOptions, ephemeris_used: set[E
     eph = ", ".join(EPHEMERIS_NAMES[e] for e in sorted(ephemeris_used, key=lambda e: e.value)) or \
         EPHEMERIS_NAMES[options.ephemeris]
     pairs = [
-        ("Motor", engine.strip()),
+        ("Motor", re.sub(r"^\s*Motor:\s*", "", engine.strip())),
         ("Modo", ("cinemático" if kinematic else "estático") + (", combinado adelante y atrás" if options.combined
                                                                   else ", solo hacia adelante")),
         ("Máscara de elevación", f"{options.elevation_mask_deg:g}°"),
@@ -306,3 +289,8 @@ def frame_text(position: Ecef) -> str:
     """«ITRF2008, época 2010.0», «SIRGAS2000, época 2000.4»: el marco y la época de la red de la base."""
     from ..crs.definicion import epoch_text
     return f"{position.frame}, época {epoch_text(position.epoch)}"
+
+
+def station_label(s: Station) -> str:
+    """«UQRO — Querétaro, Qro.» sin repetir la clave cuando el nombre ya la trae."""
+    return s.name if s.name.startswith(s.id) else f"{s.id} ({s.name})" if s.name else s.id

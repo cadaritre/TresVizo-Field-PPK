@@ -84,7 +84,7 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
                ("Flotantes", str(counts[Solution.FLOAT])),
                ("Autónomos", str(counts[Solution.SINGLE])), ("Sin solución", str(counts[Solution.NONE])),
                ("Épocas fijas de la trayectoria", f"{num(100 * result.fix_rate, 1)} %"),
-               ("Base", f"{result.base.id} · {result.base.name}"),
+               ("Base", secciones.station_label(result.base)),
                ("Origen de la base", _base_origin(result.base, project))]
     r.fields(summary, columns=2, label_width=120)
     if counts[Solution.FIXED] == total and total:
