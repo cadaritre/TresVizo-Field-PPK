@@ -131,6 +131,6 @@ def test_static_excludes_bad_line_when_the_rest_agree_by_w(monkeypatch, tmp_path
     assert a.excluded_baselines == ["INEG"] and not a.passed and a.chi2 > a.chi2_upper
     assert max(max(abs(w.e), abs(w.n), abs(w.u)) for w in a.standardized_residuals.values()) <= a.critical_value
     assert any("se dejó fuera" in w for w in result.warnings)
-    assert any("cuadran por la prueba w" in w and "movimiento de las estaciones" in w for w in result.warnings)
+    assert any("tampoco pasan la prueba χ²" in w and "movimiento de las estaciones" in w for w in result.warnings)
     # sin INEG: la media de UQRO e ISLP, lejos de los 0.7 m de INEG
     assert np.linalg.norm(np.array([a.position.x, a.position.y, a.position.z]) - np.array(P)) < 0.01

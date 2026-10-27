@@ -10,9 +10,10 @@ Estrategia (`ProcessingOptions.ionosphere`), ajustada con las pruebas sobre la R
     60 km, 1 h desde ahí). En la validación fijó todas las sesiones de 1 h o más a 30 y a 100–141 km, con error de
     centímetro, y su flotante es mejor que la libre de ionosfera de RTKLIB. RTKLIB corre además la libre de ionosfera
     como comprobación independiente (y sus gráficas de cielo, satélites y residuos van al informe); si las dos no
-    concuerdan, se avisa. Entre 20 y 60 km, si el propio queda flotante, se prueba como antes la fija de RTKLIB con la
-    ionosfera del mensaje y se queda solo si fijó la mitad de las épocas y coincide con la libre de ionosfera.
-    Si el procesador propio no puede con los datos (sin señales comunes, muy pocas épocas), se usa RTKLIB como antes.
+    concuerdan, se avisa. La fija de RTKLIB con la ionosfera del mensaje (la «media» de antes, entre 20 y 60 km) ya no
+    se usa: en la validación, con 15 min a 30 km, dio un fijo con 12.5 cm de error en la vertical (3.3σ) donde el
+    propio, con buena razón, quedó flotante. Si el procesador propio no puede con los datos (sin señales comunes, muy
+    pocas épocas), se usa RTKLIB como antes (media + libre de ionosfera entre 20 y 60 km; libre de ionosfera desde ahí).
 - «iono-free»: siempre libre de ionosfera de RTKLIB (flotante). «broadcast»: siempre con la ionosfera del mensaje y
   ambigüedades enteras. «estimated»: ionosfera estimada por satélite (opción de RTKLIB; en las pruebas no fijó).
 - RTKLIB: ambigüedades enteras solo de GPS, Galileo y QZSS: las de GLONASS (sesgos entre canales) y BeiDou impidieron
@@ -220,6 +221,21 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
     start_g = utc_to_gps(start).replace(tzinfo=None)
     end_g = utc_to_gps(end).replace(tzinfo=None)
     precise = options.ephemeris == Ephemeris.PRECISE
+    own = None
+    if use_own:
+        tools.check(cancel)
+        try:
+            own = _process_own(rover, station, base, options, base_xyz, approx, rover_choice, base_choice, rover_h,
+                               base_h, start_g, end_g, workdir, log,
+                               progress=lambda f, m: step(0.6 * f, m), cancel=cancel)
+        except UserError as error:
+            warnings.append(f"Línea base {station.id} ({length / 1000:.1f} km): el procesador de líneas largas no pudo "
+                            f"con estos datos ({error}); se usa RTKLIB.")
+            log.append(f"  procesador propio: {error}")
+    if own is not None:
+        # el propio decide; RTKLIB solo corre la libre de ionosfera como comprobación independiente (su fija con la
+        # ionosfera del mensaje, que antes se probaba entre 20 y 60 km, dio un fijo erróneo en la validación)
+        plan = [s_ for s_ in plan if s_.key == "libre-de-ionosfera"] or plan
     runs: list[RunResult] = []
     for k, strategy in enumerate(plan):
         tools.check(cancel)
@@ -236,8 +252,8 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
         cfg.write(conf)
         pos = workdir / f"{name}.pos"
         log.append(f"Línea base {station.id}: {strategy.text} ({length / 1000:.1f} km).")
-        span = 0.5 if use_own else 1.0
-        frac0, frac1 = span * k / len(plan), span * (k + 1) / len(plan)
+        lo, hi = (0.6, 1.0) if own is not None else (0.0, 1.0)
+        frac0, frac1 = lo + (hi - lo) * k / len(plan), lo + (hi - lo) * (k + 1) / len(plan)
         rtklib.run_rnx2rtkp(conf, pos, rover.obs[0], base.obs[0], nav, [Path(p) for p in options.precise_files],
                             workdir=workdir, start_gpst=start_g, end_gpst=end_g, interval_s=interval,
                             progress=lambda f, m: step(frac0 + (frac1 - frac0) * f, m), cancel=cancel, log=log,
@@ -246,25 +262,12 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
         run = RunResult(strategy, epochs, pos, Path(str(pos) + ".stat"), conf)
         runs.append(run)
         log.append(f"  épocas: {len(epochs)}, fijas: {100 * run.fix_rate:.0f} %")
-    own = None
-    if use_own:
-        tools.check(cancel)
-        try:
-            own = _process_own(rover, station, base, options, base_xyz, approx, rover_choice, base_choice, rover_h,
-                               base_h, start_g, end_g, workdir, log,
-                               progress=lambda f, m: step(0.5 + 0.5 * f, m), cancel=cancel)
-        except UserError as error:
-            warnings.append(f"Línea base {station.id} ({length / 1000:.1f} km): el procesador de líneas largas no pudo "
-                            f"con estos datos ({error}); se usa RTKLIB.")
-            log.append(f"  procesador propio: {error}")
     chosen = runs[0]
-    rtk_fixed_ok = False
     if len(runs) == 2:
         fixed_run, float_run = runs
         agree, detail = _agreement(fixed_run, float_run, base_xyz)
         log.append(f"  fija de RTKLIB frente a su libre de ionosfera: {detail}")
-        rtk_fixed_ok = fixed_run.fix_rate >= MIN_FIX_RATE_AUTO and agree
-        if rtk_fixed_ok:
+        if fixed_run.fix_rate >= MIN_FIX_RATE_AUTO and agree:
             chosen = fixed_run
         else:
             chosen = float_run
@@ -275,14 +278,11 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
                                 "libre de ionosfera (flotante).")
     elif chosen.strategy.key == "libre-de-ionosfera" and (options.ionosphere or "auto") == "auto" and own is None:
         log.append(f"  {length / 1000:.1f} km: línea larga, solución libre de ionosfera.")
-    if own is not None and (own.fixed or not rtk_fixed_ok):
+    if own is not None:
         control = runs[-1]
         solution = summarize_own(own, rover, station, base_xyz, options, control, warnings, notes)
         _cross_check(solution, control, rover, station, base_xyz, options, log)
         return solution, control
-    if own is not None:
-        log.append(f"  procesador propio flotante ({own.reason}); la fija de RTKLIB con la ionosfera del mensaje "
-                   "coincide con la libre de ionosfera y se usa esa.")
     solution = summarize(chosen, rover, station, base_xyz, options, warnings, notes)
     return solution, chosen
 

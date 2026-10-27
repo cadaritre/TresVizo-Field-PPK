@@ -108,32 +108,28 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
         adjustment = adjust.adjust(lines, frame, epoch)
         full = adjustment
         if not adjustment.passed and len(lines) >= 3 and len(adjustment.flagged_baselines) == 1:
-            # con tres o más bases y una sola línea que no cuadra (prueba w): se ajusta sin ella si las que quedan
-            # cuadran entre sí por la prueba w (lectura de datos de Baarda: se quita la peor y se vuelve a probar);
-            # si además falla la χ² de las que quedan, se avisa (sus coordenadas oficiales difieren entre sí más de
-            # lo que dicen las líneas base: movimiento de las estaciones desde la época de la coordenada)
+            # con tres o más bases y una sola línea que no cuadra (la de mayor w sobre el valor crítico): se quita y
+            # se vuelve a ajustar (lectura de datos de Baarda). Si las que quedan tampoco pasan la χ², se avisa: sus
+            # coordenadas oficiales difieren entre sí más de lo que miden las líneas (movimiento de las estaciones
+            # desde la época de la coordenada); con dos ya no se puede saber cuál
             bad = adjustment.flagged_baselines[0]
             reduced = adjust.adjust([l for l in lines if l.base_id != bad], frame, epoch)
-            reduced_w = max((max(abs(w.e), abs(w.n), abs(w.u)) for w in reduced.standardized_residuals.values()),
-                            default=0.0)
-            if reduced.passed or reduced_w <= reduced.critical_value:
-                log.append(f"Ajuste con todas las bases: χ² = {full.chi2:.2f} (límite {full.chi2_upper:.2f}), NO "
-                           f"PASA; la prueba w señala {bad}.")
-                r = full.residuals_enu[bad]
-                warnings.append(f"La línea base con {bad} no cuadra con las demás (residuo E {r.e * 100:+.1f}, N "
-                                f"{r.n * 100:+.1f}, U {r.u * 100:+.1f} cm): se dejó fuera del ajuste. Revisa la "
-                                f"coordenada, la altura y los avisos de {bad}.")
-                reduced.excluded_baselines = [bad]
-                reduced.flagged_baselines = [bad]
-                if not reduced.passed:
-                    rest = ", ".join(l.base_id for l in lines if l.base_id != bad)
-                    warnings.append(f"Sin {bad}, las líneas base con {rest} cuadran por la prueba w (máx. "
-                                    f"{reduced_w:.2f} ≤ {reduced.critical_value:.2f}) pero no por la χ² "
-                                    f"(χ² = {reduced.chi2:.1f} > {reduced.chi2_upper:.1f}): las coordenadas oficiales "
-                                    "de esas bases difieren entre sí más de lo que miden las líneas (movimiento de "
-                                    "las estaciones desde la época de su coordenada). La σ del resultado se escala "
-                                    "con esa diferencia (σ0).")
-                adjustment = reduced
+            log.append(f"Ajuste con todas las bases: χ² = {full.chi2:.2f} (límite {full.chi2_upper:.2f}), NO "
+                       f"PASA; la prueba w señala {bad}.")
+            r = full.residuals_enu[bad]
+            warnings.append(f"La línea base con {bad} no cuadra con las demás (residuo E {r.e * 100:+.1f}, N "
+                            f"{r.n * 100:+.1f}, U {r.u * 100:+.1f} cm): se dejó fuera del ajuste. Revisa la "
+                            f"coordenada, la altura y los avisos de {bad}.")
+            reduced.excluded_baselines = [bad]
+            reduced.flagged_baselines = [bad]
+            if not reduced.passed:
+                rest = ", ".join(l.base_id for l in lines if l.base_id != bad)
+                warnings.append(f"Sin {bad}, las líneas base con {rest} tampoco pasan la prueba χ² "
+                                f"(χ² = {reduced.chi2:.1f} > {reduced.chi2_upper:.1f}): las coordenadas oficiales "
+                                "de esas bases difieren entre sí más de lo que miden las líneas (movimiento de las "
+                                "estaciones desde la época de su coordenada). La σ del resultado se escala con esa "
+                                "diferencia (σ0).")
+            adjustment = reduced
         position = adjustment.position
         sigma = adjustment.sigma_enu
         log.append(f"Ajuste: χ² = {adjustment.chi2:.2f} con {adjustment.degrees_of_freedom} gl (límite al 95 %: "

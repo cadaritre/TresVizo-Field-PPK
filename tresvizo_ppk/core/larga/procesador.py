@@ -60,11 +60,11 @@ MIN_FIX_LONG_KM = 60.0
 OUTLIER_SIGMAS = 4.0
 # Error que la covarianza formal no ve (troposfera, órbitas, multitrayectoria), 1σ por componente en metros:
 #     σ = a + b·(L/100 km)/√T + c·(L/100 km) [solo con efemérides difundidas]   (T en horas)
-# Calibrado con la validación sobre la RGNA (docs/validacion.md): con él, el error de las sesiones de 1 a 4 h frente
-# a la referencia PPP del día queda con RMS de 1σ y ningún componente pasa de 3σ.
+# Calibrado con la validación sobre la RGNA (docs/validacion.md, 168 sesiones de 15 min a 4 h): con él, el error
+# frente a la referencia PPP del día queda con RMS de ≤ 1σ por componente y ninguno pasa de 3σ.
 ERROR_FLOOR = {
     "fixed": {"h": (0.003, 0.004, 0.001), "v": (0.004, 0.006, 0.002)},
-    "float": {"h": (0.004, 0.006, 0.001), "v": (0.0045, 0.003, 0.003)},
+    "float": {"h": (0.006, 0.0055, 0.001), "v": (0.005, 0.0075, 0.0025)},
 }
 MAX_ITER = 6
 

@@ -13,7 +13,14 @@ procesa con `process_static` como lo haría el usuario y se compara:
 
 Uso:
     python scripts/validacion_rgna.py --datos DIR_RGNA --precisas DIR_SP3_CLK --salida DIR
-        [--rover UGTO] [--bases UQRO,ISLP,INEG] [--sesiones 1,2,4,24] [--fecha 2026-10-20]
+        [--rover UGTO] [--bases UQRO,ISLP,INEG] [--sesiones 1,2,4,24] [--ventanas 4] [--fecha 2026-10-20]
+    python scripts/validacion_rgna.py --resumen DIR/validacion.json [otro.json …]
+
+Cada línea base guarda su motor (RTKLIB o el procesador propio de líneas largas), su solución, la resolución de
+ambigüedades (combinaciones fijadas, razón, tasa de éxito o por qué quedó flotante), el error del vector frente a
+la referencia del día y su σ. `--resumen` imprime las tablas de docs/validacion.md: por línea, duración y
+efemérides, cuántas fijó, el RMS y el máximo del error y los **fijos erróneos** (fija con algún componente del
+error mayor que 3 veces su σ).
 
 DIR_RGNA tiene una carpeta por estación con los ZIP tal como los entrega el INEGI. DIR_SP3_CLK, el SP3 y el CLK
 finales de la ESA del día (ESA0OPSFIN_…_ORB.SP3 y _CLK.CLK, descomprimidos).
@@ -70,15 +77,21 @@ def ppp_truth(obs_path: Path, station, nav: list[Path], sp3: list[Path], clk: li
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--datos", type=Path, required=True)
-    parser.add_argument("--precisas", type=Path, required=True)
-    parser.add_argument("--salida", type=Path, required=True)
+    parser.add_argument("--datos", type=Path)
+    parser.add_argument("--precisas", type=Path)
+    parser.add_argument("--salida", type=Path)
+    parser.add_argument("--ventanas", type=int, default=4, help="sesiones por duración repartidas en el día")
+    parser.add_argument("--resumen", type=Path, nargs="+", help="imprime las tablas de uno o varios validacion.json")
     parser.add_argument("--rover", default="UGTO")
     parser.add_argument("--bases", default="UQRO,ISLP,INEG")
     parser.add_argument("--sesiones", default="1,2,4,24")
     parser.add_argument("--fecha", default="2026-10-20")
     parser.add_argument("--efemerides", default="broadcast,precise")
     args = parser.parse_args()
+    if args.resumen:
+        return summary(args.resumen)
+    if not (args.datos and args.precisas and args.salida):
+        parser.error("hacen falta --datos, --precisas y --salida (o --resumen)")
     out = args.salida
     out.mkdir(parents=True, exist_ok=True)
     day = datetime.fromisoformat(args.fecha).replace(tzinfo=timezone.utc)
@@ -107,7 +120,7 @@ def main() -> int:
     results = {"fecha": args.fecha, "rover": args.rover, "bases": args.bases.split(","),
                "ppp_menos_oficial_mm": motion, "sesiones": []}
     for hours in [float(h) for h in args.sesiones.split(",")]:
-        n_windows = 1 if hours >= 24 else min(4, int(24 // hours))
+        n_windows = 1 if hours >= 24 else min(args.ventanas, int(24 // hours))
         starts = [day + timedelta(hours=k * (24 / n_windows)) for k in range(n_windows)] if hours < 24 else [day]
         for eph in args.efemerides.split(","):
             for start in starts:
@@ -142,7 +155,19 @@ def main() -> int:
                         "error_vector_mm": enu_mm(R0, vec - true_vec),
                         "rover_menos_oficial_mm": enu_mm(R0, (B0 + vec) - R0),
                         "sigma_mm": [round(v * 1000, 1) for v in _sigma_enu(R0, b.covariance_ecef)],
+                        "motor": b.engine,
                     })
+                    if b.ambiguity is not None:
+                        a = b.ambiguity
+                        row["lineas"][-1]["ambiguedades"] = {
+                            "fija": a.fixed, "motivo": a.reason, "dobles_diferencias": a.double_differences,
+                            "ancho_fijas": a.widelane_fixed, "candidatas": a.narrowlane_candidates,
+                            "fijadas": a.narrowlane_fixed, "razon": a.ratio, "exito": a.success_rate}
+                        fp = a.float_position
+                        row["lineas"][-1]["error_flotante_mm"] = enu_mm(
+                            R0, (np.array([fp.x, fp.y, fp.z]) - B0) - true_vec)
+                        fs = a.float_sigma_enu
+                        row["lineas"][-1]["sigma_flotante_mm"] = [round(v * 1000, 1) for v in (fs.e, fs.n, fs.u)]
                 p = result.position
                 final = np.array([p.x, p.y, p.z])
                 row["final_menos_oficial_mm"] = enu_mm(R0, final - R0)
@@ -162,6 +187,40 @@ def main() -> int:
                 print(json.dumps({k: row[k] for k in ("sesion", "final_menos_oficial_mm")}, ensure_ascii=False),
                       [(l["base"], l["solucion"], l["error_vector_mm"]) for l in row["lineas"]], flush=True)
     print(f"Listo: {out / 'validacion.json'}")
+    return 0
+
+
+def summary(paths: list[Path]) -> int:
+    """Tablas de docs/validacion.md a partir de los validacion.json."""
+    rows = []
+    for path in paths:
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        for ses in data["sesiones"]:
+            for line in ses["lineas"]:
+                rows.append({**line, "rover": data["rover"], "horas": ses["horas"], "efemerides": ses["efemerides"]})
+    keys = sorted({(r["rover"], r["base"], r["km"] // 1) for r in rows}, key=lambda k: (k[2], k[1]))
+    print("| Línea | km | Sesión | Efemérides | Fijas | RMS E | RMS N | RMS U | Máx. horiz. | Máx. vert. | "
+          "Fijos erróneos |")
+    print("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    for rover, base, _ in keys:
+        sel = [r for r in rows if r["rover"] == rover and r["base"] == base]
+        km = sel[0]["km"]
+        for hours in sorted({r["horas"] for r in sel}):
+            for eph in ("broadcast", "precise"):
+                group = [r for r in sel if r["horas"] == hours and r["efemerides"] == eph]
+                if not group:
+                    continue
+                err = np.array([r["error_vector_mm"] for r in group])
+                sig = np.array([r["sigma_mm"] for r in group])
+                fixed = [r["solucion"] == "fixed" for r in group]
+                wrong = sum(1 for r, e, s_ in zip(group, err, sig) if r["solucion"] == "fixed" and
+                            np.any(np.abs(e) > 3 * s_))
+                rms = np.sqrt(np.mean(err ** 2, axis=0))
+                mh = float(np.max(np.hypot(err[:, 0], err[:, 1])))
+                mv = float(np.max(np.abs(err[:, 2])))
+                print(f"| {rover}–{base} | {km:.1f} | {hours:g} h | {'precisas' if eph == 'precise' else 'difundidas'}"
+                      f" | {sum(fixed)}/{len(group)} | {rms[0]:.1f} | {rms[1]:.1f} | {rms[2]:.1f} | {mh:.1f} | "
+                      f"{mv:.1f} | {wrong} |")
     return 0
 
 
