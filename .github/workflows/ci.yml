@@ -19,13 +19,14 @@ jobs:
   pruebas:
     name: Pruebas (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022, macos-14]
+        os: [ubuntu-24.04, windows-2022, macos-15]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
           cache: pip
@@ -48,16 +49,17 @@ jobs:
     name: Instalador (${{ matrix.name }})
     needs: pruebas
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
         include:
           - {name: Windows x64, os: windows-2022}
-          - {name: macOS arm64, os: macos-14}
-          - {name: macOS x86_64, os: macos-13}
+          - {name: macOS arm64, os: macos-15}
+          - {name: macOS x86_64, os: macos-15-intel}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.13'
           cache: pip
@@ -76,7 +78,7 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then python scripts/build_rtklib.py --cc gcc; else python scripts/build_rtklib.py; fi
       - name: Programa, autoprueba e instalador
         run: python scripts/distribuir.py --skip-tests --skip-rtklib
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: TresVizo-Field-PPK-${{ runner.os }}-${{ runner.arch }}
           path: |
