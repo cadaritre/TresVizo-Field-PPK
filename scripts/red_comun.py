@@ -229,10 +229,38 @@ def complete_coordinates(station: dict) -> dict:
     return station
 
 
+# Redes revisadas que NO se publican (regla del propietario: si no está claro que se pueda redistribuir, se retiene,
+# con el motivo escrito). `publicar.py --redes` las lista como retenidas en LISTA.txt y SUBIR.txt.
+HELD = {
+    "rbmc-ibge": "Brasil (RBMC, IBGE): el IBGE no publica una licencia que permita redistribuir sus datos; el mismo "
+                 "problema que sus geoides y rejillas (hgeoHNOR2020, NTv2), retenidos por eso.",
+    "ramsac-ign": "Argentina (RAMSAC, IGN): los términos del IGN solo permiten el uso comercial como insumo de un "
+                  "producto nuevo, como con GEOIDE-Ar16, retenido por eso.",
+    "magna-eco-igac": "Colombia (MAGNA-ECO, IGAC): no hay licencia escrita para las coordenadas de la red activa; "
+                      "se consultan en el portal del IGAC y el tiempo real pide cuenta. La CC BY 4.0 del "
+                      "QGeoidCOL2023 viene de la resolución de ese modelo, no de la red.",
+    "sirgas-chile-igm": "Chile (IGM): los certificados de las estaciones CORS se venden; no hay términos de uso ni "
+                        "licencia abierta en igm.cl ni en sirgaschile.cl.",
+    "regpmoc-ign-pe": "Perú (REGPMOC, IGN): no publica licencia ni términos de uso para las coordenadas de la red.",
+    "regna-rou-igm": "Uruguay (REGNA-ROU, IGM): publica las coordenadas y los datos son libres y sin costo para "
+                     "usarlos, pero no hay licencia escrita que permita redistribuirlos; la descarga es por FTP.",
+    "regme-igm-ec": "Ecuador (REGME, IGM): no se encontró licencia ni lista pública de coordenadas.",
+    "margen-igm-bo": "Bolivia (MARGEN, IGM): no se encontró licencia ni lista pública de coordenadas.",
+    "cr-sirgas-ign-cr": "Costa Rica (IGN, red de estaciones CR-SIRGAS): las fichas están en el SNIT sin licencia "
+                        "escrita; no hay lista descargable.",
+    "ign-gt": "Guatemala (IGN): no se encontró licencia ni lista pública de coordenadas.",
+    "igntg-pa": "Panamá (IGNTG): no se encontró licencia ni lista pública de coordenadas.",
+    "cnr-sv": "El Salvador (IGCN-CNR): las coordenadas de la red son del catálogo de servicios, a pedido o de pago.",
+}
+
+
 def write_package(package: dict, out_dir: Path = PACKAGES) -> Path:
-    """Valida el paquete con el mismo lector de la app y lo escribe (UTF-8, una estación por bloque)."""
+    """Valida el paquete con el mismo lector de la app y lo escribe (UTF-8, una estación por bloque), junto con
+    `retenidas.json` (las redes que no se publican, con su motivo)."""
     networks.parse_package(json.loads(json.dumps(package)))
     out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "retenidas.json").write_text(json.dumps(HELD, ensure_ascii=False, indent=1) + "\n",
+                                            encoding="utf-8")
     path = out_dir / f"{package['id']}.json"
     path.write_text(json.dumps(package, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return path
