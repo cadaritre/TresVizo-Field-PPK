@@ -18,7 +18,7 @@ CLASSES = {  # clave → (título, icono Lucide, token de color)
 }
 # Las redes CORS no son parte de este catálogo: se bajan, instalan y actualizan en «Estaciones de referencia» (como en TBC).
 SHORT = {'projected': 'Proyectado', 'geographic': 'Geográfico', 'geoid': 'Geoide', 'grid': 'Transformación de datum'}
-REGIONS = ['Norteamérica', 'Centroamérica y Caribe', 'Sudamérica', 'Europa', 'Mundo']
+REGIONS = ['Norteamérica', 'Centroamérica y Caribe', 'Sudamérica', 'Europa', 'Oceanía', 'Mundo']
 COUNTRIES = {
     'MX': ('México', 'Norteamérica'), 'US': ('Estados Unidos', 'Norteamérica'), 'CA': ('Canadá', 'Norteamérica'),
     'GT': ('Guatemala', 'Centroamérica y Caribe'), 'BZ': ('Belice', 'Centroamérica y Caribe'),
@@ -32,12 +32,15 @@ COUNTRIES = {
     'DM': ('Dominica', 'Centroamérica y Caribe'), 'LC': ('Santa Lucía', 'Centroamérica y Caribe'),
     'VC': ('San Vicente y las Granadinas', 'Centroamérica y Caribe'), 'GD': ('Granada', 'Centroamérica y Caribe'),
     'MQ': ('Martinica', 'Centroamérica y Caribe'), 'GP': ('Guadalupe', 'Centroamérica y Caribe'),
+    'BS': ('Bahamas', 'Centroamérica y Caribe'),
     'AR': ('Argentina', 'Sudamérica'), 'BO': ('Bolivia', 'Sudamérica'), 'BR': ('Brasil', 'Sudamérica'),
     'CL': ('Chile', 'Sudamérica'), 'CO': ('Colombia', 'Sudamérica'), 'EC': ('Ecuador', 'Sudamérica'),
     'GY': ('Guyana', 'Sudamérica'), 'PY': ('Paraguay', 'Sudamérica'), 'PE': ('Perú', 'Sudamérica'),
     'SR': ('Surinam', 'Sudamérica'), 'UY': ('Uruguay', 'Sudamérica'), 'VE': ('Venezuela', 'Sudamérica'),
     'GF': ('Guayana Francesa', 'Sudamérica'),
     'ES': ('España', 'Europa'), 'PT': ('Portugal', 'Europa'), 'FR': ('Francia', 'Europa'),
+    'AS': ('Samoa Americana', 'Oceanía'), 'GU': ('Guam', 'Oceanía'), 'MH': ('Islas Marshall', 'Oceanía'),
+    'MP': ('Islas Marianas del Norte', 'Oceanía'),
 }
 WORLD = ('', 'Mundo')
 
