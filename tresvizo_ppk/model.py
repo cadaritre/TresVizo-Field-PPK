@@ -364,6 +364,8 @@ class Project:
     coordinates: CoordinateChoice = field(default_factory=CoordinateChoice)
     pole_height_m: float = 0.0
     point_name: str = ""
+    point_code: str = ""                       # estático: código del vértice (capa del DXF, «Code» del CSV)
+    point_description: str = ""                # estático: descripción del vértice («Description», `desc` del LandXML)
     created: datetime | None = None
     processed: datetime | None = None
     # Añadido por la interfaz (proyectos .tvppk, §1.4):
