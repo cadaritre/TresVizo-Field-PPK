@@ -14,7 +14,7 @@ import sinteticos as s  # noqa: E402
 
 from tresvizo_ppk.crs import api as crs  # noqa: E402
 from tresvizo_ppk.errors import UserError  # noqa: E402
-from tresvizo_ppk.model import CoordinateChoice, Solution  # noqa: E402
+from tresvizo_ppk.model import CoordinateChoice, Enu, Solution  # noqa: E402
 from tresvizo_ppk.report import api, calculos, estilo, rtklib_salida  # noqa: E402
 from tresvizo_ppk.version import __version__  # noqa: E402
 
@@ -61,7 +61,7 @@ def test_informe_estatico_completo(static_pdf):
     # Resumen con la coordenada en el sistema elegido y en el marco oficial
     c = crs.transform(result.position, project.coordinates)
     for needle in ("Resumen · VERT-01", "Resultado: Aprobado", "FIJA (todas las líneas base)",
-                   "Mexico ITRF2008 / UTM zona 13N", f"{c.northing_m:.3f} m", f"{c.easting_m:.3f} m",
+                   "México ITRF2008 / UTM zona 13N", f"{c.northing_m:.3f} m", f"{c.easting_m:.3f} m",
                    f"{c.orthometric_height_m:.3f} m", "Cota ortométrica (H)", "ITRF2008, época 2010.0",
                    f"{result.position.x:.3f} m", "Horizontal al 95 %", "Elipse de error (1σ)"):
         assert needle in t, needle
@@ -129,12 +129,58 @@ def test_sin_archivos_de_rtklib_y_sistema_no_instalado(tmp_path):
 
 def test_linea_flotante_da_avisos(tmp_path):
     result = s.static_result(tmp_path)
-    result.baselines[1] = replace(result.baselines[1], solution=Solution.FLOAT, ratio=1.8)
-    result.adjustment = replace(result.adjustment, passed=False, flagged_baselines=["PRB2"])
+    result.baselines[0] = replace(result.baselines[0], solution=Solution.FLOAT, ratio=1.8)    # 6.7 km: es un fallo
+    result.adjustment = replace(result.adjustment, passed=False, flagged_baselines=["PRB1"])
     _, t = _read(api.static_report(result, s.static_project(tmp_path), s.user(), tmp_path / "x.pdf"))
     for needle in ("Resultado: Con avisos", "quedó flotante", "no pasa la prueba χ²", "no cuadra",
-                   "MIXTA: PRB1 FIJA, PRB2 FLOTANTE"):
+                   "MIXTA: PRB1 FLOTANTE, PRB2 FIJA"):
         assert needle in t, needle
+
+
+def test_linea_larga_flotante_no_parece_un_fallo(tmp_path):
+    result = s.static_result(tmp_path)
+    assert result.baselines[1].length_m > 60_000
+    result.baselines[1] = replace(result.baselines[1], solution=Solution.FLOAT, ratio=None)
+    _, t = _read(api.static_report(result, s.static_project(tmp_path), s.user(), tmp_path / "x.pdf"))
+    assert "Resultado: Aprobado" in t and "Líneas largas con solución flotante" in t
+    assert "Línea larga (99.3 km): se calcula libre de ionosfera" in t and "σ horizontal" in t
+    assert "quedó flotante" not in t and "FIJA y FLOTANTE (líneas largas)" in t
+
+
+def test_linea_excluida_del_ajuste_y_base_aproximada(tmp_path):
+    result = s.static_result(tmp_path, bases=3)
+    adj = result.adjustment
+    residuals = {k: v for k, v in adj.residuals_enu.items() if k != "PRB3"}
+    w = {k: Enu(0.5, -0.8, 1.1) for k in residuals}
+    result.adjustment = replace(adj, residuals_enu=residuals, standardized_residuals=w, critical_value=3.29,
+                                chi2_lower=0.48, chi2_upper=11.14, excluded_baselines=["PRB3"],
+                                flagged_baselines=["PRB3"], degrees_of_freedom=3)
+    result.bases[0] = replace(result.bases[0], approximate=True, coordinate_origin="rinex-header", official=False,
+                              source="encabezado de PRB10293.26O")
+    _, t = _read(api.static_report(result, s.static_project(tmp_path), s.user(), tmp_path / "x.pdf"))
+    for needle in ("La línea base con PRB3 se dejó fuera del ajuste", "Línea base excluida del ajuste", "excluida",
+                   "w máx. (crít. 3.29)", "0.480 – 11.140",
+                   "Coordenada de la base PRB1 aproximada (posición del encabezado RINEX; encabezado de PRB10293.26O): "
+                   "los puntos quedan bien entre sí pero desplazados lo mismo que la base."):
+        assert needle in t, needle
+
+
+def test_base_aproximada_en_el_informe_de_puntos(tmp_path):
+    result = s.points_result(tmp_path)
+    result.base = replace(result.base, approximate=True, coordinate_origin="autonomous", official=False, source="")
+    project = replace(s.points_project(tmp_path), base_kind="own")
+    _, t = _read(api.points_report(result, project, s.user(), tmp_path / "x.pdf"))
+    assert t.count("los puntos quedan bien entre sí pero desplazados lo mismo que la base") >= 2
+    assert "media de la solución autónoma de la sesión" in t
+
+
+def test_nombres_en_espanol():
+    from tresvizo_ppk.report.secciones import spanish_name
+    assert spanish_name("Mexico ITRF2008 / UTM zona 13N") == "México ITRF2008 / UTM zona 13N"
+    assert spanish_name("NAD27 / UTM zone 13N") == "NAD27 / UTM zona 13N (NAD27 / UTM zone 13N)"
+    assert spanish_name("Mexico ITRF92 / UTM zone 12N") == "México ITRF92 / UTM zona 12N (Mexico ITRF92 / UTM zone 12N)"
+    assert spanish_name("MAGNA-SIRGAS 2018 / Origen-Nacional") == "MAGNA-SIRGAS 2018 / Origen-Nacional"
+    assert spanish_name("WGS 84") == "WGS 84"
 
 
 def test_carpeta_sin_permiso(tmp_path):

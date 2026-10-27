@@ -3,6 +3,7 @@ gráficas de RTKLIB, avisos y bitácora."""
 from __future__ import annotations
 
 import math
+import re
 from pathlib import Path
 
 from ..crs import api as crs
@@ -31,10 +32,68 @@ def transform_or_none(position: Ecef | None, choice: CoordinateChoice) -> tuple[
         return None, str(error)
 
 
+_SPANISH = [(re.compile(r"\bMexico\b"), "México"), (re.compile(r"\bUTM zone\b"), "UTM zona"),
+            (re.compile(r"\bzone\b"), "zona")]
+
+
+def spanish_name(name: str) -> str:
+    """El nombre de un sistema en el informe. El de las apps («Mexico ITRF2008 / UTM zona 13N») es español salvo el
+    acento: se escribe «México». Un nombre del registro EPSG en inglés se deja tal cual entre paréntesis, con el
+    nombre en español delante: «NAD27 / UTM zona 13N (NAD27 / UTM zone 13N)»."""
+    if not name:
+        return name
+    spanish = name
+    for pattern, repl in _SPANISH:
+        spanish = pattern.sub(repl, spanish)
+    if spanish == name:
+        return name
+    if "zona" in name and "zone" not in name:      # nombre de las apps: solo el acento
+        return spanish
+    return f"{spanish} ({name})"
+
+
 def system_name(c: TransformedCoordinate | None, choice: CoordinateChoice) -> str:
     if c is None:
         return choice.label or choice.crs_id
-    return choice.label or c.crs_name
+    return choice.label or spanish_name(c.crs_name)
+
+
+ORIGIN_NAMES = {"official": "coordenada oficial de su red", "rinex-header": "posición del encabezado RINEX",
+                "autonomous": "media de la solución autónoma de la sesión", "project": "de un proyecto estático",
+                "manual": "escrita a mano"}
+
+
+def approximate_base_text(s: Station) -> str:
+    """El aviso de una base de coordenada aproximada (encabezado RINEX o media autónoma)."""
+    origin = ORIGIN_NAMES.get(s.coordinate_origin, s.coordinate_origin)
+    detail = origin + (f"; {s.source}" if s.source else "")
+    return (f"Coordenada de la base {s.id} aproximada ({detail}): los puntos quedan bien entre sí pero desplazados "
+            "lo mismo que la base.")
+
+
+def station_notes(s: Station) -> list[str]:
+    """Los avisos que el paquete de la red da para la estación (hundimientos, sismos…)."""
+    try:
+        from ..core import networks
+        return networks.station_notes(s)
+    except Exception:     # sin la red instalada o sin el motor, no hay avisos de paquete
+        return []
+
+
+def base_notices(r: Report, stations: list[Station]) -> list[str]:
+    """Recuadros de las bases aproximadas y de los avisos de su red; devuelve los textos para el resumen."""
+    out: list[str] = []
+    for s in stations:
+        if s.approximate:
+            text_ = approximate_base_text(s)
+            r.callout("warning", "Base con coordenada aproximada", [text_])
+            out.append(text_)
+        notes = station_notes(s)
+        if notes:
+            r.callout("info", f"Avisos de la red para {s.id}" + (f" ({s.network_name})" if s.network_name else ""),
+                      notes)
+            out += [f"{s.id}: {n}" for n in notes]
+    return out
 
 
 def height_label(c: TransformedCoordinate | None) -> str:
@@ -141,9 +200,14 @@ def options_section(r: Report, options: ProcessingOptions, ephemeris_used: set[E
 def station_rows(stations: list[Station]) -> list[list[str]]:
     rows = []
     for s in stations:
-        origin = "oficial" if s.official else "corregida por el usuario o propia"
+        origin = ORIGIN_NAMES.get(s.coordinate_origin, s.coordinate_origin)
+        if s.coordinate_origin == "official" and not s.official:
+            origin = "corregida por el usuario"
+        if s.approximate:
+            origin += ", APROXIMADA"
+        network = f"{s.network_name}: " if s.network_name else ""
         rows.append([f"{s.id}", s.name, f"{s.antenna_type or '—'} {s.radome or ''}".strip(),
-                     num(s.antenna_height_m, 3), s.receiver or "—", f"{s.source or '—'} ({origin})"])
+                     num(s.antenna_height_m, 3), s.receiver or "—", f"{network}{s.source or '—'} ({origin})"])
     return rows
 
 

@@ -96,6 +96,8 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     lines = [f"{p.point.name}: {secciones.POINT_SOLUTION_NAMES[p.solution].lower()}"
              + (f" — {p.message}" if p.message else "") for p in points if p.solution != Solution.FIXED]
     r.callout(kind, title, lines or ["Cada punto se promedió con épocas fijas."])
+    if result.base.approximate:
+        r.callout("warning", "Base con coordenada aproximada", [secciones.approximate_base_text(result.base)])
     r.para("En posproceso todo se asume plomeado: cada punto es la antena menos la altura vertical del bastón; la "
            "compensación de inclinación de campo no interviene.", "small")
 
@@ -103,6 +105,8 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     r.h1("Base")
     r.table(["Clave", "Nombre", "Antena y radomo", "Altura (m)", "Receptor", "Coordenada"],
             secciones.station_rows([result.base]), widths=[40, 85, 105, 50, 80, 155], right={3})
+    r.space(4)
+    secciones.base_notices(r, [result.base])
     r.space(4)
     r.fields(secciones.coordinate_fields(base_c, result.base.position, choice), columns=2, label_width=110)
     r.space(4)
@@ -216,6 +220,8 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
 
 
 def _base_origin(base, project: Project) -> str:
+    if base.approximate:
+        return f"coordenada aproximada ({secciones.ORIGIN_NAMES.get(base.coordinate_origin, base.coordinate_origin)})"
     if project.base_kind == "own":
         if project.source_project:
             return f"base propia, coordenada del proyecto estático {project.source_project}"

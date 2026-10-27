@@ -13,6 +13,24 @@ from .documento import Report, text
 from .estilo import num, signed
 
 TITLE = "Informe de posproceso de línea base"
+LONG_LINE_M = 60_000.0      # desde aquí el motor usa libre de ionosfera con ambigüedades flotantes (§4, validación)
+
+
+def is_long_float(b) -> bool:
+    """Una línea larga flotante es lo esperado, no un fallo: libre de ionosfera con ambigüedades flotantes."""
+    return b.solution == Solution.FLOAT and b.length_m >= LONG_LINE_M
+
+
+def long_float_text(b) -> str:
+    lat, lon, _ = calculos.geodetic(b.base.position)
+    ce = calculos.cov_enu(b.covariance_ecef, lat, lon)
+    sh = math.sqrt(max(ce[0][0] + ce[1][1], 0.0))
+    sv = math.sqrt(max(ce[2][2], 0.0))
+    hours = (b.end - b.start).total_seconds() / 3600
+    return (f"Línea larga ({num(b.length_m / 1000, 1)} km): se calcula libre de ionosfera con ambigüedades flotantes, "
+            f"que es lo correcto a esta distancia; con sesiones largas da precisión de centímetro (≤ 1 cm con 4 h en "
+            f"la validación del motor). Esta sesión de {num(hours, 1)} h: σ horizontal {num(sh, 3)} m, σ vertical "
+            f"{num(sv, 3)} m.")
 
 
 def _status(result: StaticResult, min_ratio: float) -> tuple[str, str, list[str]]:
@@ -20,22 +38,35 @@ def _status(result: StaticResult, min_ratio: float) -> tuple[str, str, list[str]
     reasons: list[str] = []
     if not result.baselines or all(b.solution == Solution.NONE for b in result.baselines):
         return "error", "Sin solución", ["Ninguna línea base dio solución."]
+    adj = result.adjustment
+    excluded = set(adj.excluded_baselines) if adj is not None else set()
+    for s_ in result.bases:
+        if s_.approximate:
+            reasons.append(secciones.approximate_base_text(s_))
+    for bid in sorted(excluded):
+        reasons.append(f"La línea base con {bid} se dejó fuera del ajuste: la prueba w la señaló y sin ella el ajuste "
+                       "pasa la prueba χ² (detalle en «Ajuste de red»).")
     for b in result.baselines:
+        if is_long_float(b) or b.base.id in excluded:
+            continue
         if b.solution != Solution.FIXED:
             reasons.append(f"La línea base desde {b.base.id} quedó {secciones.SOLUTION_NAMES[b.solution].lower()}.")
         elif b.ratio is not None and b.ratio < min_ratio:
             reasons.append(f"El cociente de la línea base desde {b.base.id} ({num(b.ratio, 1)}) es menor que el mínimo "
                            f"({min_ratio:g}).")
-    adj = result.adjustment
     if adj is not None and not adj.passed:
         reasons.append("El ajuste de red no pasa la prueba χ² al 95 %.")
-    if adj is not None and adj.flagged_baselines:
-        reasons.append("Líneas base que no cuadran con las demás: " + ", ".join(adj.flagged_baselines) + ".")
+    if adj is not None and [x for x in adj.flagged_baselines if x not in excluded]:
+        reasons.append("Líneas base que no cuadran con las demás: " +
+                       ", ".join(x for x in adj.flagged_baselines if x not in excluded) + ".")
     if len(result.baselines) == 1:
         reasons.append("Con una sola base no hay redundancia: la coordenada sale de esa línea base y no se puede "
                        "comprobar con otra.")
-    reasons += result.warnings
-    if any(b.solution == Solution.FIXED for b in result.baselines) and not [
+    reasons += [w for w in result.warnings if w not in reasons and not any(
+        w.startswith(f"La línea base con {bid}") for bid in excluded)]
+    reasons = list(dict.fromkeys(reasons))
+    usable = [b for b in result.baselines if b.solution == Solution.FIXED or is_long_float(b)]
+    if usable and not [
             x for x in reasons if not x.startswith("Con una sola base")]:
         return ("success", "Aprobado", reasons)
     return "warning", "Con avisos", reasons
@@ -62,8 +93,11 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
                 "una sola línea base, sin ajuste")]
     r.fields(summary, columns=2, label_width=70)
     r.space(4)
-    r.callout(kind, f"Resultado: {status}", reasons or ["Todas las líneas base fijas y el ajuste dentro de "
+    r.callout(kind, f"Resultado: {status}", reasons or ["Todas las líneas base resueltas y el ajuste dentro de "
                                                          "tolerancia."])
+    longs = [long_float_text(b) for b in result.baselines if is_long_float(b)]
+    if longs:
+        r.callout("info", "Líneas largas con solución flotante", longs)
     r.h2("Coordenada final en el sistema elegido")
     r.fields(secciones.coordinate_fields(c, result.position, choice), columns=2, label_width=110)
     r.h2(f"Coordenada final en el marco de la base ({secciones.frame_text(result.position)})")
@@ -101,6 +135,8 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
     r.h1("Estaciones")
     r.table(["Clave", "Nombre", "Antena y radomo", "Altura (m)", "Receptor", "Coordenada"],
             secciones.station_rows(result.bases), widths=[40, 85, 105, 50, 80, 155], right={3})
+    r.space(4)
+    secciones.base_notices(r, result.bases)
     rover = result.rover
     r.space(4)
     r.fields([("Rover", rover.marker or result.point_name), ("Receptor", rover.receiver or "—"),
@@ -120,6 +156,8 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
     if adj is not None:
         r.h1("Ajuste de red")
         lo, hi = calculos.chi2_bounds(adj.degrees_of_freedom) if adj.degrees_of_freedom > 0 else (None, None)
+        if adj.chi2_upper:
+            lo, hi = adj.chi2_lower, adj.chi2_upper
         head = r.st["cell_head"]
         pairs = [("Grados de libertad", str(adj.degrees_of_freedom)),
                  (Paragraph("σ<sub>0</sub> a priori", head), "1.000"),
@@ -129,15 +167,41 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
                  ("Prueba χ²", "pasa" if adj.passed else "no pasa")]
         r.fields(pairs, columns=2, label_width=120)
         rows, hl = [], {}
-        for i, (bid, res) in enumerate(sorted(adj.residuals_enu.items())):
-            flagged = bid in adj.flagged_baselines
+        lat, lon, _ = calculos.geodetic(adj.position)
+        w_crit = adj.critical_value
+        ids = [b.base.id for b in result.baselines]
+        for i, bid in enumerate(ids):
+            excluded_here = bid in adj.excluded_baselines
+            if excluded_here:      # su residuo contra la coordenada ajustada sin ella
+                bl = next(b for b in result.baselines if b.base.id == bid)
+                d = (bl.rover_position.x - adj.position.x, bl.rover_position.y - adj.position.y,
+                     bl.rover_position.z - adj.position.z)
+                res = Enu(*calculos.to_enu(d, lat, lon))
+            else:
+                res = adj.residuals_enu.get(bid)
+                if res is None:
+                    continue
+            w = adj.standardized_residuals.get(bid)
+            w_max = max(abs(w.e), abs(w.n), abs(w.u)) if w else None
+            if excluded_here:
+                state = "excluida"
+                hl[len(rows)] = estilo.SEMANTIC["error_bg"]
+            elif bid in adj.flagged_baselines:
+                state = "no cuadra"
+                hl[len(rows)] = estilo.SEMANTIC["warning_bg"]
+            else:
+                state = "bien"
             rows.append([bid, signed(res.e, 3), signed(res.n, 3), signed(res.u, 3), num(math.hypot(res.e, res.n), 3),
-                         "no cuadra" if flagged else "bien"])
-            if flagged:
-                hl[i] = estilo.SEMANTIC["warning_bg"]
+                         num(w_max, 2) if w_max is not None else "—", state])
         r.space(4)
-        r.table(["Línea base desde", "Residuo E (m)", "Residuo N (m)", "Residuo U (m)", "Horizontal (m)", "Estado"],
-                rows, widths=[90, 75, 75, 75, 75, 70], right={1, 2, 3, 4}, highlight=hl)
+        r.table(["Línea base desde", "Residuo E (m)", "Residuo N (m)", "Residuo U (m)", "Horizontal (m)",
+                 "w máx." + (f" (crít. {w_crit:.2f})" if w_crit else ""), "Estado"],
+                rows, widths=[78, 66, 66, 66, 66, 70, 58], right={1, 2, 3, 4, 5}, highlight=hl)
+        if adj.excluded_baselines:
+            r.callout("warning", "Línea base excluida del ajuste", [
+                f"{bid}: la prueba w de Baarda la señaló como la que no cuadra y, sin ella, el ajuste pasa la prueba χ² "
+                f"al 95 %. Su residuo es contra la coordenada ajustada con las demás. Revisa la coordenada, la altura y "
+                f"los avisos de {bid}." for bid in adj.excluded_baselines])
         r.space(4)
         r.fields([("σ E / σ N / σ U ajustadas", f"{num(adj.sigma_enu.e, 4)} / {num(adj.sigma_enu.n, 4)} / "
                    f"{num(adj.sigma_enu.u, 4)} m")], columns=1, label_width=150)
@@ -172,6 +236,9 @@ def _overall_solution(result: StaticResult) -> str:
     sols = {b.solution for b in result.baselines}
     if sols == {Solution.FIXED}:
         return "FIJA (todas las líneas base)"
+    if all(b.solution == Solution.FIXED or is_long_float(b) for b in result.baselines) and result.baselines:
+        return ("FLOTANTE, líneas largas libres de ionosfera" if sols == {Solution.FLOAT} else
+                "FIJA y FLOTANTE (líneas largas)")
     if Solution.FIXED in sols:
         return "MIXTA: " + ", ".join(f"{b.base.id} {secciones.SOLUTION_NAMES[b.solution]}" for b in result.baselines)
     if sols:
@@ -209,6 +276,8 @@ def _baseline(r: Report, b, options) -> None:
               ("RMS", num(b.rms_m, 4, "m") if b.rms_m is not None else "—"),
               ("Efemérides", secciones.EPHEMERIS_NAMES[b.ephemeris])], columns=2, label_width=80)
     r.para(f"Satélites usados ({len(b.satellites)}): {text(', '.join(b.satellites))}", "small")
+    if is_long_float(b):
+        r.para(text(long_float_text(b)), "small")
     r.h2("Vector")
     r.table(["Componente", "Valor (m)", "σ (m)", "Componente", "Valor (m)", "σ (m)"],
             [["ΔX", signed(b.vector_ecef.x, 4), num(sx, 4), "ΔE", signed(b.vector_enu.e, 4), num(se, 4)],
