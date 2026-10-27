@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from tkinter import ttk
 
-from app.components import Banner, ScrollFrame, card, wrap_label
+from app.components import Banner, ScrollFrame, card, scrolled, wrap_label
 
 KINDS = {'static': 'Georreferenciar punto', 'points': 'PPK de puntos'}
 
@@ -61,13 +61,15 @@ class HomePage(ttk.Frame):
         recents, inner = card(body, 'Proyectos recientes',
                               'Doble clic o Intro para abrir. También puedes arrastrar un archivo .tvppk a la ventana.')
         recents.pack(fill='both', expand=True, pady=(24, 0))
-        self.tree = ttk.Treeview(inner, columns=('name', 'kind', 'folder', 'date'), show='headings', height=8,
+        holder = ttk.Frame(inner, style='Flat.Card.TFrame')
+        holder.pack(fill='both', expand=True)
+        self.tree = ttk.Treeview(holder, columns=('name', 'kind', 'folder', 'date'), show='headings', height=8,
                                  selectmode='browse')
         for key, title, width, stretch in [('name', 'Proyecto', 220, False), ('kind', 'Tipo', 170, False),
                                            ('folder', 'Carpeta', 320, True), ('date', 'Modificado', 140, False)]:
             self.tree.heading(key, text=title, anchor='w')
             self.tree.column(key, width=width, minwidth=80, stretch=stretch, anchor='w')
-        self.tree.pack(fill='both', expand=True)
+        scrolled(self.tree, holder)
         self.tree.bind('<Double-1>', lambda e: self.open_selected())
         self.tree.bind('<Return>', lambda e: self.open_selected())
         self.empty = ttk.Label(inner, text='Todavía no hay proyectos. Empieza uno de los dos trabajos de arriba.',
@@ -106,7 +108,7 @@ class HomePage(ttk.Frame):
                 self.tree.selection_set(first)
                 self.tree.focus(first)
         else:
-            self.empty.pack(anchor='w', before=self.tree)
+            self.empty.pack(anchor='w', before=self.tree.master)
         self.update_buttons()
 
     def update_buttons(self):

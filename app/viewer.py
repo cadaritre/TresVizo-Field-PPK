@@ -9,6 +9,7 @@ from tkinter import filedialog, ttk
 from PIL import ImageTk
 
 from app import tasks
+from app.components import scrolled
 
 
 def render_page(path: Path, page: int, width_px: int):
@@ -59,12 +60,7 @@ class DocumentViewer(tk.Toplevel):
         frame.pack(fill='both', expand=True)
         self.canvas = tk.Canvas(frame, highlightthickness=0, borderwidth=0)
         self.canvas.scroll_surface = True
-        vs = ttk.Scrollbar(frame, command=self.canvas.yview)
-        hs = ttk.Scrollbar(frame, orient='horizontal', command=self.canvas.xview)
-        vs.pack(side='right', fill='y')
-        hs.pack(side='bottom', fill='x')
-        self.canvas.pack(fill='both', expand=True)
-        self.canvas.configure(yscrollcommand=vs.set, xscrollcommand=hs.set)
+        scrolled(self.canvas, frame, horizontal=True)
         self.canvas.bind('<ButtonPress-1>', lambda e: self.canvas.scan_mark(e.x, e.y))
         self.canvas.bind('<B1-Motion>', lambda e: self.canvas.scan_dragto(e.x, e.y, gain=1))
         self.canvas.bind('<MouseWheel>', lambda e: self.canvas.yview_scroll(

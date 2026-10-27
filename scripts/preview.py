@@ -101,7 +101,7 @@ def main():
             page.build_steps()
             page.touched = set(range(page.PROCESS_STEP))
             if process:
-                path = app.settings.projects_dir()/f'{job.point_name or "Levantamiento predio Las Flores"}.tvppk'
+                path = app.settings.projects_dir()/f'{getattr(job, "point_name", "") or "Levantamiento predio Las Flores"}.tvppk'
                 page.project, page.path, page.dirty = page._write(path), path, False
                 page.update_title()
                 page.go(page.PROCESS_STEP)

@@ -7,7 +7,7 @@ from tkinter import messagebox, ttk
 from tresvizo_ppk.model import CoordinateChoice
 
 from app import tasks
-from app.components import Banner, ProgressPanel, ScrollFrame, card, wrap_label
+from app.components import Banner, ProgressPanel, ScrollFrame, card, scrolled, wrap_label
 
 KIND_TEXT = {'factory': 'Sistemas de fábrica', 'crs-package': 'Paquete de sistemas', 'geoid': 'Geoide',
              'datum-grid': 'Rejilla de datum'}
@@ -166,14 +166,16 @@ class CrsPage(ttk.Frame):
         self.remove_button = ttk.Button(actions, text='Quitar', style='Card.Link.TButton', command=self.uninstall)
         app.icons.bind(self.remove_button, 'trash-2', 16)
         self.remove_button.pack(side='left')
-        self.tree = ttk.Treeview(inner, columns=('title', 'kind', 'region', 'version', 'size', 'state'),
+        holder = ttk.Frame(inner, style='Flat.Card.TFrame')
+        holder.pack(fill='x')
+        self.tree = ttk.Treeview(holder, columns=('title', 'kind', 'region', 'version', 'size', 'state'),
                                  show='headings', height=9, selectmode='browse')
-        for key, title, width, stretch in [('title', 'Nombre', 300, True), ('kind', 'Tipo', 150, False),
-                                           ('region', 'Región', 140, False), ('version', 'Versión', 90, False),
-                                           ('size', 'Tamaño', 80, False), ('state', 'Estado', 170, False)]:
+        for key, title, width, stretch in [('title', 'Nombre', 280, True), ('kind', 'Tipo', 170, False),
+                                           ('region', 'Región', 130, False), ('version', 'Versión', 100, False),
+                                           ('size', 'Tamaño', 80, False), ('state', 'Estado', 190, False)]:
             self.tree.heading(key, text=title, anchor='w')
             self.tree.column(key, width=width, minwidth=60, stretch=stretch, anchor='w')
-        self.tree.pack(fill='x')
+        scrolled(self.tree, holder)
         self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_details())
         self.details = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')
         self.details.pack(fill='x', pady=(10, 0))

@@ -11,7 +11,7 @@ from PIL import Image, ImageTk
 
 from tresvizo_ppk.version import __version__
 
-from app.components import ScrollFrame, card, wrap_label
+from app.components import ScrollFrame, card, scrolled, wrap_label
 from app.paths import APP_NAME, ROOT
 from app.settings import UNITS, SettingsError
 from app.themes import BUILTINS, palette
@@ -247,10 +247,11 @@ class AboutPage(ttk.Frame):
         window.geometry('820x640')
         window.transient(self.app)
         text = tk.Text(window, wrap='word', padx=16, pady=12, font=self.app.theme.fonts.mono())
-        bar = ttk.Scrollbar(window, command=text.yview)
-        text.configure(yscrollcommand=bar.set)
-        bar.pack(side='right', fill='y')
-        text.pack(fill='both', expand=True)
+        frame = ttk.Frame(window)
+        frame.pack(fill='both', expand=True)
+        text.destroy()
+        text = tk.Text(frame, wrap='word', padx=16, pady=12, font=self.app.theme.fonts.mono())
+        scrolled(text, frame)
         text.insert('1.0', licenses_text())
         text.configure(state='disabled')
         self.app.theme.walk(window)

@@ -11,7 +11,7 @@ from tresvizo_ppk.model import Ephemeris, Solution
 
 from app import tasks
 from app.charts import BarChart, PlanChart, enu_of
-from app.components import DropZone, FileList, LabeledEntry, card, wrap_label
+from app.components import DropZone, FileList, LabeledEntry, ThinScrollbar, card, wrap_label
 from app.formatting import dms, horizontal, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import PointsJob, classify
@@ -73,7 +73,8 @@ class PointsPage(WizardPage):
         DropZone(inner, self.app, 'Arrastra aquí la grabación de la base', 'Una grabación .bin/.part o sus RINEX.',
                  self.add_own_files, RECORDING_TYPES).pack(fill='x')
         self.own_list = FileList(inner, self.app, self.set_own_files)
-        self.set_own_files(self.job.base.files if self.job.base_kind == 'own' else [], notify=False)
+        if self.job.base_kind == 'own':
+            self.set_own_files(self.job.base.files, notify=False)
         frame, inner = card(parent, 'Datos de la base')
         frame.pack(fill='x', pady=(16, 0))
         inner.columnconfigure((0, 1), weight=1, uniform='own')
@@ -137,7 +138,8 @@ class PointsPage(WizardPage):
             self.job.base_kind = kind
             self.rgna_panel.set_files([])
             self.rgna_panel.picker.show()
-            self.set_own_files([], notify=False)
+            self.own_list.set([])
+            self.own_list.pack_forget()
         self.rgna_frame.pack_forget()
         self.own_frame.pack_forget()
         (self.rgna_frame if kind == 'rgna' else self.own_frame).pack(fill='x')
@@ -358,9 +360,6 @@ class PointsPage(WizardPage):
     def make_report(self, report, output, project, user, out):
         return report.points_report(output['result'], project, user, out)
 
-    def required_parts(self):
-        return super().required_parts()
-
     def export_button(self, parent):
         button = ttk.Menubutton(parent, text='Exportar')
         self.app.icons.bind(button, 'share')
@@ -407,8 +406,8 @@ class PointsPage(WizardPage):
         top.columnconfigure(1, weight=3, uniform='top')
         frame, inner = card(top, 'Resumen de la jornada')
         frame.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
-        ttk.Label(inner, text=f'{fixed} FIJOS · {floating} FLOTANTES · {none} SIN SOLUCIÓN', style=kind+'.TLabel').pack(
-            anchor='w')
+        wrap_label(inner, f'{fixed} FIJOS · {floating} FLOTANTES · {none} SIN SOLUCIÓN', style=kind+'.TLabel',
+                   margin=40).pack(fill='x')
         lines = [f'Épocas fijas de la trayectoria: {result.fix_rate*100:.1f} %',
                  f'Base: {result.base.id} · {result.base.name} ({"oficial" if result.base.official else result.base.source})',
                  f'{len(result.points)} puntos del CSV']
@@ -440,8 +439,8 @@ class PointsPage(WizardPage):
         first, second = ('Este', 'Norte') if projected else ('Latitud', 'Longitud')
         height_title = 'Cota' if any(c is not None and c.orthometric_height_m is not None for c in coordinates) else \
             'Altura elip.'
-        columns = [('name', 'Punto', 120), ('code', 'Código', 90), ('a', first, 130), ('b', second, 130),
-                   ('h', height_title, 100), ('sh', 'σ H', 80), ('sv', 'σ V', 80), ('epochs', 'Épocas', 90),
+        columns = [('name', 'Punto', 110), ('code', 'Código', 80), ('a', first, 150), ('b', second, 160),
+                   ('h', height_title, 120), ('sh', 'σ H', 80), ('sv', 'σ V', 80), ('epochs', 'Épocas', 90),
                    ('solution', 'Solución', 110), ('delta', 'Δ campo H/V', 130), ('dist', 'A la base', 100),
                    ('message', 'Aviso', 220)]
         tree = ttk.Treeview(inner, columns=[c[0] for c in columns], show='headings',
@@ -449,8 +448,11 @@ class PointsPage(WizardPage):
         for key, title, width in columns:
             tree.heading(key, text=title, anchor='w')
             tree.column(key, width=width, minwidth=50, anchor='w', stretch=key == 'message')
-        for key in ('fixed', 'float', 'single', 'none'):
-            tree.tag_configure(key, foreground=self.app.theme.tokens['solution_'+key])
+        # Solo se resaltan las filas que piden revisión; la solución siempre va escrita.
+        tokens = self.app.theme.tokens
+        tree.tag_configure('float', foreground=tokens['warning_fg'], background=tokens['warning_bg'])
+        for key in ('single', 'none'):
+            tree.tag_configure(key, foreground=tokens['error_fg'], background=tokens['error_bg'])
         for index, (p, c) in enumerate(zip(result.points, coordinates)):
             if c is not None and projected and c.northing_m is not None:
                 a, b = format_length(c.easting_m, prefs), format_length(c.northing_m, prefs)
@@ -469,10 +471,10 @@ class PointsPage(WizardPage):
                 f'{p.epochs_fixed}/{p.epochs_total}', solution_text(p.solution), delta,
                 format_length(p.distance_to_base_m, prefs, 0) if p.distance_to_base_m is not None else '—',
                 p.message))
-        scroll = ttk.Scrollbar(inner, orient='horizontal', command=tree.xview)
-        tree.configure(xscrollcommand=scroll.set)
         tree.pack(fill='x')
-        scroll.pack(fill='x')
+        scroll = ThinScrollbar(inner, tree.xview, orient='horizontal')
+        tree.configure(xscrollcommand=scroll.set)
+        scroll.pack(fill='x', pady=(3, 0))
         frame, inner = card(body, 'Precisión por punto')
         frame.pack(fill='x', pady=(16, 0))
         bars = BarChart(inner, self.app)

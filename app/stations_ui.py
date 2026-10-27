@@ -4,7 +4,7 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
-from app.components import Banner, card, wrap_label
+from app.components import Banner, card, scrolled, wrap_label
 from app.wizard_ui import ecef_text, rgna_catalog
 
 
@@ -41,10 +41,7 @@ class StationsPage(ttk.Frame):
                                            ('antenna', 'Antena', 170, False), ('source', 'Coordenada', 110, False)]:
             self.tree.heading(key, text=title, anchor='w', command=lambda k=key: self.sort(k))
             self.tree.column(key, width=width, minwidth=60, stretch=stretch, anchor='w')
-        bar = ttk.Scrollbar(table, command=self.tree.yview)
-        self.tree.configure(yscrollcommand=bar.set)
-        bar.pack(side='right', fill='y')
-        self.tree.pack(fill='both', expand=True)
+        scrolled(self.tree, table)
         self.tree.bind('<<TreeviewSelect>>', lambda e: self.details())
         frame, self.detail = card(panes, 'Detalle')
         frame.grid(row=0, column=1, sticky='nsew')

@@ -25,55 +25,96 @@ def size_text(n: int) -> str:
 class ThinScrollbar(tk.Canvas):
     """Barra de desplazamiento delgada con el pulgar redondeado (dibujada; igual en Windows, macOS y Linux).
 
-    Ocupa siempre su lugar; sin nada que desplazar, no se dibuja el pulgar."""
+    Ocupa siempre su lugar; sin nada que desplazar, no se dibuja el pulgar. `command` es el `yview`/`xview` del
+    widget que desplaza, y su `set` va en el `yscrollcommand`/`xscrollcommand` de ese widget."""
 
-    def __init__(self, parent, command, width=10):
-        super().__init__(parent, width=width, highlightthickness=0, borderwidth=0)
-        self.scroll_surface = True
-        self.command, self.first, self.last, self.drag = command, 0.0, 1.0, None
-        self.hover = False
+    def __init__(self, parent, command, orient='vertical', thickness=10, surface=None):
+        self.surface_key = surface or ('surface' if str(getattr(parent, 'cget', lambda k: '')('style')).startswith(
+            ('Card', 'Flat.Card')) else 'background')
+        size = {'width': thickness} if orient == 'vertical' else {'height': thickness}
+        super().__init__(parent, highlightthickness=0, borderwidth=0, **size)
+        self.own_palette = True
+        self.vertical = orient == 'vertical'
+        self.command, self.first, self.last, self.drag, self.hover = command, 0.0, 1.0, None, False
         self.bind('<Configure>', lambda e: self.redraw())
         self.bind('<ButtonPress-1>', self.press)
         self.bind('<B1-Motion>', self.move)
-        self.bind('<ButtonRelease-1>', lambda e: setattr(self, 'drag', None))
-        self.bind('<Enter>', lambda e: (setattr(self, 'hover', True), self.redraw()))
-        self.bind('<Leave>', lambda e: (setattr(self, 'hover', False), self.redraw()))
+        self.bind('<ButtonRelease-1>', self.release)
+        self.bind('<Enter>', lambda e: self._hover(True))
+        self.bind('<Leave>', lambda e: self._hover(False))
+        theme = getattr(self.winfo_toplevel(), 'theme', None) or getattr(parent.winfo_toplevel(), 'theme', None)
+        if theme is not None:
+            theme.subscribe(self, lambda tokens: self.redraw())
+
+    def _hover(self, value):
+        self.hover = value
+        self.redraw()
+
+    def release(self, event):
+        self.drag = None
+        self.redraw()
 
     def set(self, first, last):
         self.first, self.last = float(first), float(last)
         self.redraw()
 
+    def length(self):
+        return max(1, self.winfo_height() if self.vertical else self.winfo_width())
+
     def redraw(self):
-        tokens = getattr(self.winfo_toplevel(), 'theme', None)
-        tokens = tokens.tokens if tokens else None
+        if not self.winfo_exists():
+            return
+        app = self.winfo_toplevel()
+        theme = getattr(app, 'theme', None) or getattr(getattr(app, 'master', None), 'theme', None)
+        tokens = theme.tokens if theme else None
         self.delete('all')
         if not tokens:
             return
         from app.themes import mix
-        self.configure(background=tokens['background'])
+        back = tokens[self.surface_key]
+        self.configure(background=back)
         if self.first <= 0 and self.last >= 1:
             return
-        height, width = self.winfo_height(), self.winfo_width()
-        y0, y1 = self.first*height, max(self.first*height+24, self.last*height)
-        color = mix(tokens['background'], tokens['muted'], .75 if self.hover or self.drag else .45)
-        r = (width-4)/2
-        x0, x1 = 2, width-2
-        self.create_oval(x0, y0+1, x1, y0+1+2*r, fill=color, outline='')
-        self.create_oval(x0, y1-1-2*r, x1, y1-1, fill=color, outline='')
-        self.create_rectangle(x0, y0+1+r, x1, y1-1-r, fill=color, outline='')
+        n = self.length()
+        a, b = self.first*n, max(self.first*n+24, self.last*n)
+        cross = self.winfo_width() if self.vertical else self.winfo_height()
+        color = mix(back, tokens['muted'], .75 if self.hover or self.drag else .45)
+        r = (cross-4)/2
+        if self.vertical:
+            self.create_oval(2, a+1, cross-2, a+1+2*r, fill=color, outline='')
+            self.create_oval(2, b-1-2*r, cross-2, b-1, fill=color, outline='')
+            self.create_rectangle(2, a+1+r, cross-2, b-1-r, fill=color, outline='')
+        else:
+            self.create_oval(a+1, 2, a+1+2*r, cross-2, fill=color, outline='')
+            self.create_oval(b-1-2*r, 2, b-1, cross-2, fill=color, outline='')
+            self.create_rectangle(a+1+r, 2, b-1-r, cross-2, fill=color, outline='')
 
     def press(self, event):
-        height = max(1, self.winfo_height())
-        position = event.y/height
+        position = (event.y if self.vertical else event.x)/self.length()
         if self.first <= position <= self.last:
-            self.drag = (event.y, self.first)
+            self.drag = (event.y if self.vertical else event.x, self.first)
         else:
             self.command('scroll', -1 if position < self.first else 1, 'pages')
 
     def move(self, event):
         if self.drag:
-            start_y, start_first = self.drag
-            self.command('moveto', start_first+(event.y-start_y)/max(1, self.winfo_height()))
+            start, first = self.drag
+            self.command('moveto', first+((event.y if self.vertical else event.x)-start)/self.length())
+
+
+def scrolled(widget, parent, horizontal=False):
+    """Barras delgadas para un Treeview, Text o Canvas ya creado dentro de `parent` (que se acomoda con grid)."""
+    bar = ThinScrollbar(parent, widget.yview)
+    widget.configure(yscrollcommand=bar.set)
+    widget.grid(row=0, column=0, sticky='nsew')
+    bar.grid(row=0, column=1, sticky='ns', padx=(3, 0))
+    parent.rowconfigure(0, weight=1)
+    parent.columnconfigure(0, weight=1)
+    if horizontal:
+        hbar = ThinScrollbar(parent, widget.xview, orient='horizontal')
+        widget.configure(xscrollcommand=hbar.set)
+        hbar.grid(row=1, column=0, sticky='ew', pady=(3, 0))
+    return widget
 
 
 class ScrollFrame(ttk.Frame):
@@ -96,8 +137,6 @@ class ScrollFrame(ttk.Frame):
             0, 0, e.width, max(e.height, self.canvas.winfo_height()))))
         self.canvas.bind('<Configure>', lambda e: self.canvas.itemconfigure(self.window, width=e.width))
         top = self.winfo_toplevel()
-        if getattr(top, 'theme', None) is not None:
-            top.theme.subscribe(self.bar, lambda tokens: self.bar.redraw())
         bindings = [('<MouseWheel>', top.bind('<MouseWheel>', self.wheel, add='+'))]
         if sys.platform.startswith('linux'):
             bindings += [(seq, top.bind(seq, self.wheel, add='+')) for seq in ('<Button-4>', '<Button-5>')]
