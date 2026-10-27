@@ -30,6 +30,7 @@ def lab_antex(folder: Path, name: str, *, source=("TRM115000.00", "NONE"), up_mm
         elif label == "NORTH / EAST / UP" and freq in ("G01", "G02"):
             line = line[:20] + f"{float(line[20:30]) + up_mm:10.2f}" + line[30:]
         out.append(line)
+    folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{name.lower()}.atx"
     path.write_text(HEADER + "".join(out), encoding="latin-1")
     return path
@@ -262,3 +263,22 @@ def test_report_says_which_antenna_model_and_source(tmp_path):
                                     length_m=800)]
     t = text(report.points_report(points, s.points_project(tmp_path), s.user(), tmp_path / "p.pdf"))
     assert "NGS (ngs20.atx)" in t and "más de 5 km" not in t
+
+
+def test_project_keeps_antennas_and_imported_antex(tmp_path):
+    from tresvizo_ppk import project as proj
+    from tresvizo_ppk.model import Project
+    folder = tmp_path / "proyectos"
+    lab = lab_antex(folder / "antenas", "ZZZLAB-PRUEBA")
+    sel = AntennaSelection(antenna_type="LEIAR10", radome="NONE", height_method="slant", measured_m=1.5,
+                           slant_radius_m=0.12, slant_offset_m=0.0362, dimensions_source="IGS antenna.gra")
+    p = Project(name="v", options=ProcessingOptions(antex_files=[lab], antennas={
+        "rover": sel, "base:ICEP": AntennaSelection(antenna_type="ZZZLAB-PRUEBA")}))
+    path = proj.save(p, folder / "v", app_version="0.1.0")
+    raw = path.read_text(encoding="utf-8")
+    assert '"antenas/zzzlab-prueba.atx"' in raw
+    loaded = proj.load(path)
+    assert loaded.options.antex_files == [lab.resolve()]
+    assert loaded.options.antennas["rover"] == sel
+    assert loaded.options.antennas["base:ICEP"].antenna_type == "ZZZLAB-PRUEBA"
+    assert loaded.options.antennas["base:ICEP"].height_method == "arp"

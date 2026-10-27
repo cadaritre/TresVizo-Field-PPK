@@ -9,11 +9,12 @@ import hashlib
 import json
 import os
 import tempfile
-from dataclasses import dataclass, fields
+from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from .model import CoordinateChoice, Ecef, Enu, Ephemeris, ProcessingOptions, Project, Station
+from .model import (HEIGHT_METHODS, AntennaSelection, CoordinateChoice, Ecef, Enu, Ephemeris, ProcessingOptions,
+                    Project, Station)
 
 SUFFIX = ".tvppk"
 FORMAT = "tresvizo-field-ppk/proyecto"
@@ -180,7 +181,27 @@ def _options(o: ProcessingOptions, folder: Path) -> dict:
     return {"elevation_mask_deg": o.elevation_mask_deg, "constellations": list(o.constellations),
             "frequencies": o.frequencies, "ionosphere": o.ionosphere, "ephemeris": o.ephemeris.value,
             "precise_files": [relative(p, folder) for p in o.precise_files], "ambiguity_mode": o.ambiguity_mode,
-            "combined": o.combined, "min_ratio": o.min_ratio, "interval_s": o.interval_s}
+            "combined": o.combined, "min_ratio": o.min_ratio, "interval_s": o.interval_s,
+            "antex_files": [relative(p, folder) for p in o.antex_files],
+            "antennas": {role: asdict(sel) for role, sel in o.antennas.items()}}
+
+
+def _parse_antenna(d) -> AntennaSelection | None:
+    if not isinstance(d, dict):
+        return None
+    known = {f.name for f in fields(AntennaSelection)}
+    values = {k: v for k, v in d.items() if k in known}
+    try:
+        sel = AntennaSelection(**values)
+        for name in ("measured_m", "mount_offset_m", "slant_radius_m", "slant_offset_m"):
+            value = getattr(sel, name)
+            setattr(sel, name, None if value is None else float(value))
+        sel.antenna_type, sel.radome = str(sel.antenna_type), str(sel.radome)
+        sel.height_method = sel.height_method if sel.height_method in HEIGHT_METHODS else "arp"
+        sel.dimensions_source = str(sel.dimensions_source)
+    except (TypeError, ValueError):
+        return None
+    return sel
 
 
 def _parse_options(d: dict, folder: Path) -> ProcessingOptions:
@@ -193,6 +214,11 @@ def _parse_options(d: dict, folder: Path) -> ProcessingOptions:
         values["ephemeris"] = Ephemeris(values["ephemeris"])
     if "precise_files" in values:
         values["precise_files"] = [absolute(p, folder) for p in values["precise_files"]]
+    if "antex_files" in values:
+        values["antex_files"] = [absolute(p, folder) for p in values["antex_files"] if isinstance(p, str)]
+    if "antennas" in values:
+        raw = values["antennas"] if isinstance(values["antennas"], dict) else {}
+        values["antennas"] = {str(k): sel for k, v in raw.items() if (sel := _parse_antenna(v)) is not None}
     options = ProcessingOptions(**{**default.__dict__, **values})
     return options
 
