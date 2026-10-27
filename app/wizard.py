@@ -9,11 +9,18 @@ import math
 from pathlib import Path
 import re
 
-from tresvizo_ppk.model import CoordinateChoice, Ecef, Ephemeris, ProcessingOptions, Project, Station
+from tresvizo_ppk.model import (OFFICIAL_EPOCH, OFFICIAL_FRAME, CoordinateChoice, Ecef, Ephemeris, ProcessingOptions,
+                                Project, Station)
 
 MAX_BASES = 3
 RINEX_SOURCE = 'Aproximada (encabezado RINEX)'
 CONSTELLATIONS = ('GPS', 'GLONASS', 'Galileo', 'BeiDou', 'QZSS')
+# Una estación a menos de esto del rover es el propio rover (la posición aproximada del rover yerra decenas de metros
+# a lo sumo, y ninguna estación de referencia está a menos de 30 m de un punto que se georreferencia contra ella).
+ROVER_STATION_M = 30.0
+# Marcos usuales para una coordenada escrita a mano, además de los de las redes instaladas.
+COMMON_FRAMES = ('ITRF2020', 'ITRF2014', 'ITRF2008', 'IGS20', 'IGS14', 'NAD83(2011)', 'NAD83(CSRS)', 'ETRS89',
+                 'SIRGAS2000', 'SIRGAS-CON', 'WGS84')
 
 # --- Clasificación de archivos ----------------------------------------------------------------------------------------
 
@@ -108,6 +115,34 @@ def geodetic_to_ecef(lat_deg: float, lon_deg: float, h: float) -> tuple[float, f
     return ((n+h)*math.cos(lat)*math.cos(lon), (n+h)*math.cos(lat)*math.sin(lon), (n*(1-e2)+h)*math.sin(lat))
 
 
+def epoch_text(epoch: float) -> str:
+    """«2010.0», «2000.4», «2024.1234»: la época con al menos un decimal y sin ceros de más."""
+    text = f'{float(epoch):.4f}'.rstrip('0')
+    return text+'0' if text.endswith('.') else text
+
+
+def distance_m(a: Ecef, b: Ecef) -> float:
+    return math.dist((a.x, a.y, a.z), (b.x, b.y, b.z))
+
+
+def same_frame(frame_a: str, epoch_a: float, frame_b: str, epoch_b: float | None) -> bool:
+    """Mismo marco (sin distinguir mayúsculas ni espacios) y misma época, si la red declara la suya."""
+    def norm(text):
+        return re.sub(r'[\s_]', '', str(text)).casefold()
+    return norm(frame_a) == norm(frame_b) and (epoch_b is None or abs(float(epoch_a)-float(epoch_b)) < 1e-6)
+
+
+def rover_station_distance(station: Station, marker: str, position: Ecef | None) -> float | None:
+    """Distancia de la estación al rover si es el propio rover (misma clave o a menos de ROVER_STATION_M); si no,
+    None. Con la misma clave y sin posición aproximada, 0."""
+    distance = distance_m(station.position, position) if position is not None else None
+    if distance is not None and distance < ROVER_STATION_M:
+        return distance
+    if marker and station.id.strip().upper() == marker.strip().upper():
+        return distance if distance is not None else 0.0
+    return None
+
+
 # --- Avisos ----------------------------------------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -175,10 +210,13 @@ def options_issues(options: ProcessingOptions, precise_download: bool) -> list[I
     return found
 
 
-def number_issues(number: str) -> list[Issue]:
+def number_issues(number: str, place: str = '') -> list[Issue]:
+    found = []
     if len(number.strip()) > 40 or any(ord(c) < 32 for c in number):
-        return [Issue('number', 'El número de proyecto admite hasta 40 caracteres.')]
-    return []
+        found.append(Issue('number', 'El número de proyecto admite hasta 40 caracteres.'))
+    if len(place.strip()) > 80 or any(ord(c) < 32 for c in place):
+        found.append(Issue('place', 'El lugar admite hasta 80 caracteres.'))
+    return found
 
 
 # --- Estático: georreferenciar un punto ------------------------------------------------------------------------------
@@ -211,6 +249,10 @@ class StaticJob:
     coordinates: CoordinateChoice = field(default_factory=CoordinateChoice)
     precise_download: bool = False
     number: str = ''                         # número o clave del proyecto (sale en el informe)
+    place: str = ''                          # lugar de la firma del informe («Aguascalientes, Ags.»)
+    # Del rover leído (no se guardan: salen de sus archivos): para no ofrecer como base la estación del propio rover.
+    rover_marker: str = ''
+    rover_position: Ecef | None = None
 
     STEPS = ('Rover', 'Estaciones de referencia', 'Ajustes', 'Proceso', 'Resultado')
 
@@ -253,7 +295,7 @@ class StaticJob:
                                             'con dos o tres el resultado se puede verificar.', 'warning'))
             return found
         if step == 2:
-            return options_issues(self.options, self.precise_download)+number_issues(self.number)
+            return options_issues(self.options, self.precise_download)+number_issues(self.number, self.place)
         return []
 
     def first_invalid_step(self) -> int | None:
@@ -282,6 +324,7 @@ class StaticJob:
         project = project or Project()
         project.kind = 'static'
         project.number = self.number.strip()
+        project.place = self.place.strip()
         project.point_name = self.point_name.strip()
         project.pole_height_m = self.pole_height_m()
         project.options = self.options
@@ -297,7 +340,7 @@ class StaticJob:
                  for role, paths in files.items() if role.startswith('base:')]
         return cls(rover_files=files.get('rover', []), point_name=project.point_name,
                    pole_height=f'{project.pole_height_m:.3f}', bases=bases, options=project.options,
-                   coordinates=project.coordinates, number=project.number)
+                   coordinates=project.coordinates, number=project.number, place=project.place)
 
 
 # --- PPK de puntos --------------------------------------------------------------------------------------------------
@@ -319,27 +362,53 @@ class PointsJob:
     candidate_index: int = 0
     coord_format: str = 'geodetic'           # «geodetic» (lat, lon, h) o «ecef»
     coord_text: tuple[str, str, str] = ('', '', '')
+    # Marco y época de la coordenada escrita a mano (se guardan en la coordenada de la base del proyecto). No se
+    # transforma ni el marco ni la época (especificación §3.4): los puntos quedan en los de la base.
+    coord_frame: str = OFFICIAL_FRAME
+    coord_epoch: str = f'{OFFICIAL_EPOCH:.1f}'  # texto, como lo escribe el usuario
+    # Red de la estación más cercana a la base (nombre, marco, época), para avisar si los marcos no coinciden.
+    network_frame: tuple[str, str, float | None] | None = None
+    own_receiver: str = ''                   # receptor de la base propia, del ObservationSet (o del proyecto)
     rover_files: list[Path] = field(default_factory=list)
     csv_file: Path | None = None
     options: ProcessingOptions = field(default_factory=ProcessingOptions)
     coordinates: CoordinateChoice = field(default_factory=CoordinateChoice)
     precise_download: bool = False
     number: str = ''
+    place: str = ''                          # lugar de la firma del informe
 
     STEPS = ('Base', 'Rover y puntos', 'Ajustes', 'Proceso', 'Resultado')
 
-    def manual_position(self) -> Ecef:
+    def manual_frame(self) -> tuple[str, float]:
+        """Marco y época de la coordenada escrita a mano; ValueError con el motivo si no valen."""
+        frame = self.coord_frame.strip()
+        if not frame or len(frame) > 40 or any(ord(c) < 32 for c in frame):
+            raise ValueError('Escribe el marco de la coordenada (por ejemplo ITRF2008), hasta 40 caracteres.')
+        try:
+            epoch = parse_number(self.coord_epoch)
+        except ValueError:
+            raise ValueError('Escribe la época de la coordenada como año decimal (por ejemplo 2010.0).') from None
+        if not 1950 <= epoch <= 2100:
+            raise ValueError('La época de la coordenada va de 1950 a 2100 (año decimal, por ejemplo 2010.0).')
+        return frame, epoch
+
+    def manual_xyz(self) -> tuple[float, float, float]:
+        """X, Y, Z de la coordenada escrita a mano (elipsoide GRS80 si se escribió en latitud y longitud)."""
         a, b, c = self.coord_text
         if self.coord_format == 'ecef':
             x, y, z = parse_number(a), parse_number(b), parse_number(c)
             radius = math.sqrt(x*x+y*y+z*z)
             if not 6_300_000 < radius < 6_400_000:
                 raise ValueError('La coordenada no está sobre la superficie de la Tierra (revisa X, Y, Z).')
-            return Ecef(x, y, z)
+            return x, y, z
         lat, lon, h = parse_angle(a, 'N', 'S'), parse_angle(b, 'E', 'W'), parse_number(c)
         if not -90 <= lat <= 90 or not -180 <= lon <= 180 or not -500 <= h <= 9000:
             raise ValueError('Latitud, longitud o altura fuera de rango.')
-        return Ecef(*geodetic_to_ecef(lat, lon, h))
+        return geodetic_to_ecef(lat, lon, h)
+
+    def manual_position(self) -> Ecef:
+        """La coordenada escrita a mano con el marco y la época que eligió el usuario."""
+        return Ecef(*self.manual_xyz(), *self.manual_frame())
 
     def step_issues(self, step: int) -> list[Issue]:
         if step == 0:
@@ -368,14 +437,19 @@ class PointsJob:
                     found.append(Issue('own_coord', 'Ese proyecto todavía no tiene coordenada final: procésalo antes.'))
             else:
                 try:
-                    self.manual_position()
+                    frame, epoch = self.manual_frame()
+                except ValueError as exc:
+                    found.append(Issue('own_frame', str(exc)))
+                    frame = None
+                try:
+                    self.manual_xyz()
                 except ValueError as exc:
                     message = str(exc) if 'Tierra' in str(exc) or 'rango' in str(exc) else \
                         'Escribe la coordenada completa de la base (los tres valores).'
                     found.append(Issue('own_coord', message))
                 else:
-                    found.append(Issue('own_coord', 'Coordenada escrita a mano: debe estar en el marco y la época '
-                                                    'oficiales de la red para ligar el resultado a ella.', 'warning'))
+                    if frame is not None:
+                        found.append(self.frame_issue(frame, epoch))
             return found
         if step == 1:
             found = _files_issues('rover', self.rover_files, 'la grabación cinemática o su RINEX', ROVER_KINDS)
@@ -387,8 +461,19 @@ class PointsJob:
                 found.append(Issue('csv', 'El archivo de puntos debe ser el CSV de TresVizo Field.'))
             return found
         if step == 2:
-            return options_issues(self.options, self.precise_download)+number_issues(self.number)
+            return options_issues(self.options, self.precise_download)+number_issues(self.number, self.place)
         return []
+
+    def frame_issue(self, frame: str, epoch: float) -> Issue:
+        """Aviso del marco de la coordenada escrita a mano frente al de la red más cercana (si se conoce)."""
+        net = self.network_frame
+        if net is not None and net[1] and not same_frame(frame, epoch, net[1], net[2]):
+            theirs = f'{net[1]}, época {net[2]:g}' if net[2] is not None else net[1]
+            return Issue('own_frame', f'La base y la red están en marcos distintos (la base en {frame}, época '
+                                      f'{epoch:g}; {net[0]} en {theirs}); no se transforma: los puntos quedan en el '
+                                      'marco y la época de la base, y el informe lo dice.', 'warning')
+        return Issue('own_frame', f'Coordenada escrita a mano en {frame}, época {epoch:g}: los puntos quedan en ese '
+                                  'marco y esa época (no se transforman), y el informe lo dice.', 'warning')
 
     def first_invalid_step(self) -> int | None:
         for step in range(3):
@@ -404,7 +489,8 @@ class PointsJob:
                 chosen = self.candidates[min(self.candidate_index, len(self.candidates)-1)]
                 name = self.own_name.strip() or chosen.name
                 return replace(chosen, name=name, antenna_height_m=parse_number(self.own_height)
-                               if self.own_height.strip() else chosen.antenna_height_m)
+                               if self.own_height.strip() else chosen.antenna_height_m,
+                               receiver=chosen.receiver or self.own_receiver)
             if self.rinex_position is None:
                 raise ValueError('Sin posición en el encabezado RINEX de la base.')
             position, source = self.rinex_position, RINEX_SOURCE
@@ -415,7 +501,7 @@ class PointsJob:
         name = self.own_name.strip()
         origin = {'rinex': 'rinex-header', 'project': 'project'}.get(self.own_source, 'manual')
         return Station(id=re.sub(r'[^A-Za-z0-9]', '', name)[:9].upper() or 'BASE', name=name, position=position,
-                       antenna_height_m=parse_number(self.own_height), receiver='MeridianV', source=source,
+                       antenna_height_m=parse_number(self.own_height), receiver=self.own_receiver, source=source,
                        official=False, coordinate_origin=origin, approximate=self.own_source == 'rinex')
 
     def base_height_m(self) -> float | None:
@@ -435,6 +521,7 @@ class PointsJob:
         project = project or Project()
         project.kind = 'points'
         project.number = self.number.strip()
+        project.place = self.place.strip()
         project.base_kind = self.base_kind
         project.options = self.options
         project.coordinates = self.coordinates
@@ -451,20 +538,24 @@ class PointsJob:
         base_files = next((paths for role, paths in files.items() if role.startswith('base:')), [])
         job = cls(base_kind=project.base_kind, rover_files=files.get('rover', []),
                   csv_file=(files.get('csv') or [None])[0], options=project.options, coordinates=project.coordinates,
-                  number=project.number)
+                  number=project.number, place=project.place)
         if project.base_kind == 'rgna':
             job.base = BaseEntry(files=base_files, station=station, name=station.name if station else '')
         else:
             job.base = BaseEntry(files=base_files)
             job.own_name = station.name if station else ''
             job.own_height = f'{project.pole_height_m:.3f}'
+            job.own_receiver = station.receiver if station else ''
             if project.source_project and project.folder:
                 job.own_source = 'project'
                 job.own_project = absolute(project.source_project, project.folder)
                 job.own_position = station.position if station else None
-            elif station and station.source == RINEX_SOURCE:
-                job.own_source, job.rinex_position = 'rinex', station.position
-            elif station:
+            elif station and station.coordinate_origin == 'manual':
+                p = station.position
                 job.own_source, job.coord_format = 'manual', 'ecef'
-                job.coord_text = (f'{station.position.x:.4f}', f'{station.position.y:.4f}', f'{station.position.z:.4f}')
+                job.coord_text = (f'{p.x:.4f}', f'{p.y:.4f}', f'{p.z:.4f}')
+                job.coord_frame, job.coord_epoch = p.frame, epoch_text(p.epoch)
+            elif station:
+                # La del encabezado, la autónoma o la oficial: se vuelve a elegir la misma candidata al leer la base.
+                job.own_source, job.rinex_position = 'rinex', station.position
         return job

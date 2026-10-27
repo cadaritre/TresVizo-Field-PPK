@@ -153,10 +153,14 @@ def _parse_enu(v: dict) -> Enu:
 
 
 def _station(s: Station) -> dict:
+    """Todos los campos de la estación: la coordenada lleva su marco y su época (los de la red, o los que eligió el
+    usuario para una base escrita a mano), y su origen («official», «manual», «project»…) decide cómo se reabre."""
     return {"id": s.id, "name": s.name, "position": _ecef(s.position),
             "sigma_enu": None if s.sigma_enu is None else _enu(s.sigma_enu),
             "antenna_type": s.antenna_type, "radome": s.radome, "antenna_height_m": s.antenna_height_m,
-            "receiver": s.receiver, "source": s.source, "official": s.official}
+            "receiver": s.receiver, "source": s.source, "official": s.official, "network": s.network,
+            "network_name": s.network_name, "attribution": s.attribution,
+            "coordinate_origin": s.coordinate_origin, "approximate": s.approximate}
 
 
 def _parse_station(d: dict) -> Station:
@@ -165,7 +169,11 @@ def _parse_station(d: dict) -> Station:
                    sigma_enu=None if sigma is None else _parse_enu(sigma),
                    antenna_type=str(d.get("antenna_type", "")), radome=str(d.get("radome", "NONE")),
                    antenna_height_m=float(d.get("antenna_height_m", 0.0)), receiver=str(d.get("receiver", "")),
-                   source=str(d.get("source", "")), official=bool(d.get("official", True)))
+                   source=str(d.get("source", "")), official=bool(d.get("official", True)),
+                   network=str(d.get("network", "")), network_name=str(d.get("network_name", "")),
+                   attribution=str(d.get("attribution", "")),
+                   coordinate_origin=str(d.get("coordinate_origin", "official")),
+                   approximate=bool(d.get("approximate", False)))
 
 
 def _options(o: ProcessingOptions, folder: Path) -> dict:

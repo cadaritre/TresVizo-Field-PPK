@@ -362,3 +362,57 @@ def test_spanish_display_names_and_plurals():
     assert display_name('') == ''
     assert plural(1, 'línea base', 'líneas base') == '1 línea base' and plural(2, 'línea base', 'líneas base') == '2 líneas base'
     assert plural(0, 'hueco') == '0 huecos'
+
+
+def test_manual_base_frame_epoch_receiver_and_place_roundtrip(tmp_path):
+    """Base propia escrita a mano: marco y época elegidos, aviso si no son los de la red de la zona, receptor del
+    ObservationSet, y todo (más el lugar de la firma) se guarda y se reabre igual."""
+    job = wz.PointsJob(base_kind='own', base=wz.BaseEntry([touch(tmp_path, 'base.bin')]), own_name='B1',
+                       own_height='1.5', own_source='manual', coord_format='ecef',
+                       coord_text=('-1000000.1234', '-5500000.5678', '3000000.9012'), own_receiver='MeridianVI',
+                       rover_files=[touch(tmp_path, 'jornada.bin')], csv_file=touch(tmp_path, 'puntos.csv'),
+                       place='Aguascalientes, Ags.')
+    job.coord_frame, job.coord_epoch = 'NAD83(2011)', '2010,0'
+    st = job.station()
+    assert (st.position.frame, st.position.epoch) == ('NAD83(2011)', 2010.0)
+    assert st.receiver == 'MeridianVI' and st.coordinate_origin == 'manual'
+    assert [i.level for i in job.step_issues(0)] == ['warning']
+    assert 'NAD83(2011), época 2010' in job.step_issues(0)[0].message
+    job.network_frame = ('RGNA — INEGI, México', 'ITRF2008', 2010.0)
+    issue = job.step_issues(0)[0]
+    assert issue.level == 'warning' and 'marcos distintos' in issue.message and 'no se transforma' in issue.message
+    job.coord_frame = 'itrf 2008'
+    assert 'marcos distintos' not in job.step_issues(0)[0].message     # mismo marco, escrito distinto
+    job.coord_epoch = '2024.5'
+    assert 'marcos distintos' in job.step_issues(0)[0].message          # misma red, otra época
+    for bad in ('', 'año', '1800'):
+        job.coord_epoch = bad
+        assert any(i.field == 'own_frame' and i.level == 'error' for i in job.step_issues(0))
+    job.coord_frame, job.coord_epoch = 'ETRS89', '1989.0'
+    project = job.to_project(folder=tmp_path)
+    proj.set_inputs(project, job.files(), tmp_path)
+    loaded = proj.load(proj.save(project, tmp_path/'propia'))
+    assert loaded.place == 'Aguascalientes, Ags.'
+    again = wz.PointsJob.from_project(loaded, proj.resolve_inputs(loaded))
+    assert again.own_source == 'manual' and (again.coord_frame, again.coord_epoch) == ('ETRS89', '1989.0')
+    assert again.coord_text == job.coord_text and again.own_receiver == 'MeridianVI' and again.place == job.place
+    assert again.station().position == job.station().position
+    # Las candidatas aproximadas se reabren como aproximadas (antes volvían como «escrita a mano»).
+    approx = wz.PointsJob(base_kind='own', base=wz.BaseEntry([touch(tmp_path, 'base.bin')]), own_name='B2',
+                          own_height='1.5', candidates=[Station('B2', 'B2', Ecef(-1e6, -5.5e6, 3e6), official=False,
+                                                                source='Media autónoma', coordinate_origin='autonomous',
+                                                                approximate=True)],
+                          rinex_position=Ecef(-1e6, -5.5e6, 3e6))
+    project = approx.to_project(folder=tmp_path)
+    proj.set_inputs(project, approx.files(), tmp_path)
+    loaded = proj.load(proj.save(project, tmp_path/'aprox'))
+    assert loaded.bases[0].coordinate_origin == 'autonomous' and loaded.bases[0].approximate
+    again = wz.PointsJob.from_project(loaded, proj.resolve_inputs(loaded))
+    assert again.own_source == 'rinex' and again.rinex_position == Ecef(-1e6, -5.5e6, 3e6)
+    # Estático: el lugar se guarda y vuelve.
+    static = wz.StaticJob(rover_files=[touch(tmp_path, 'p.bin')], point_name='P1', pole_height='1.8',
+                          bases=[wz.BaseEntry([touch(tmp_path, 'chih2990.24o')], station(), '')], place='León, Gto.')
+    assert static.to_project().place == 'León, Gto.'
+    assert wz.StaticJob.from_project(static.to_project(), static.files()).place == 'León, Gto.'
+    static.place = 'x'*81
+    assert any(i.field == 'place' for i in static.step_issues(2))

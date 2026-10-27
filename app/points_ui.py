@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 from tresvizo_ppk import project as projects
-from tresvizo_ppk.model import Ephemeris, Solution
+from tresvizo_ppk.model import Ecef, Ephemeris, Solution
 
 from app import tasks
 from tresvizo_ppk.nombres import display_name
@@ -16,9 +16,9 @@ from app.charts import BarChart, PlanChart, enu_of
 from app.components import DropZone, FileList, LabeledEntry, ThinScrollbar, card, wrap_label
 from app.formatting import dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
-from app.wizard import PointsJob, classify
+from app.wizard import COMMON_FRAMES, PointsJob, classify, distance_m, epoch_text
 from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text,
-                           station_label)
+                           network_catalog, station_label)
 from app.static_ui import RECORDING_TYPES
 
 EXPORTS = [('field_csv', 'CSV de TresVizo Field…', '.csv', 'CSV de TresVizo Field'),
@@ -122,8 +122,25 @@ class PointsPage(WizardPage):
             ttk.Entry(self.coord_entries, textvariable=var).grid(row=1, column=column, sticky='ew', padx=(0, 12))
             var.trace_add('write', lambda *a: self.edit(coord_text=tuple(v.get() for v in self.coord_vars)))
             self.coord_labels.append(label)
-        self.coord_hint = ttk.Label(self.manual, text='', style='Card.Subtitle.TLabel')
-        self.coord_hint.pack(anchor='w', pady=(6, 0))
+        self.coord_hint = ttk.Label(self.manual, text='', style='Card.Subtitle.TLabel', justify='left')
+        self.coord_hint.pack(anchor='w', fill='x', pady=(6, 0))
+        self.manual.bind('<Configure>', lambda e: self.coord_hint.configure(wraplength=max(200, e.width-20)),
+                         add='+')
+        # Marco y época de la coordenada: se guardan con ella y salen en el informe; no se transforman.
+        frame_row = ttk.Frame(self.manual, style='Flat.Card.TFrame')
+        frame_row.pack(fill='x', pady=(10, 0))
+        ttk.Label(frame_row, text='Marco', style='Card.Strong.TLabel').grid(row=0, column=0, sticky='w', pady=(0, 4))
+        ttk.Label(frame_row, text='Época (año decimal)', style='Card.Strong.TLabel').grid(row=0, column=1, sticky='w',
+                                                                                         padx=(12, 0), pady=(0, 4))
+        self.frame_var = tk.StringVar(value=self.job.coord_frame)
+        self.epoch_var = tk.StringVar(value=self.job.coord_epoch)
+        self.frame_box = ttk.Combobox(frame_row, textvariable=self.frame_var, values=self.frame_choices(), width=18)
+        self.frame_box.grid(row=1, column=0, sticky='w')
+        ttk.Entry(frame_row, textvariable=self.epoch_var, width=10).grid(row=1, column=1, sticky='w', padx=(12, 0))
+        self.frame_box.bind('<<ComboboxSelected>>', lambda e: self.frame_picked())
+        self.frame_var.trace_add('write', lambda *a: self.edit(coord_frame=self.frame_var.get()))
+        self.epoch_var.trace_add('write', lambda *a: self.edit(coord_epoch=self.epoch_var.get()))
+        network_catalog(self.app, self.networks_loaded)
         self.switch_format(notify=False)
         self.render_candidates()
         self.switch_source(notify=False)
@@ -134,7 +151,49 @@ class PointsPage(WizardPage):
     def edit(self, **values):
         for key, value in values.items():
             setattr(self.job, key, value)
+        if {'coord_text', 'coord_format', 'coord_frame', 'coord_epoch'} & set(values):
+            self.update_network_frame()
         self.changed()
+
+    # --- Marco de la coordenada escrita a mano ----------------------------------------------------------------
+
+    NETWORK_RADIUS_M = 500_000.0      # una red cuenta como «la de la zona» si tiene una estación a menos de esto
+
+    def frame_choices(self) -> list[str]:
+        """Los marcos de las redes instaladas primero y luego los usuales; se puede escribir otro."""
+        found = [f'{n.frame}' for n in (self.app.networks_cache or []) if n.frame]
+        return list(dict.fromkeys([*found, *COMMON_FRAMES]))
+
+    def networks_loaded(self, networks):
+        if hasattr(self, 'frame_box') and self.frame_box.winfo_exists():
+            self.frame_box.configure(values=self.frame_choices())
+            self.update_network_frame()
+            self.refresh()
+
+    def frame_picked(self):
+        """Al elegir el marco de una red instalada, su época oficial (se puede corregir)."""
+        frame = self.frame_var.get()
+        net = next((n for n in (self.app.networks_cache or []) if n.frame == frame and n.epoch is not None), None)
+        if net is not None:
+            self.epoch_var.set(epoch_text(net.epoch))
+
+    def update_network_frame(self):
+        """La red con la estación más cercana a la coordenada escrita (a menos de 500 km): su marco y su época."""
+        from app.networks import network_of
+        self.job.network_frame = None
+        core = self.app.backend.core
+        if self.job.own_source != 'manual' or core is None or not callable(getattr(core, 'nearest_stations', None)):
+            return
+        try:
+            xyz = self.job.manual_xyz()
+            found = list(core.nearest_stations(Ecef(*xyz), 1))
+        except Exception:  # noqa: BLE001 - el aviso es una ayuda; la validación de la coordenada sigue
+            return
+        if not found or found[0][1] > self.NETWORK_RADIUS_M:
+            return
+        net = network_of(self.app.networks_cache or [], found[0][0])
+        if net is not None and net.frame:
+            self.job.network_frame = (net.name, net.frame, net.epoch)
 
     def switch_base(self, notify=True):
         kind = self.kind_var.get()
@@ -157,6 +216,9 @@ class PointsPage(WizardPage):
         self.set_own_files(list(dict.fromkeys([*self.job.base.files, *paths])))
 
     def set_own_files(self, paths, notify=True):
+        # Al reabrir un proyecto se vuelve a elegir la candidata que se guardó (no la primera).
+        self._wanted_position = self.job.rinex_position if not notify else None
+        self._station_before = self.station_or_none()
         self.job.base.files = list(paths)
         self.own_list.set(paths)
         if paths and not self.own_list.winfo_manager():
@@ -199,20 +261,37 @@ class PointsPage(WizardPage):
                                                       'en el encabezado RINEX.')
             self.autofill(self.own_height, self.own_height_field, f'{obs.antenna_height_m:.4f}',
                           self.origin_text(obs, 'antenna_height_m', origin))
+        before = getattr(self, '_station_before', None)
+        self._station_before = None
+        self.job.own_receiver = obs.receiver_model or obs.receiver or ''
         found = getattr(obs, 'ui_extra', None)
+        wanted = getattr(self, '_wanted_position', None)
+        self._wanted_position = None
         if found is None:      # motor sin candidatas: la del encabezado
             self.job.candidates = []
             self.job.rinex_position = obs.approx_position
         else:
             self.job.candidates = list(found)
-            self.job.candidate_index = 0
-            self.job.rinex_position = found[0].position if found else None
+            self.job.candidate_index = next((i for i, c in enumerate(found) if wanted is not None and
+                                             distance_m(c.position, wanted) < 1e-4), 0)
+            self.job.rinex_position = found[self.job.candidate_index].position if found else None
         self.job.rinex_missing = self.job.rinex_position is None
         self.render_candidates()
         self.own_info.configure(text=f'{self.obs_summary(obs)} · {origin}')
         self.own_info.pack(fill='x', pady=(8, 0))
         self.show_rinex_position()
-        self.changed()
+        # Leer los archivos de un proyecto recién abierto no es un cambio: solo si la base que se procesaría cambió.
+        saved = self.project.bases[0] if self.project is not None and self.project.bases and not self.dirty else None
+        if self.station_or_none() not in (before, saved):
+            self.changed()
+        else:
+            self.refresh()
+
+    def station_or_none(self):
+        try:
+            return self.job.station()
+        except (ValueError, TypeError, AttributeError):
+            return None
 
     CANDIDATE_TEXT = {'official': 'Oficial (catálogo de su red)', 'rinex-header': 'Aproximada (encabezado RINEX)',
                       'autonomous': 'Aproximada (solución autónoma de la sesión)'}
@@ -264,6 +343,7 @@ class PointsPage(WizardPage):
         {'rinex': self.from_rinex, 'project': self.from_project}.get(self.job.own_source, self.manual).pack(fill='x')
         self.show_project_info()
         self.show_rinex_position()
+        self.update_network_frame()
         if notify:
             self.changed()
 
@@ -271,11 +351,12 @@ class PointsPage(WizardPage):
         self.job.coord_format = self.format_var.get()
         if self.job.coord_format == 'geodetic':
             names = ('Latitud', 'Longitud', 'Altura elipsoidal (m)')
-            hint = ('Grados decimales o «19 25 12.3456 N»; longitud oeste con O (o W) o con signo menos. En el marco y '
-                    'la época de la red con la que vas a ligar los puntos.')
+            hint = ('Grados decimales o «19 25 12.3456 N»; longitud oeste con O (o W) o con signo menos. Abajo, el marco y '
+                    'la época en que está la coordenada: para ligar los puntos a una red, los de esa red.')
         else:
             names = ('X (m)', 'Y (m)', 'Z (m)')
-            hint = 'Geocéntricas, en el marco y la época de la red con la que vas a ligar los puntos.'
+            hint = ('Geocéntricas. Abajo, el marco y la época en que está la coordenada: para ligar los puntos a una red, '
+                    'los de esa red.')
         for label, name in zip(self.coord_labels, names):
             label.configure(text=name)
         self.coord_hint.configure(text=hint)

@@ -376,11 +376,30 @@ class OptionsPanel(ttk.Frame):
         super().__init__(parent)
         self.app, self.job, self.changed = app, job, changed
         o = job.options
-        frame, body = card(self, 'Proyecto', 'Número o clave que sale en el encabezado del informe (opcional).')
+        frame, body = card(self, 'Proyecto', 'Número o clave que sale en el encabezado del informe y lugar del bloque '
+                                             'de firma (los dos opcionales).')
         frame.pack(fill='x', pady=(0, 16))
+        from app.components import LabeledEntry
         self.number = tk.StringVar(value=job.number)
-        ttk.Entry(body, textvariable=self.number, width=30).pack(anchor='w')
+        self.place = tk.StringVar(value=job.place)
+        self.number_field = LabeledEntry(body, 'Número', self.number, width=24)
+        self.place_field = LabeledEntry(body, 'Lugar', self.place, 'Ciudad y estado de la firma, por ejemplo '
+                                                                   '«Aguascalientes, Ags.».', width=36)
+        body.columnconfigure((0, 1), weight=1, uniform='project')
+        self.number_field.grid(row=0, column=0, sticky='new', padx=(0, 12))
+        self.place_field.grid(row=0, column=1, sticky='new', padx=(12, 0))
+
+        def arrange(event):
+            # Dos columnas si caben; una sola en ventanas angostas o con letra grande.
+            if event.width >= 560:
+                self.number_field.grid(row=0, column=0, columnspan=1, padx=(0, 12), pady=0)
+                self.place_field.grid(row=0, column=1, columnspan=1, padx=(12, 0), pady=0)
+            else:
+                self.number_field.grid(row=0, column=0, columnspan=2, padx=0, pady=0)
+                self.place_field.grid(row=1, column=0, columnspan=2, padx=0, pady=(12, 0))
+        body.bind('<Configure>', arrange, add='+')
         self.number.trace_add('write', lambda *a: self.apply())
+        self.place.trace_add('write', lambda *a: self.apply())
         frame, body = card(self, 'Satélites', 'Por omisión: máscara de 15°, todas las constelaciones y frecuencias '
                                               'que tengan el rover y la base.')
         frame.pack(fill='x')
@@ -507,6 +526,7 @@ class OptionsPanel(ttk.Frame):
             o.interval_s = None
         o.combined = self.combined.get()
         self.job.number = self.number.get()
+        self.job.place = self.place.get()
         self.job.coordinates = self.chooser.get()
         self.toggle_precise()
         self.changed()

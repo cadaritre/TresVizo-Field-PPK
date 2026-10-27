@@ -477,3 +477,53 @@ def test_reload_cancels_pending_file_reads_and_uses_its_own_temporary_folder(app
     assert not page.dirty and not app.shown, app.shown
     temporal = app.settings.data_dir()/'Temporal'
     assert not temporal.exists() or not any(temporal.iterdir())
+
+
+def _descendants(widget):
+    stack, out = list(widget.winfo_children()), []
+    while stack:
+        w = stack.pop()
+        out.append(w)
+        stack += w.winfo_children()
+    return out
+
+
+def test_place_field_is_saved_in_the_project(app, tmp_path):
+    page = app.show('Georreferenciar punto')
+    path = static_ready(app, tmp_path, page)
+    page.go(2)
+    options = next(w for w in _descendants(page.frames[2].body) if w.__class__.__name__ == 'OptionsPanel')
+    options.place.set('Aguascalientes, Ags.')
+    options.number.set('LEV-2026-031')
+    assert page.job.place == 'Aguascalientes, Ags.' and page.dirty
+    page.save()
+    pump(app, lambda: not page.dirty)
+    saved = projects.load(path)
+    assert saved.place == 'Aguascalientes, Ags.' and saved.number == 'LEV-2026-031'
+    app.open_project(path)
+    options = next(w for w in _descendants(page.frames[2].body) if w.__class__.__name__ == 'OptionsPanel')
+    assert options.place.get() == 'Aguascalientes, Ags.'
+
+
+def test_reopening_an_own_base_project_is_not_a_change(app, tmp_path):
+    """Abrir un proyecto con base propia y dejar que se lean sus archivos no deja «cambios sin guardar» (antes, la
+    lectura de la base marcaba el proyecto como cambiado y volvía a la primera candidata)."""
+    f = files(tmp_path)
+    page = app.show('PPK de puntos')
+    page.kind_var.set('own')
+    page.switch_base()
+    page.add_own_files([f['S-20261024-150214.bin']])
+    pump(app, lambda: page.job.rinex_position is not None)
+    page.job.rover_files, page.job.csv_file = [f['S-20261024-150214.bin']], f['puntos.csv']
+    path = tmp_path/'propia.tvppk'
+    page.ask_path = lambda: path
+    page.save()
+    pump(app, lambda: path.exists() and not page.dirty)
+    app.open_project(path)
+    pump(app, lambda: page.job.candidates)
+    end = time.monotonic()+0.5
+    while time.monotonic() < end:
+        app.update()
+        time.sleep(0.01)
+    assert not page.dirty and page.job.own_source == 'rinex' and page.job.own_receiver == 'MeridianV'
+    assert page.job.station().receiver == 'MeridianV' and not app.shown
