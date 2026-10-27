@@ -5,7 +5,7 @@ import sys
 import tkinter as tk
 from tkinter import font as tkfont, ttk
 
-from app.themes import derived, readable
+from app.themes import derived, mix, readable
 
 
 def font_families(root) -> tuple[str, str]:
@@ -124,16 +124,23 @@ class ThemeManager:
         for style in ('TEntry', 'TCombobox', 'TSpinbox'):
             s.configure(style, fieldbackground=t['surface'], foreground=t['text'], insertcolor=t['text'], padding=6,
                         selectbackground=t['selection'], selectforeground=t['on_selection'], bordercolor=t['border'],
-                        arrowsize=14, arrowcolor=t['text'])
+                        arrowsize=14, arrowcolor=readable(t['muted'], t['surface']), background=t['surface'],
+                        lightcolor=t['surface'], darkcolor=t['surface'])
             s.map(style, fieldbackground=[('disabled', t['secondary_disabled']), ('readonly', t['surface'])],
                   foreground=[('disabled', t['on_secondary_disabled']), ('readonly', t['text'])],
                   bordercolor=[('invalid', t['error_fg']), ('focus', t['focus'])],
                   lightcolor=[('focus', t['focus'])], darkcolor=[('focus', t['focus'])])
+        s.configure('TSpinbox', arrowsize=11)
+        s.configure('TMenubutton', background=t['secondary'], foreground=t['on_secondary'], padding=(12, 7),
+                    borderwidth=0, relief='flat', arrowcolor=t['on_secondary'], font=f.body())
+        s.map('TMenubutton', background=[('disabled', t['secondary_disabled']), ('pressed', t['secondary_pressed']),
+                                         ('active', t['secondary_hover'])],
+              foreground=[('disabled', t['on_secondary_disabled']), ('active', t['on_secondary_hover'])])
         s.map('TCombobox', selectbackground=[('!focus', t['surface']), ('focus', t['selection'])],
               selectforeground=[('!focus', t['text']), ('focus', t['on_selection'])])
         s.configure('Treeview', background=t['surface'], fieldbackground=t['surface'], foreground=t['text'],
                     rowheight=int((30 if sys.platform == 'darwin' else 32)*scale), bordercolor=t['separator'],
-                    borderwidth=0, font=f.body())
+                    lightcolor=t['separator'], darkcolor=t['separator'], borderwidth=1, font=f.body())
         s.map('Treeview', background=[('selected', t['selection'])], foreground=[('selected', t['on_selection'])])
         s.configure('Treeview.Heading', background=t['surface'], foreground=t['muted_surface'], padding=6,
                     borderwidth=0, font=f.strong(-1))
@@ -143,6 +150,7 @@ class ThemeManager:
         s.configure('TNotebook.Tab', background=t['secondary'], foreground=t['on_secondary'], padding=(14, 7))
         s.map('TNotebook.Tab', background=[('selected', t['button']), ('active', t['secondary_hover'])],
               foreground=[('selected', t['on_button']), ('active', t['on_secondary_hover'])])
+        self.indicators(t)
         for style, bg in (('TCheckbutton', 'background'), ('TRadiobutton', 'background'),
                           ('Card.TCheckbutton', 'surface'), ('Card.TRadiobutton', 'surface')):
             s.configure(style, background=t[bg], foreground=t['text'], indicatorbackground=t['surface'],
@@ -153,8 +161,24 @@ class ThemeManager:
                   indicatorforeground=[('selected', t['on_button'])])
         s.configure('Horizontal.TProgressbar', background=t['button'], troughcolor=t['secondary'],
                     bordercolor=t['secondary'], lightcolor=t['button'], darkcolor=t['button'], thickness=8)
-        s.configure('TScrollbar', background=t['secondary'], troughcolor=t['background'], bordercolor=t['background'],
-                    arrowcolor=t['text'])
+        # Barras de desplazamiento delgadas, sin flechas (como las del sistema).
+        if not getattr(self, '_scroll_layout', False):
+            s.layout('Vertical.TScrollbar', [('Vertical.Scrollbar.trough', {'sticky': 'ns', 'children': [
+                ('Vertical.Scrollbar.thumb', {'expand': '1', 'sticky': 'nswe'})]})])
+            s.layout('Horizontal.TScrollbar', [('Horizontal.Scrollbar.trough', {'sticky': 'ew', 'children': [
+                ('Horizontal.Scrollbar.thumb', {'expand': '1', 'sticky': 'nswe'})]})])
+            self._scroll_layout = True
+        for orient in ('Vertical', 'Horizontal'):
+            s.configure(orient+'.TScrollbar', background=mix(t['background'], t['muted'], .35),
+                        troughcolor=t['background'], bordercolor=t['background'], lightcolor=t['background'],
+                        darkcolor=t['background'], gripcount=0, arrowsize=8, width=8)
+            s.map(orient+'.TScrollbar', background=[('active', mix(t['background'], t['muted'], .6))])
+        # Sin nada que desplazar, la barra se funde con el fondo pero conserva su lugar.
+        s.layout('Idle.Vertical.TScrollbar', s.layout('Vertical.TScrollbar'))
+        s.configure('Idle.Vertical.TScrollbar', background=t['background'], troughcolor=t['background'],
+                    bordercolor=t['background'], lightcolor=t['background'], darkcolor=t['background'],
+                    arrowsize=8, width=8)
+        s.map('Idle.Vertical.TScrollbar', background=[('active', t['background'])])
         for kind in ('error', 'warning', 'success', 'info'):
             s.configure(kind+'.TLabel', background=t[kind+'_bg'], foreground=t[kind+'_fg'], padding=10)
             s.configure(kind+'.TFrame', background=t[kind+'_bg'])
@@ -166,6 +190,58 @@ class ThemeManager:
         self.callbacks = [(w, fn) for w, fn in self.callbacks if w.winfo_exists()]
         for _, callback in self.callbacks:
             callback(t)
+
+    def indicators(self, t):
+        """Casillas y botones de opción dibujados (marca ✓ y punto), con estados de foco y deshabilitado."""
+        from PIL import Image, ImageDraw, ImageTk
+        size = int(18*getattr(self.root, 'ui_scale', 1))
+        big = size*4
+
+        def make(kind, on, disabled=False):
+            image = Image.new('RGBA', (big, big), (0, 0, 0, 0))
+            d = ImageDraw.Draw(image)
+            accent = t['button_disabled'] if disabled else t['button']
+            border = mix(t['border'], t['surface'], .4) if disabled else t['border']
+            box = (6, 6, big-6, big-6)
+            if kind == 'check':
+                if on:
+                    d.rounded_rectangle(box, radius=big//5, fill=accent)
+                    d.line([(big*.27, big*.52), (big*.43, big*.68), (big*.74, big*.34)], fill=t['on_button'],
+                           width=max(4, big//10), joint='curve')
+                else:
+                    d.rounded_rectangle(box, radius=big//5, fill=t['surface'], outline=border, width=max(3, big//18))
+            else:
+                if on:
+                    d.ellipse(box, fill=accent)
+                    c, r = big/2, big*.17
+                    d.ellipse((c-r, c-r, c+r, c+r), fill=t['on_button'])
+                else:
+                    d.ellipse(box, fill=t['surface'], outline=border, width=max(3, big//18))
+            framed = Image.new('RGBA', (size+int(7*getattr(self.root, 'ui_scale', 1)), size), (0, 0, 0, 0))
+            framed.alpha_composite(image.resize((size, size), Image.Resampling.LANCZOS))
+            return framed
+
+        keys = [(k, on, dis) for k in ('check', 'radio') for on in (False, True) for dis in (False, True)]
+        first = not hasattr(self, 'indicator_images')
+        if first:
+            self.indicator_images = {key: ImageTk.PhotoImage(make(*key), master=self.root) for key in keys}
+        else:
+            # Cambio de tema: se repintan las mismas imágenes; los elementos ttk que las usan se actualizan solos.
+            for key in keys:
+                self.indicator_images[key].paste(make(*key))
+            return
+        images, s = self.indicator_images, self.style
+        for kind, widget in (('check', 'Checkbutton'), ('radio', 'Radiobutton')):
+            element = f'Tv.{widget}.indicator'
+            s.element_create(element, 'image', images[(kind, False, False)],
+                             ('disabled', 'selected', images[(kind, True, True)]),
+                             ('disabled', images[(kind, False, True)]),
+                             ('selected', images[(kind, True, False)]), sticky='w', padding=(0, 0, 8, 0))
+            for prefix in ('', 'Card.'):
+                s.layout(prefix+'T'+widget, [('T'+widget+'.padding', {'sticky': 'nswe', 'children': [
+                    (element, {'side': 'left', 'sticky': ''}),
+                    ('T'+widget+'.focus', {'side': 'left', 'sticky': 'w', 'children': [
+                        ('T'+widget+'.label', {'sticky': 'nswe'})]})]})])
 
     def walk(self, widget):
         """Colores de los widgets clásicos de Tk (los ttk los toma de los estilos)."""

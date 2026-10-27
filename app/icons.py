@@ -8,7 +8,7 @@ from app.themes import readable
 
 # Estilo del botón → token de fondo del que salen los colores del icono.
 STYLE_KEYS = {'Active.Nav.TButton': 'selection', 'Nav.TButton': 'sidebar', 'Primary.TButton': 'button',
-              'TButton': 'secondary', '': 'secondary'}
+              'TButton': 'secondary', 'TMenubutton': 'secondary', '': 'secondary'}
 
 
 class Icons:

@@ -14,7 +14,7 @@ def config_dir() -> Path:
     """Preferencias del usuario (no son datos de trabajo): la carpeta estándar de cada sistema."""
     if sys.platform == 'win32':
         base = Path(os.environ.get('APPDATA') or Path.home()/'AppData'/'Roaming')
-        return base/'TresVizo'/'Field PPK'
+        return base/APP_NAME
     if sys.platform == 'darwin':
         return Path.home()/'Library'/'Application Support'/APP_NAME
     return Path(os.environ.get('XDG_CONFIG_HOME') or Path.home()/'.config')/'tresvizo-field-ppk'
