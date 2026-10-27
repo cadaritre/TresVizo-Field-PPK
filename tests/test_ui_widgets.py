@@ -527,3 +527,32 @@ def test_reopening_an_own_base_project_is_not_a_change(app, tmp_path):
         time.sleep(0.01)
     assert not page.dirty and page.job.own_source == 'rinex' and page.job.own_receiver == 'MeridianV'
     assert page.job.station().receiver == 'MeridianV' and not app.shown
+
+
+def test_rover_station_is_offered_as_es_el_rover(app, tmp_path, monkeypatch):
+    """En las cercanas, la estación a 0.0 km del rover dice «Es el rover» con el botón desactivado; el paso lo marca
+    como error si se elige a mano."""
+    f = files(tmp_path)
+    core = app.backend.core
+    ineg, uagu = dobles.STATIONS[0], dobles.STATIONS[1]
+    core.rover_point = ineg.position                  # la grabación está sobre INEG (a unos metros)
+    monkeypatch.setattr(core, 'nearest_stations', lambda position, count=3: [(ineg, 3.6), (uagu, 7_512.0)],
+                        raising=False)
+    page = app.show('Georreferenciar punto')
+    page.add_rover([f['S-20261024-150214.bin']])
+    pump(app, lambda: page.job.rover_position is not None)
+    page.next()
+    app.update()
+    buttons = {}
+    stack = list(page.nearby.winfo_children())
+    while stack:
+        w = stack.pop()
+        stack += w.winfo_children()
+        if isinstance(w, tk.ttk.Button):
+            buttons[w.cget('text')] = w
+    assert set(buttons) == {'Es el rover', 'Usar'} and buttons['Es el rover'].instate(['disabled'])
+    page.use_station(ineg)
+    assert page.job.bases[0].station is None
+    page.job.bases[0].station = ineg
+    page.job.bases[0].files = [f['ineg2970.26d.Z']]
+    assert any('propio rover' in i.message and i.level == 'error' for i in page.job.step_issues(1))

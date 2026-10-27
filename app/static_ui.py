@@ -12,10 +12,10 @@ from tresvizo_ppk.model import Ephemeris, Solution
 from app import tasks
 from tresvizo_ppk.nombres import display_name
 from app.charts import BarChart, PlanChart, enu_of, enu_sigma
-from app.components import DropZone, FileList, LabeledEntry, card, wrap_label
+from app.components import DropZone, FileList, LabeledEntry, Tooltip, card, later, wrap_label
 from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
-from app.wizard import MAX_BASES, BaseEntry, StaticJob, classify
+from app.wizard import MAX_BASES, ROVER_STATION_M, BaseEntry, StaticJob, classify
 from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text,
                            station_label)
 
@@ -93,6 +93,8 @@ class StaticPage(WizardPage):
         origin = self.origin_of(files)
         recording = origin.startswith('de la sesión')
         self.rover_obs = obs
+        self.job.rover_marker = getattr(obs, 'point_name', '') or obs.marker or ''
+        self.job.rover_position = getattr(obs, 'approx_position', None)
         approx = self.approx_text(obs)
         self.rover_info.configure(text=f'{self.obs_summary(obs)} · {origin}'+(f'\n{approx}' if approx else ''))
         self.render_nearby()
@@ -110,6 +112,7 @@ class StaticPage(WizardPage):
             self.height_field.hint.configure(text=self.ARP_HINT)
             self.autofill(self.height_var, self.height_field, f'{obs.antenna_height_m:.4f}',
                           self.origin_text(obs, 'antenna_height_m', origin))
+        self.refresh()      # la estación del propio rover ya se reconoce en el paso de las bases
 
     def edit(self, **values):
         for key, value in values.items():
@@ -133,6 +136,7 @@ class StaticPage(WizardPage):
         self.rover_info.pack_forget()
         if not paths:
             self.rover_obs = None
+            self.job.rover_marker, self.job.rover_position = '', None
             self.render_nearby()
         if paths:
             self.inspect('rover', paths, self.rover_inspected)
@@ -207,9 +211,14 @@ class StaticPage(WizardPage):
             network = getattr(station, 'network_name', '')
             ttk.Label(grid, text=station_label(station)+(f' · {network}' if network else ''),
                       style='Card.TLabel').grid(row=row, column=1, sticky='w', pady=3)
-            use = ttk.Button(grid, text='En uso' if station.id in chosen else 'Usar', style='Card.Link.TButton',
-                             command=lambda s=station: self.use_station(s))
-            use.state(['disabled'] if station.id in chosen or len(chosen) >= MAX_BASES else ['!disabled'])
+            # La estación del propio rover (misma clave o a menos de 30 m) no forma línea base: no se ofrece.
+            is_rover = self.job.rover_distance(station) is not None or distance < ROVER_STATION_M
+            text = 'Es el rover' if is_rover else 'En uso' if station.id in chosen else 'Usar'
+            use = ttk.Button(grid, text=text, style='Card.Link.TButton', command=lambda s=station: self.use_station(s))
+            use.state(['disabled'] if is_rover or station.id in chosen or len(chosen) >= MAX_BASES else ['!disabled'])
+            if is_rover:
+                Tooltip(use, f'{station.id} es la estación donde está el rover: no forma línea base con él.',
+                        self.app.theme)
             use.grid(row=row, column=2, sticky='e', pady=3)
             row += 1
             for text in station_notes(core, station):
@@ -236,6 +245,8 @@ class StaticPage(WizardPage):
 
     def use_station(self, station):
         """Pone la estación en la primera ficha libre (o agrega una), sin archivos todavía."""
+        if self.job.rover_distance(station) is not None:
+            return
         entry = next((b for b in self.job.bases if b.station is None), None)
         if entry is None:
             if len(self.job.bases) >= MAX_BASES:

@@ -10,15 +10,50 @@ RINEX (§3.2): `download_station_rinex` solo para redes cuyo paquete declara una
 """
 from __future__ import annotations
 
+import math
 import threading
 from datetime import datetime
 from pathlib import Path
 
+from ..errors import UserError
 from ..model import (DataQuality, Ecef, FieldPoint, ObservationSet, PointsResult, ProcessingOptions, StaticResult,
                      Station)
 from . import basecoord, field_csv, networks, observations, points, precise, quality, static, tools
 
 Progress = tools.Progress
+
+# Una línea base más corta que esto no es una línea base: la «estación» es el propio rover (la misma antena o los
+# mismos archivos). Se rechaza a la entrada con un error claro en vez de dar una solución sin sentido.
+MIN_BASELINE_M = 1.0
+
+
+def _same_recording(a: ObservationSet, b: ObservationSet) -> bool:
+    def files(obs):
+        out = set()
+        for path in obs.source_files or obs.obs:
+            try:
+                out.add(Path(path).resolve())
+            except OSError:
+                out.add(Path(path))
+        return out
+    first, second = files(a), files(b)
+    return bool(first) and first == second
+
+
+def _distance(a: Ecef, b: Ecef) -> float:
+    return math.dist((a.x, a.y, a.z), (b.x, b.y, b.z))
+
+
+def _check_not_rover(rover: ObservationSet, station: Station, obs: ObservationSet, *, use_position: bool) -> None:
+    """UserError si la base es el propio rover: los mismos archivos o, en estático, a menos de MIN_BASELINE_M."""
+    if _same_recording(rover, obs):
+        raise UserError(f"La estación {station.id} usa los mismos archivos que el rover: una línea base necesita dos "
+                        "receptores distintos. Quita esa estación o elige sus propios archivos.")
+    if use_position and rover.approx_position is not None:
+        distance = _distance(rover.approx_position, station.position)
+        if distance < MIN_BASELINE_M:
+            raise UserError(f"El rover está a {distance:.2f} m de la estación {station.id}: es el mismo punto, no una "
+                            "línea base. Quita esa estación y elige otra.")
 
 
 def prepare_observations(paths: list[Path], workdir: Path, *, pole_height_m: float | None = None,
@@ -98,8 +133,15 @@ def download_precise_products(start: datetime, end: datetime, workdir: Path, pro
 def process_static(rover: ObservationSet, bases: list[tuple[Station, ObservationSet]], options: ProcessingOptions,
                    workdir: Path, progress: Progress | None = None, cancel: threading.Event | None = None,
                    point_name: str = "") -> StaticResult:
-    return static.process_static(rover, bases, options, Path(workdir), progress=progress, cancel=cancel,
-                                 point_name=point_name)
+    for station, obs in bases:
+        _check_not_rover(rover, station, obs, use_position=True)
+    result = static.process_static(rover, bases, options, Path(workdir), progress=progress, cancel=cancel,
+                                   point_name=point_name)
+    for baseline in result.baselines:
+        if baseline.length_m < MIN_BASELINE_M:
+            raise UserError(f"La línea base con {baseline.base.id} mide {baseline.length_m:.2f} m: la estación es el "
+                            "propio rover, no una base. Quítala y vuelve a procesar.")
+    return result
 
 
 def read_field_csv(path: Path) -> list[FieldPoint]:
@@ -109,6 +151,8 @@ def read_field_csv(path: Path) -> list[FieldPoint]:
 def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], points_: list[FieldPoint],
                    options: ProcessingOptions, workdir: Path, progress: Progress | None = None,
                    cancel: threading.Event | None = None) -> PointsResult:
+    # En cinemático el rover puede pasar junto a la base: solo se rechaza la misma grabación.
+    _check_not_rover(rover, base[0], base[1], use_position=False)
     return points.process_points(rover, base, points_, options, Path(workdir), progress=progress, cancel=cancel)
 
 

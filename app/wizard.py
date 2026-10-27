@@ -256,6 +256,10 @@ class StaticJob:
 
     STEPS = ('Rover', 'Estaciones de referencia', 'Ajustes', 'Proceso', 'Resultado')
 
+    def rover_distance(self, station: Station) -> float | None:
+        """Distancia al rover si `station` es el propio rover (ver `rover_station_distance`); si no, None."""
+        return rover_station_distance(station, self.rover_marker or self.point_name, self.rover_position)
+
     def step_issues(self, step: int) -> list[Issue]:
         if step == 0:
             found = _files_issues('rover', self.rover_files, 'la grabación del receptor o su RINEX', ROVER_KINDS)
@@ -286,6 +290,10 @@ class StaticJob:
                     if base.station.id in seen:
                         found.append(Issue(key, f'La estación {base.station.id} está repetida.'))
                     seen.add(base.station.id)
+                    distance = self.rover_distance(base.station)
+                    if distance is not None:
+                        found.append(Issue(key, f'{base.station.id} es la estación del propio rover (a {distance:.1f} m '
+                                                'del punto): no forma línea base. Elige otra estación.'))
                     found += _name_issues(key, base.name or base.station.name, 'de la estación', 60)
                     if not base.station.official:
                         found.append(Issue(key, f'{base.station.id}: coordenada corregida a mano; el informe lo dirá.',

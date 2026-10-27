@@ -416,3 +416,50 @@ def test_manual_base_frame_epoch_receiver_and_place_roundtrip(tmp_path):
     assert wz.StaticJob.from_project(static.to_project(), static.files()).place == 'León, Gto.'
     static.place = 'x'*81
     assert any(i.field == 'place' for i in static.step_issues(2))
+
+
+def test_rover_station_is_never_a_base():
+    """La estación del propio rover (misma clave o a menos de 30 m) no forma línea base: error en el paso 2."""
+    ineg = station('INEG')
+    job = wz.StaticJob(rover_files=[Path('x.bin')], point_name='P1', pole_height='1.8',
+                       bases=[wz.BaseEntry([Path('ineg2970.26o')], ineg, '')])
+    assert job.rover_distance(ineg) is None
+    job.rover_marker = 'ineg'
+    assert job.rover_distance(ineg) == 0.0
+    assert any('propio rover' in i.message and i.level == 'error' for i in job.step_issues(1))
+    p = ineg.position
+    job.rover_marker, job.rover_position = 'P1', Ecef(p.x+12.0, p.y, p.z)
+    assert abs(job.rover_distance(ineg)-12.0) < 1e-6
+    assert any('a 12.0 m' in i.message for i in job.step_issues(1))
+    job.rover_position = Ecef(p.x+31.0, p.y, p.z)
+    assert job.rover_distance(ineg) is None and not any('propio rover' in i.message for i in job.step_issues(1))
+
+
+def test_engine_rejects_a_base_that_is_the_rover(tmp_path, monkeypatch):
+    """A la entrada del motor: la misma grabación, o el rover a menos de 1 m de la estación, es un UserError claro;
+    y si el proceso diera una línea base de menos de 1 m, también."""
+    from dataclasses import replace
+    from tresvizo_ppk.core import api, static
+    from tresvizo_ppk.model import ObservationSet
+    ineg = station('INEG')
+    p = ineg.position
+    rover = ObservationSet(obs=[tmp_path/'r.obs'], source_files=[touch(tmp_path, 'ineg2970.26o')],
+                           approx_position=Ecef(p.x+0.3, p.y, p.z))
+    same = ObservationSet(obs=[tmp_path/'b.obs'], source_files=[tmp_path/'ineg2970.26o'])
+    other = ObservationSet(obs=[tmp_path/'b.obs'], source_files=[touch(tmp_path, 'uagu2970.26o')])
+    called = []
+    monkeypatch.setattr(static, 'process_static', lambda *a, **k: called.append(a) or result)
+    with pytest.raises(UserError, match='mismos archivos'):
+        api.process_static(rover, [(ineg, same)], ProcessingOptions(), tmp_path)
+    with pytest.raises(UserError, match='a 0.30 m de la estación INEG'):
+        api.process_static(rover, [(ineg, other)], ProcessingOptions(), tmp_path)
+    with pytest.raises(UserError, match='mismos archivos'):
+        api.process_points(rover, (ineg, same), [], ProcessingOptions(), tmp_path)
+    assert not called
+    from types import SimpleNamespace
+    result = SimpleNamespace(baselines=[SimpleNamespace(base=ineg, length_m=0.42)])
+    far = replace(rover, approx_position=Ecef(p.x+5000.0, p.y, p.z))
+    with pytest.raises(UserError, match='mide 0.42 m'):
+        api.process_static(far, [(ineg, other)], ProcessingOptions(), tmp_path)
+    result.baselines[0].length_m = 5000.0
+    assert api.process_static(far, [(ineg, other)], ProcessingOptions(), tmp_path) is result
