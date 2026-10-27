@@ -116,8 +116,8 @@ class StaticPage(WizardPage):
             child.destroy()
         for index, entry in enumerate(self.job.bases):
             remove = (lambda i=index: self.remove_base(i)) if len(self.job.bases) > 1 else None
-            BasePanel(self.base_panels, self.app, entry, f'Estación {index+1}', self.changed, remove).pack(
-                fill='x', pady=(16, 0))
+            BasePanel(self.base_panels, self.app, entry, f'Estación {index+1}', self.changed, remove,
+                      guide=self.rgna_guide).pack(fill='x', pady=(16, 0))
         self.add_base_button.state(['disabled'] if len(self.job.bases) >= MAX_BASES else ['!disabled'])
         self.app.theme.walk(self.base_panels)
 
@@ -180,13 +180,15 @@ class StaticPage(WizardPage):
         entries = [b for b in job.bases if b.station]
         for index, (station, entry) in enumerate(zip(stations, entries)):
             obs = core.prepare_observations(entry.files, workdir/f'base-{station.id}', marker=station.id,
-                                            progress=stages.stage(1+index), cancel=cancel)
+                                            window=self.base_window(rover), progress=stages.stage(1+index),
+                                            cancel=cancel)
             bases.append((station, obs))
         options = deepcopy(job.options)
         if options.ephemeris is Ephemeris.PRECISE and not options.precise_files and job.precise_download:
             options.precise_files = list(core.download_precise_products(rover.start, rover.end, workdir/'efemerides',
                                                                         stages.stage(1+len(stations)), cancel))
-        result = core.process_static(rover, bases, options, workdir, stages.stage(2+len(stations)), cancel)
+        result = core.process_static(rover, bases, options, workdir, stages.stage(2+len(stations)), cancel,
+                                     point_name=job.point_name.strip())
         final = stages.stage(3+len(stations))
         final(0.2, 'Pasando la coordenada al sistema elegido…')
         coordinate, warning = self.transform(result.position, job.coordinates)

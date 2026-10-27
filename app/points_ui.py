@@ -61,7 +61,8 @@ class PointsPage(WizardPage):
             download = ttk.Button(g, text='Descargar de la RGNA…', command=self.download_rgna)
             self.app.icons.bind(download, 'download')
             download.pack(anchor='w', pady=(10, 0))
-        self.rgna_panel = BasePanel(self.rgna_frame, self.app, self.job.base, 'Estación de la RGNA', self.changed)
+        self.rgna_panel = BasePanel(self.rgna_frame, self.app, self.job.base, 'Estación de la RGNA', self.changed,
+                                    guide=self.rgna_guide)
         self.rgna_panel.pack(fill='x', pady=(16, 0))
         self.own_frame = ttk.Frame(body)
         self.build_own(self.own_frame)
@@ -331,10 +332,11 @@ class PointsPage(WizardPage):
     def work(self, job, project, workdir, progress, cancel):
         core = self.app.backend.core
         station = job.station()
-        stages = tasks.Stages(progress, [2, 3, 1, 1, 8, 2])
+        stages = tasks.Stages(progress, [3, 2, 1, 1, 8, 2])
+        rover = core.prepare_observations(job.rover_files, workdir/'rover', progress=stages.stage(0), cancel=cancel)
         base_obs = core.prepare_observations(job.base.files, workdir/'base', pole_height_m=job.base_height_m(),
-                                             marker=station.id, progress=stages.stage(0), cancel=cancel)
-        rover = core.prepare_observations(job.rover_files, workdir/'rover', progress=stages.stage(1), cancel=cancel)
+                                             marker=station.id, window=self.base_window(rover),
+                                             progress=stages.stage(1), cancel=cancel)
         stages.stage(2)(0.0, 'Leyendo los puntos de TresVizo Field…')
         points = core.read_field_csv(job.csv_file)
         options = deepcopy(job.options)
@@ -356,6 +358,15 @@ class PointsPage(WizardPage):
         final(1.0, 'Listo.')
         return {'result': result, 'coordinates': coordinates, 'coordinate_warnings': warnings,
                 'choice': job.coordinates}
+
+    def session_window(self, callback):
+        """Con el CSV ya leído, el día y las horas salen de las ocupaciones (sin leer la grabación)."""
+        points = getattr(self, 'csv_points', None)
+        if points:
+            from datetime import timedelta
+            callback(min(p.start for p in points)-timedelta(minutes=30), max(p.end for p in points)+timedelta(minutes=30))
+            return
+        super().session_window(callback)
 
     def make_report(self, report, output, project, user, out):
         return report.points_report(output['result'], project, user, out)

@@ -78,7 +78,8 @@ class FakeCore:
     def find_station(self, marker):
         return next((s for s in STATIONS if s.id == marker.upper()), None)
 
-    def prepare_observations(self, paths, workdir, *, pole_height_m=None, marker=None, progress=None, cancel=None):
+    def prepare_observations(self, paths, workdir, *, pole_height_m=None, marker=None, window=None, progress=None,
+                             cancel=None):
         self.calls.append(('prepare', [Path(p).name for p in paths], pole_height_m, marker))
         _wait(progress, cancel, 4, f'Preparando {marker or "observaciones"}…', self.delay)
         Path(workdir).mkdir(parents=True, exist_ok=True)
@@ -94,7 +95,10 @@ class FakeCore:
         _wait(progress, cancel, 3, 'Bajando órbitas IGS…', self.delay)
         return [Path(workdir)/'IGS0OPSFIN_20262970000_01D_15M_ORB.SP3']
 
-    def process_static(self, rover, bases, options, workdir, progress=None, cancel=None):
+    def rgna_download_guide(self, station_id, start, end):
+        return f'Baja los RINEX de {station_id} del {start:%Y-%m-%d}, de {start:%H:%M} a {end:%H:%M} UTC.'
+
+    def process_static(self, rover, bases, options, workdir, progress=None, cancel=None, point_name=''):
         self.calls.append(('static', [s.id for s, _ in bases], options.elevation_mask_deg))
         _wait(progress, cancel, 10, 'Resolviendo ambigüedades…', self.delay)
         if self.fail:
@@ -119,7 +123,7 @@ class FakeCore:
             adjustment = AdjustmentResult(position=point, covariance_ecef=((1e-5, 0, 0), (0, 1e-5, 0), (0, 0, 3e-5)),
                                           sigma_enu=Enu(0.004, 0.005, 0.011), residuals_enu=residuals, sigma0=1.12,
                                           chi2=2.4, degrees_of_freedom=3*(len(bases)-1), passed=True)
-        return StaticResult(point_name=rover.marker, rover=rover, rover_quality=quality(), bases=[s for s, _ in bases],
+        return StaticResult(point_name=point_name or rover.marker, rover=rover, rover_quality=quality(), bases=[s for s, _ in bases],
                             baselines=baselines, adjustment=adjustment, position=point,
                             sigma_enu=Enu(0.004, 0.005, 0.011), log=['RTKLIB-EX 2.5.1 (doble de prueba)'],
                             warnings=[] if len(bases) > 1 else ['Una sola estación: sin comprobación entre líneas base.'])

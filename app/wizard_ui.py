@@ -35,7 +35,11 @@ INEGI_GUIDE = ('Los RINEX de la RGNA se bajan del sitio del INEGI (Red Geodésic
 
 
 def station_label(station: Station) -> str:
-    return f'{station.id} · {station.name}'
+    """«INEG · Aguascalientes» (sin repetir la clave si el nombre ya empieza con ella)."""
+    name = station.name
+    if name.upper().startswith(station.id.upper()):
+        name = name[len(station.id):].lstrip(' —-·:') or station.name
+    return f'{station.id} · {name}'
 
 
 def ecef_text(p: Ecef) -> str:
@@ -251,7 +255,7 @@ class CoordinateDialog(tk.Toplevel):
 class BasePanel(ttk.Frame):
     """Una estación: sus archivos (arrastrar y soltar) y su estación del catálogo."""
 
-    def __init__(self, parent, app, entry: BaseEntry, title, changed, on_remove=None, kinds_hint=''):
+    def __init__(self, parent, app, entry: BaseEntry, title, changed, on_remove=None, kinds_hint='', guide=None):
         super().__init__(parent, style='Card.TFrame', padding=18)
         self.app, self.entry, self.changed = app, entry, changed
         head = ttk.Frame(self, style='Flat.Card.TFrame')
@@ -263,6 +267,11 @@ class BasePanel(ttk.Frame):
             remove = ttk.Button(head, text='Quitar estación', style='Card.Link.TButton', command=on_remove)
             app.icons.bind(remove, 'x', 16)
             remove.pack(side='right')
+        if guide is not None and app.backend.available('core', 'rgna_download_guide'):
+            which = ttk.Button(head, text='¿Qué archivos bajo?', style='Card.Link.TButton',
+                               command=lambda: guide(entry))
+            app.icons.bind(which, 'download', 16)
+            which.pack(side='right', padx=(0, 12))
         self.drop = DropZone(self, app, 'Arrastra aquí los RINEX de la estación',
                              kinds_hint or 'Como los bajaste del INEGI: horarios o diarios, .Z, .gz, .zip, Hatanaka; '
                                            'RINEX 2.11, 3 o 4.', self.add, RINEX_TYPES)
@@ -619,6 +628,65 @@ class WizardPage(ttk.Frame):
             self.worker.cancel.set()
             self.progress.cancelling()
 
+    # --- Guía de descarga de la RGNA ---------------------------------------------------------------------------
+
+    def session_window(self, callback):
+        """Día y horas UTC de la sesión del rover (se leen de la grabación; la copia temporal se borra)."""
+        import hashlib
+        import shutil
+        files = [Path(p) for p in self.job.rover_files]
+        if not files:
+            self.app.show_error('user', 'Agrega primero la grabación del rover: de ella salen el día y las horas de '
+                                        'la sesión.')
+            return
+        try:
+            key = tuple((str(p), p.stat().st_mtime_ns) for p in files)
+        except OSError as exc:
+            self.app.show_error('user', f'No se puede leer «{Path(exc.filename or "").name}».')
+            return
+        cache = getattr(self, '_window_cache', None)
+        if cache and cache[0] == key:
+            callback(*cache[1])
+            return
+        folder = self.app.settings.data_dir()/'Temporal'/hashlib.sha256(repr(key).encode()).hexdigest()[:16]
+        core = self.app.backend.core
+
+        def work(progress, cancel):
+            try:
+                obs = core.prepare_observations(files, folder, progress=progress, cancel=cancel)
+                return obs.start, obs.end
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
+
+        def done(window):
+            self.app.set_status('Sesión del rover leída.')
+            if window[0] is None or window[1] is None:
+                self.app.show_error('user', 'La grabación del rover no trae épocas: revisa el archivo.')
+                return
+            self._window_cache = (key, window)
+            callback(*window)
+        self.app.set_status('Leyendo la grabación del rover para saber el día y las horas de la sesión…')
+        tasks.run(self, work, on_done=done,
+                  on_error=lambda kind, message, detail: self.app.show_error(kind, message, detail),
+                  on_cancel=lambda m: self.app.set_status(m))
+
+    def rgna_guide(self, entry: BaseEntry):
+        if entry.station is None:
+            self.app.show_error('user', 'Elige primero la estación de la RGNA.')
+            return
+        core = self.app.backend.core
+
+        def show(start, end):
+            from app.rgna_download import RgnaGuideDialog
+            try:
+                text = core.rgna_download_guide(entry.station.id, start, end)
+            except Exception as exc:  # noqa: BLE001
+                kind, message = tasks.classify(exc)
+                self.app.show_error(kind, message, repr(exc))
+                return
+            RgnaGuideDialog(self.app, entry.station, text)
+        self.session_window(show)
+
     # --- Proyecto -----------------------------------------------------------------------------------------------
 
     def default_name(self) -> str:
@@ -810,6 +878,14 @@ class WizardPage(ttk.Frame):
             return self.work(job, project, workdir, progress, cancel)
         self.worker = tasks.run(self, work, on_progress=self.progress.update_progress, on_done=done, on_error=failed,
                                 on_cancel=cancelled)
+
+    @staticmethod
+    def base_window(rover):
+        """Ventana del rover para recortar las bases (con cinco minutos de margen), si se conoce."""
+        from datetime import timedelta
+        if rover.start is None or rover.end is None:
+            return None
+        return rover.start-timedelta(minutes=5), rover.end+timedelta(minutes=5)
 
     def required_parts(self) -> str | None:
         for key in ('core', 'crs'):

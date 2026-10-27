@@ -108,6 +108,29 @@ def test_static_wizard_full_flow(app, tmp_path):
     assert 'LF-01' in app.clipboard_get()
 
 
+def test_rgna_guide_from_rover_session(app, tmp_path):
+    f = files(tmp_path)
+    page = app.show('Georreferenciar punto')
+    page.add_rover([f['S-20261024-150214.bin']])
+    entry = page.job.bases[0]
+    page.rgna_guide(entry)                          # sin estación: lo dice
+    assert app.shown[-1][1][1].startswith('Elige primero')
+    entry.station = dobles.STATIONS[0]
+    page.rgna_guide(entry)
+    from app.rgna_download import RgnaGuideDialog
+    pump(app, lambda: any(isinstance(w, RgnaGuideDialog) for w in app.winfo_children()))
+    dialog = next(w for w in app.winfo_children() if isinstance(w, RgnaGuideDialog))
+    assert 'INEG' in dialog.text and '15:02' in dialog.text
+    assert not (app.settings.data_dir()/'Temporal').exists() or not any((app.settings.data_dir()/'Temporal').iterdir())
+
+
+def test_station_label():
+    from app.wizard_ui import station_label
+    from tresvizo_ppk.model import Ecef, Station
+    assert station_label(Station('INEG', 'INEG — Aguascalientes, Ags.', Ecef(0, 0, 0))) == 'INEG · Aguascalientes, Ags.'
+    assert station_label(Station('UAGU', 'Universidad', Ecef(0, 0, 0))) == 'UAGU · Universidad'
+
+
 def test_cancel_keeps_wizard_usable(app, tmp_path):
     app.backend.parts['core'] = dobles.FakeCore(delay=0.2)
     f = files(tmp_path)
