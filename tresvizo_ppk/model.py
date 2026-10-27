@@ -275,3 +275,7 @@ class Project:
     point_name: str = ""
     created: datetime | None = None
     processed: datetime | None = None
+    # Añadido por la interfaz (proyectos .tvppk, §1.4):
+    bases: list[Station] = field(default_factory=list)   # estaciones elegidas con su coordenada (editada o no)
+    base_kind: str = "rgna"                    # PPK de puntos: «rgna» o «own» (base propia)
+    source_project: str = ""                   # base propia encadenada: ruta relativa del proyecto estático
