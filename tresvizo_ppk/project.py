@@ -73,8 +73,7 @@ def workdir(project: Project, path: Path | None = None) -> Path:
     return Path(folder)/(stem+".trabajo")
 
 
-def set_inputs(project: Project, files: dict[str, list[Path]], folder: Path, previous: dict[str, str] | None = None,
-               progress=None, cancel=None) -> None:
+def set_inputs(project: Project, files: dict[str, list[Path]], folder: Path, progress=None, cancel=None) -> None:
     """Rutas relativas y SHA-256 de cada archivo por papel («rover», «base:CHIH», «csv», «precise»…)."""
     folder = Path(folder)
     total = sum(len(v) for v in files.values()) or 1

@@ -648,7 +648,7 @@ class WizardPage(ttk.Frame):
 
     def _write(self, path: Path, progress=None, cancel=None) -> Project:
         project = self.make_project(path.parent)
-        projects.set_inputs(project, self.job.files(), path.parent, progress, cancel)
+        projects.set_inputs(project, self.job.files(), path.parent, progress=progress, cancel=cancel)
         projects.save(project, path, __version__)
         return project
 
