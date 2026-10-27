@@ -179,6 +179,22 @@ class ThemeManager:
                     bordercolor=t['background'], lightcolor=t['background'], darkcolor=t['background'],
                     arrowsize=8, width=8)
         s.map('Idle.Vertical.TScrollbar', background=[('active', t['background'])])
+        # Cápsulas de clase del catálogo (color de serie del tema, fondo suave y texto con contraste 4.5:1).
+        from app.catalog_view import CLASSES
+        for cls, (_, _, token) in CLASSES.items():
+            back = mix(t[token], t['surface'], .84)
+            fore = readable(t[token], back)
+            t['cap_'+cls+'_bg'], t['cap_'+cls+'_fg'] = back, fore
+            s.configure(f'Cap.{cls}.TLabel', background=back, foreground=fore, padding=(8, 3), font=f.strong(-2))
+        for name, bg, fg in (('Installed', 'success_bg', 'success_fg'), ('Available', 'info_bg', 'info_fg'),
+                             ('Update', 'warning_bg', 'warning_fg'), ('Neutral', 'secondary', 'on_secondary')):
+            s.configure(f'Cap.{name}.TLabel', background=t[bg], foreground=t[fg], padding=(8, 3), font=f.strong(-2))
+        for style, bg, fg in (('Seg.TButton', 'surface', 'text'), ('Seg.Active.TButton', 'selection', 'on_selection')):
+            s.configure(style, background=t[bg], foreground=t[fg], padding=(12, 6), borderwidth=1,
+                        bordercolor=t['separator'] if bg == 'surface' else t['focus'], relief='solid', font=f.body(-1),
+                        focuscolor=t['focus'], focusthickness=2)
+            s.map(style, background=[('pressed', t['selection_pressed']), ('active', t['selection_hover'])],
+                  foreground=[('pressed', t['on_selection_pressed']), ('active', t['on_selection_hover'])])
         for kind in ('error', 'warning', 'success', 'info'):
             s.configure(kind+'.TLabel', background=t[kind+'_bg'], foreground=t[kind+'_fg'], padding=10)
             s.configure(kind+'.TFrame', background=t[kind+'_bg'])

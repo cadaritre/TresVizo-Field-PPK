@@ -8,7 +8,8 @@ from app.themes import readable
 
 # Estilo del botón → token de fondo del que salen los colores del icono.
 STYLE_KEYS = {'Active.Nav.TButton': 'selection', 'Nav.TButton': 'sidebar', 'Primary.TButton': 'button',
-              'TButton': 'secondary', 'TMenubutton': 'secondary', '': 'secondary'}
+              'TButton': 'secondary', 'TMenubutton': 'secondary', 'Seg.TButton': 'surface',
+              'Seg.Active.TButton': 'selection', '': 'secondary'}
 
 
 class Icons:
@@ -29,7 +30,7 @@ class Icons:
     def size(self, base=18):
         return int(base*getattr(self.theme.root, 'ui_scale', 1))
 
-    def bind(self, widget, name, size=18, show_text=True):
+    def bind(self, widget, name, size=18, show_text=True, color_token=None):
         """Icono con los colores de cada estado del botón (reposo, hover, presionado, deshabilitado)."""
         widget.icon_name = name
 
@@ -50,7 +51,11 @@ class Icons:
                           'active', self.photo(widget.icon_name, pixels, readable(tokens['primary'], tokens['selection']))]
             else:
                 key = STYLE_KEYS.get(style, 'secondary')
-                states = [self.photo(widget.icon_name, pixels, tokens['on_'+key])]
+                normal = tokens['on_'+key]
+                if color_token:
+                    # Icono con el color de su clase (contraste 3:1 sobre el fondo del botón).
+                    normal = readable(tokens[color_token], tokens[key], 3)
+                states = [self.photo(widget.icon_name, pixels, normal)]
                 for state, variant in [('disabled', 'disabled'), ('pressed', 'pressed'), ('active', 'hover')]:
                     states.extend((state, self.photo(widget.icon_name, pixels, tokens[f'on_{key}_{variant}'])))
             widget.icon_states = states

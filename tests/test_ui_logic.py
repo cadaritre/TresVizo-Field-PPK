@@ -284,3 +284,35 @@ def test_builtin_themes_meet_contrast():
             assert contrast(t['solution_'+key], t['surface']) >= 3, (name, key)
         for key in ('button', 'secondary', 'sidebar', 'selection'):
             assert contrast(t['on_'+key], t[key]) >= 4.5, (name, key)
+
+
+def test_catalog_view_classes_search_and_groups():
+    from types import SimpleNamespace as N
+    from app import catalog_view as cv
+    item = lambda **k: N(**{**dict(id='', kind='', title='', region='', countries=(), authority='A', license='L',
+                                  license_url='', attribution='', transformation_notice='', version='1', revision=1,
+                                  bytes=1, size_text='1 KB', bundled=False, installed=False, update_available=False,
+                                  downloadable=True, requires=(), systems=0), **k})
+    items = [item(id='crs-br', kind='crs-package', title='Brasil', countries=('BR',), systems=40),
+             item(id='ggm10', kind='geoid', title='GGM10 · Geoide Gravimétrico Mexicano', countries=('MX',),
+                  bundled=True, installed=True, downloadable=False),
+             item(id='ntv2-es', kind='datum-grid', title='Rejilla ED50 → ETRS89', countries=('ES',)),
+             item(id='rbmc', kind='cors-network', title='RBMC — IBGE, Brasil', countries=('BR',))]
+    systems = [N(code='EPSG:6369', name='Mexico ITRF2008 / UTM zona 14N', kind='projected', datum='Mexico ITRF2008',
+                 countries=(), frame='', legacy=False, accuracy_text='', missing_grids=(), geoid_model_id=None,
+                 origin='fábrica', area='México'),
+               N(code='EPSG:4326', name='WGS 84', kind='geographic2D', datum='World Geodetic System 1984',
+                 countries=(), frame='', legacy=False, accuracy_text='', missing_grids=(), geoid_model_id=None,
+                 origin='fábrica', area='Mundo')]
+    crs = N(catalog=lambda: items, systems=lambda: systems, definition=lambda code: None)
+    entries = cv.build(crs)
+    assert cv.counts(entries) == {'projected': 2, 'geographic': 2, 'geoid': 1, 'grid': 1, 'cors': 1}
+    assert [e.title for e in cv.select(entries, 'projected', 'méxico')] == ['Mexico ITRF2008 / UTM zona 14N']
+    assert [e.title for e in cv.select(entries, None, 'EPSG:6369')] == ['Mexico ITRF2008 / UTM zona 14N']
+    assert [e.cls for e in cv.select(entries, None, 'brasil')] == ['projected', 'geographic', 'cors']
+    assert all(not e.installed for e in cv.select(entries, None, state='available'))
+    assert {e.title for e in cv.select(entries, None, state='installed')} >= {'WGS 84', 'GGM10 · Geoide Gravimétrico Mexicano'}
+    groups = cv.grouped(cv.select(entries, 'projected'))
+    assert list(groups) == ['Norteamérica', 'Sudamérica'] and list(groups['Sudamérica']) == ['Brasil']
+    assert cv.grouped(cv.select(entries, 'geographic'))['Mundo']['Mundo'][0].title == 'WGS 84'
+    assert cv.normalize('Ñandú México') == 'nandu mexico'

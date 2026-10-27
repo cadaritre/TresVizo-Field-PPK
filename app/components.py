@@ -504,3 +504,54 @@ class Collapsible(ttk.Frame):
                 if not self.opened:
                     self.body.pack_forget()
         step()
+
+
+class FlowFrame(ttk.Frame):
+    """Acomoda sus hijos en filas que se envuelven según el ancho disponible (chips, cápsulas, acciones).
+
+    Los hijos se agregan con `add(widget)`; nunca se recortan al angostar la ventana."""
+
+    def __init__(self, parent, gap=8, row_gap=6, **kwargs):
+        super().__init__(parent, **kwargs)
+        self.gap, self.row_gap, self.items, self._width = gap, row_gap, [], None
+        self.bind('<Configure>', self._layout)
+
+    def add(self, widget, stretch=False):
+        widget.flow_stretch = stretch
+        self.items.append(widget)
+        self.after_idle(self._layout)
+        return widget
+
+    def clear(self):
+        for widget in self.items:
+            widget.destroy()
+        self.items = []
+
+    def _layout(self, event=None):
+        if not self.winfo_exists():
+            return
+        width = max(1, self.winfo_width())
+        if width <= 1:
+            width = max(1, self.winfo_reqwidth())
+        row, x = 0, 0
+        positions = []
+        for widget in self.items:
+            if not widget.winfo_exists():
+                continue
+            w = widget.winfo_reqwidth()
+            if x and x+w > width:
+                row, x = row+1, 0
+            positions.append((widget, row, x))
+            x += w+self.gap
+        signature = tuple((str(w), r) for w, r, _ in positions)
+        if signature == self._width:
+            return
+        self._width = signature
+        for widget in self.items:
+            if widget.winfo_exists():
+                widget.grid_forget()
+        columns: dict[int, int] = {}
+        for widget, r, _ in positions:
+            c = columns.get(r, 0)
+            widget.grid(row=r, column=c, sticky='w', padx=(0, self.gap), pady=(0, self.row_gap))
+            columns[r] = c+1

@@ -137,159 +137,308 @@ class CoordinateChooser(ttk.Frame):
 
 
 class CrsPage(ttk.Frame):
+    """Catálogo profesional: una sección por clase, búsqueda al instante, filtro de estado, agrupado por región y
+    país, todo el índice visible (lo no instalado se instala desde aquí) y detalle completo de cada entrada."""
+
+    STATES = [('installed', 'Instalados'), ('available', 'Disponibles'), ('all', 'Todos')]
+
     def __init__(self, parent, app):
         super().__init__(parent)
-        self.app = app
-        self.worker = None
-        self.items = []
+        from app import catalog_view
+        from app.components import FlowFrame
+        self.app, self.cv = app, catalog_view
+        self.entries, self.worker, self.cls, self.state = [], None, 'projected', 'all'
+        self.loaded_groups: set[str] = set()
         ttk.Label(self, text='Sistemas y geoides', style='Title.TLabel').pack(anchor='w')
-        wrap_label(self, 'El mismo catálogo firmado que las apps TresVizo Field. Vienen incluidos WGS 84, Mexico ITRF2008 '
-                         'con UTM 11N a 16N, GGM10 y GGM25; lo demás se baja de github.com/cadaritre/GNSS-TresVizo '
-                         'solo cuando lo pides, y se comprueba su firma antes de usarlo.').pack(anchor='w', fill='x',
-                                                                                                 pady=(4, 14))
+        wrap_label(self, 'El catálogo firmado de TresVizo Field: sistemas, geoides, rejillas y redes CORS. Lo de fábrica '
+                         'viene incluido; lo demás se baja de github.com/cadaritre/GNSS-TresVizo solo cuando lo pides y '
+                         'se comprueba su firma antes de usarlo.').pack(anchor='w', fill='x', pady=(4, 10))
         self.notice = ttk.Frame(self)
         self.notice.pack(fill='x')
-        scroll = ScrollFrame(self)
-        scroll.pack(fill='both', expand=True)
-        body = scroll.body
-        frame, inner = card(body, 'Catálogo')
-        frame.pack(fill='x')
-        actions = ttk.Frame(inner, style='Flat.Card.TFrame')
-        actions.pack(fill='x', pady=(0, 10))
-        self.refresh_button = ttk.Button(actions, text='Actualizar catálogo', command=self.download_index)
-        app.icons.bind(self.refresh_button, 'refresh-cw')
-        self.refresh_button.pack(side='left')
-        self.install_button = ttk.Button(actions, text='Bajar e instalar', style='Primary.TButton',
-                                         command=self.install)
-        app.icons.bind(self.install_button, 'download')
-        self.install_button.pack(side='left', padx=8)
-        self.remove_button = ttk.Button(actions, text='Quitar', style='Card.Link.TButton', command=self.uninstall)
-        app.icons.bind(self.remove_button, 'trash-2', 16)
-        self.remove_button.pack(side='left')
-        holder = ttk.Frame(inner, style='Flat.Card.TFrame')
-        holder.pack(fill='x')
-        self.tree = ttk.Treeview(holder, columns=('title', 'kind', 'region', 'version', 'size', 'state'),
-                                 show='headings', height=9, selectmode='browse')
-        for key, title, width, stretch in [('title', 'Nombre', 280, True), ('kind', 'Tipo', 170, False),
-                                           ('region', 'Región', 130, False), ('version', 'Versión', 100, False),
-                                           ('size', 'Tamaño', 80, False), ('state', 'Estado', 190, False)]:
-            self.tree.heading(key, text=title, anchor='w')
-            self.tree.column(key, width=width, minwidth=60, stretch=stretch, anchor='w')
-        scrolled(self.tree, holder)
-        self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_details())
-        self.details = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')
-        self.details.pack(fill='x', pady=(10, 0))
-        inner.bind('<Configure>', lambda e: self.details.configure(wraplength=max(200, e.width-20)), add='+')
-        self.progress = ProgressPanel(inner, app, self.cancel)
-        frame, inner = card(body, 'Sistema por omisión',
-                            'El que se propone en cada proyecto nuevo; cada proyecto guarda el suyo.')
-        frame.pack(fill='x', pady=(18, 0))
-        self.chooser = CoordinateChooser(inner, app, app.settings.coordinates(), changed=self.default_changed)
-        self.chooser.pack(fill='x')
-        self.saved_label = ttk.Label(inner, text='', style='Card.Subtitle.TLabel')
-        self.saved_label.pack(anchor='w', pady=(8, 0))
+        self.segments = FlowFrame(self)
+        self.segments.pack(fill='x', pady=(0, 4))
+        self.segment_buttons = {}
+        for cls, (title, icon, _) in catalog_view.CLASSES.items():
+            button = ttk.Button(self.segments, text=title, style='Seg.TButton', command=lambda c=cls: self.pick(c))
+            app.icons.bind(button, icon, 16, color_token=self.cv.CLASSES[cls][2])
+            self.segments.add(button)
+            self.segment_buttons[cls] = button
+        tools = FlowFrame(self)
+        tools.pack(fill='x', pady=(4, 8))
+        search = ttk.Frame(tools)
+        app.icons.label(search, 'search', 16).pack(side='left', padx=(0, 6))
+        self.query = tk.StringVar()
+        entry = ttk.Entry(search, textvariable=self.query, width=34)
+        entry.pack(side='left')
+        from app.components import Tooltip
+        Tooltip(entry, 'Nombre, EPSG, país, datum o zona; sin importar acentos ni mayúsculas.', app.theme)
+        self.query.trace_add('write', lambda *a: self.after_idle(self.refresh_list))
+        tools.add(search)
+        states = ttk.Frame(tools)
+        self.state_buttons = {}
+        for key, label in self.STATES:
+            button = ttk.Button(states, text=label, style='Seg.TButton', command=lambda k=key: self.pick_state(k))
+            button.pack(side='left', padx=(0, 4))
+            self.state_buttons[key] = button
+        tools.add(states)
+        self.refresh_button = ttk.Button(tools, text='Actualizar catálogo', command=self.download_index)
+        app.icons.bind(self.refresh_button, 'refresh-cw', 16)
+        tools.add(self.refresh_button)
+        self.body = ttk.Frame(self)
+        self.body.pack(fill='both', expand=True)
+        self.list_card = ttk.Frame(self.body, style='Card.TFrame', padding=1)
+        self.tree = ttk.Treeview(self.list_card, columns=('code', 'state'), show='tree headings', selectmode='browse')
+        self.tree.heading('#0', text='Nombre', anchor='w')
+        self.tree.heading('code', text='Código', anchor='w')
+        self.tree.heading('state', text='Estado', anchor='w')
+        self.tree.column('#0', width=330, minwidth=200, stretch=True)
+        self.tree.column('code', width=110, minwidth=80, stretch=False)
+        self.tree.column('state', width=120, minwidth=100, stretch=False)
+        scrolled(self.tree, self.list_card)
+        self.tree.bind('<<TreeviewOpen>>', self.expand)
+        self.tree.bind('<<TreeviewSelect>>', lambda e: self.show_detail())
+        self.detail_scroll = ScrollFrame(self.body, padding=(0, 0, 4, 4))
+        self.detail = ttk.Frame(self.detail_scroll.body, style='Card.TFrame', padding=16)
+        self.detail.pack(fill='x')
+        self.body.bind('<Configure>', self.arrange, add='+')
+        self.arranged = None
         if app.backend.crs is None:
-            Banner(self.notice, app, 'error', app.backend.missing_message('crs')).pack(fill='x', pady=(0, 12))
-            for button in (self.refresh_button, self.install_button, self.remove_button):
-                button.state(['disabled'])
+            Banner(self.notice, app, 'error', app.backend.missing_message('crs')).pack(fill='x', pady=(0, 8))
+            self.refresh_button.state(['disabled'])
+        self.paint_segments()
+
+    # --- Disposición: lista y detalle lado a lado, o uno sobre otro si la ventana es angosta -----------------------
+
+    def arrange(self, event=None):
+        wide = self.body.winfo_width() >= 860
+        if wide == self.arranged:
+            return
+        self.arranged = wide
+        self.list_card.grid_forget()
+        self.detail_scroll.grid_forget()
+        if wide:
+            self.body.columnconfigure(0, weight=3)
+            self.body.columnconfigure(1, weight=2)
+            self.body.rowconfigure(0, weight=1)
+            self.body.rowconfigure(1, weight=0)
+            self.list_card.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
+            self.detail_scroll.grid(row=0, column=1, sticky='nsew')
+        else:
+            self.body.columnconfigure(0, weight=1)
+            self.body.columnconfigure(1, weight=0)
+            self.body.rowconfigure(0, weight=3)
+            self.body.rowconfigure(1, weight=2)
+            self.list_card.grid(row=0, column=0, sticky='nsew', pady=(0, 10))
+            self.detail_scroll.grid(row=1, column=0, sticky='nsew')
+
+    # --- Datos ------------------------------------------------------------------------------------------------
 
     def on_show(self):
-        self.refresh()
+        self.reload()
 
-    def refresh(self):
+    def reload(self):
         crs = self.app.backend.crs
         if crs is None:
             return
+        from app.wizard_ui import network_catalog
+
+        def with_networks(found):
+            try:
+                self.entries = self.cv.build(crs, found)
+            except Exception as exc:  # noqa: BLE001
+                kind, message = tasks.classify(exc)
+                self.app.show_error(kind, message, repr(exc))
+                self.entries = []
+            self.paint_segments()
+            self.refresh_list()
+        network_catalog(self.app, with_networks)
+
+    def pick(self, cls):
+        self.cls = cls
+        self.paint_segments()
+        self.refresh_list()
+
+    def pick_state(self, state):
+        self.state = state
+        self.paint_segments()
+        self.refresh_list()
+
+    def paint_segments(self):
+        counts = self.cv.counts(self.entries, self.query.get(), self.state) if self.entries else {}
+        for cls, button in self.segment_buttons.items():
+            title = self.cv.CLASSES[cls][0]
+            button.configure(text=f'{title}  {counts.get(cls, 0)}' if self.entries else title,
+                             style='Seg.Active.TButton' if cls == self.cls else 'Seg.TButton')
+            button.refresh_icon()
+        for key, button in self.state_buttons.items():
+            button.configure(style='Seg.Active.TButton' if key == self.state else 'Seg.TButton')
+
+    def refresh_list(self):
+        self.paint_segments()
         selected = self.tree.selection()
-        self.items = crs.catalog()
         self.tree.delete(*self.tree.get_children())
-        for item in self.items:
-            self.tree.insert('', 'end', iid=item.id, values=(item.title, KIND_TEXT.get(item.kind, item.kind),
-                                                             item.region, item.version or '—', item.size_text or '—',
-                                                             item_state(item)))
+        self.loaded_groups = set()
+        self.visible = self.cv.select(self.entries, self.cls, self.query.get(), self.state)
+        self.groups = self.cv.grouped(self.visible)
+        searching = bool(self.query.get().strip())
+        for region, countries in self.groups.items():
+            total = sum(len(v) for v in countries.values())
+            rid = 'r:'+region
+            self.tree.insert('', 'end', iid=rid, text=f'{region}  ·  {total}', open=True, tags=('group',))
+            for country, items in countries.items():
+                code = next((c for c in items[0].countries if self.cv.country_region(c)[0] == country), '')
+                cid = f'c:{region}:{country}'
+                label = f'{code} · {country}' if code else country
+                self.tree.insert(rid, 'end', iid=cid, text=f'{label}  ·  {len(items)}', open=False,
+                                 tags=('country',))
+                if searching or len(self.visible) <= 60:
+                    self.fill_group(cid)
+                    self.tree.item(cid, open=True)
+                else:
+                    self.tree.insert(cid, 'end', iid=cid+':…', text='…')   # se llena al abrir (lista perezosa)
+        tokens = self.app.theme.tokens
+        self.tree.tag_configure('group', font=self.app.theme.fonts.strong(), foreground=tokens['text'])
+        self.tree.tag_configure('country', foreground=tokens['muted_surface'])
+        if not self.visible:
+            self.tree.insert('', 'end', iid='vacío', text='Nada coincide con la búsqueda y el filtro.')
         keep = [i for i in selected if self.tree.exists(i)]
+        if not keep:
+            first = next((i for r in self.tree.get_children() for c in self.tree.get_children(r)
+                          for i in self.tree.get_children(c) if '|' in i), None)
+            keep = [first] if first else []
         if keep:
             self.tree.selection_set(keep)
-        elif self.items:
-            self.tree.selection_set(self.items[0].id)
-        self.show_details()
-        self.chooser.reload()
+            self.tree.see(keep[0])
+        else:
+            self.show_detail()
 
-    def selected(self):
-        chosen = self.tree.selection()
-        return next((i for i in self.items if chosen and i.id == chosen[0]), None)
-
-    def show_details(self):
-        item = self.selected()
-        busy = self.worker is not None
-        if item is None:
-            self.details.configure(text='')
-            self.install_button.state(['disabled'])
-            self.remove_button.state(['disabled'])
+    def fill_group(self, cid):
+        if cid in self.loaded_groups:
             return
-        lines = [x for x in (item.authority and f'Fuente: {item.authority}',
-                             item.license and f'Licencia: {item.license}' + (f' ({item.license_url})'
-                                                                             if item.license_url else ''),
-                             item.attribution, item.transformation_notice,
-                             item.systems and f'{item.systems} sistemas',
-                             item.requires and 'Necesita: '+', '.join(item.requires)) if x]
-        self.details.configure(text='\n'.join(lines))
-        can_install = item.downloadable and (not item.installed or item.update_available) and not busy
-        self.install_button.configure(text='Actualizar' if item.installed and item.update_available else
-                                      'Bajar e instalar')
-        self.install_button.refresh_icon()
-        self.install_button.state(['!disabled'] if can_install else ['disabled'])
-        self.remove_button.state(['!disabled'] if item.installed and not item.bundled and not busy else ['disabled'])
+        self.loaded_groups.add(cid)
+        _, region, country = cid.split(':', 2)
+        for child in self.tree.get_children(cid):
+            self.tree.delete(child)
+        for entry in self.groups.get(region, {}).get(country, []):
+            iid = f'{cid}|{entry.key}'
+            self.tree.insert(cid, 'end', iid=iid, text=entry.title, values=(entry.code or '—', entry.short_state))
+
+    def expand(self, event=None):
+        focus = self.tree.focus()
+        if focus.startswith('c:'):
+            self.fill_group(focus)
+
+    def selected_entry(self):
+        chosen = self.tree.selection()
+        if not chosen or '|' not in chosen[0]:
+            return None
+        key = chosen[0].split('|', 1)[1]
+        return next((e for e in self.entries if e.key == key), None)
+
+    # --- Detalle ----------------------------------------------------------------------------------------------
+
+    def show_detail(self):
+        from app.components import FlowFrame
+        for child in self.detail.winfo_children():
+            child.destroy()
+        entry = self.selected_entry()
+        if entry is None:
+            ttk.Label(self.detail, text='Elige una entrada de la lista para ver su detalle.',
+                      style='Card.Subtitle.TLabel').pack(anchor='w')
+            return
+        caps = FlowFrame(self.detail, style='Flat.Card.TFrame')
+        caps.pack(fill='x')
+        title, icon, _ = self.cv.CLASSES[entry.cls]
+        cap = ttk.Label(caps, text=self.cv.SHORT[entry.cls], style=f'Cap.{entry.cls}.TLabel')
+        cap.image = self.app.icons.photo(icon, self.app.icons.size(14), self.app.theme.tokens[f'cap_{entry.cls}_fg'])
+        cap.configure(image=cap.image, compound='left')
+        caps.add(cap)
+        state_style = {'De fábrica': 'Neutral', 'Instalado': 'Installed', 'Actualización disponible': 'Update',
+                       'Disponible para bajar': 'Available'}.get(entry.state, 'Neutral')
+        caps.add(ttk.Label(caps, text=entry.state, style=f'Cap.{state_style}.TLabel'))
+        for code in entry.countries:
+            caps.add(ttk.Label(caps, text=f'{code} · {self.cv.country_region(code)[0]}', style='Cap.Neutral.TLabel'))
+        wrap_label(self.detail, entry.title, style='Card.Section.TLabel', margin=40).pack(fill='x', pady=(10, 2))
+        if entry.subtitle:
+            wrap_label(self.detail, entry.subtitle, style='Card.Subtitle.TLabel', margin=40).pack(fill='x')
+        grid = ttk.Frame(self.detail, style='Flat.Card.TFrame')
+        grid.pack(fill='x', pady=(10, 0))
+        grid.columnconfigure(1, weight=1)
+        values = []
+        for row, (label, value) in enumerate(entry.details):
+            ttk.Label(grid, text=label, style='Card.Subtitle.TLabel').grid(row=row, column=0, sticky='nw', pady=2,
+                                                                          padx=(0, 12))
+            v = ttk.Label(grid, text=value, style='Card.TLabel', justify='left')
+            v.grid(row=row, column=1, sticky='nw', pady=2)
+            values.append(v)
+        grid.bind('<Configure>', lambda e: [v.configure(wraplength=max(160, e.width-200)) for v in values
+                                            if v.winfo_exists()], add='+')
+        if entry.package and entry.cls in ('projected', 'geographic') and not entry.key.startswith('pkg:'):
+            wrap_label(self.detail, f'Lo trae: {entry.package}', style='Card.Subtitle.TLabel', margin=40).pack(
+                fill='x', pady=(8, 0))
+        actions = FlowFrame(self.detail, style='Flat.Card.TFrame')
+        actions.pack(fill='x', pady=(12, 0))
+        busy = self.worker is not None
+        if entry.downloadable and (not entry.installed or entry.update):
+            install = ttk.Button(actions, text='Actualizar' if entry.installed else 'Bajar e instalar',
+                                 style='Primary.TButton', command=lambda: self.install(entry))
+            self.app.icons.bind(install, 'download', 16)
+            install.state(['disabled'] if busy else ['!disabled'])
+            actions.add(install)
+        if entry.installed and entry.item_id and not entry.bundled:
+            remove = ttk.Button(actions, text='Quitar', command=lambda: self.uninstall(entry))
+            self.app.icons.bind(remove, 'trash-2', 16)
+            remove.state(['disabled'] if busy else ['!disabled'])
+            actions.add(remove)
+        self.progress = ProgressPanel(self.detail, self.app, self.cancel)
+        self.app.theme.walk(self.detail)
+
+    # --- Acciones ---------------------------------------------------------------------------------------------
 
     def _run(self, work, message, done_text):
         self.progress.pack(fill='x', pady=(12, 0))
         self.progress.start(message)
-        for button in (self.refresh_button, self.install_button, self.remove_button):
-            button.state(['disabled'])
+        self.refresh_button.state(['disabled'])
 
         def finish(text=''):
             self.worker = None
-            self.progress.stop(text)
             self.refresh_button.state(['!disabled'])
-            self.refresh()
-
-        def done(_):
-            finish(done_text)
-            self.app.set_status(done_text)
+            self.app.networks_cache = None
+            self.app.set_status(text)
+            self.reload()
 
         def error(kind, message, detail):
             finish(message)
             self.app.show_error(kind, message, detail)
-
-        self.worker = tasks.run(self, work, on_progress=self.progress.update_progress, on_done=done, on_error=error,
+        self.worker = tasks.run(self, work, on_progress=self.progress.update_progress,
+                                on_done=lambda _: finish(done_text), on_error=error,
                                 on_cancel=lambda m: finish('Cancelado. No se instaló nada a medias.'))
 
     def download_index(self):
         crs = self.app.backend.crs
+        self.show_detail()   # el panel de progreso vive en el detalle
         self._run(lambda p, c: crs.download_index(p, c),
-                  'Bajando el catálogo firmado de github.com/cadaritre/GNSS-TresVizo…', 'Catálogo actualizado y '
-                  'verificado (firma Ed25519).')
+                  'Bajando el catálogo firmado de github.com/cadaritre/GNSS-TresVizo…',
+                  'Catálogo actualizado y verificado (firma Ed25519).')
 
-    def install(self):
-        item = self.selected()
-        if item is None:
-            return
-        size = f' ({item.size_text})' if item.size_text else ''
-        if not messagebox.askokcancel('Bajar e instalar', f'Se bajará «{item.title}»{size} de '
+    def install(self, entry):
+        size = f' ({entry.size})' if entry.size else ''
+        if not messagebox.askokcancel('Bajar e instalar', f'Se bajará «{entry.package or entry.title}»{size} de '
                                       'github.com/cadaritre/GNSS-TresVizo y se comprobará contra el catálogo firmado '
-                                      'antes de usarlo.', parent=self):
+                                      'antes de usarlo.', parent=self.app):
             return
         crs = self.app.backend.crs
-        self._run(lambda p, c: crs.install(item.id, p, c), f'Bajando {item.title}…', f'«{item.title}» instalado.')
+        self._run(lambda p, c: crs.install(entry.item_id, p, c), f'Bajando {entry.package or entry.title}…',
+                  f'«{entry.package or entry.title}» instalado.')
 
-    def uninstall(self):
-        item = self.selected()
-        if item is None or not messagebox.askyesno('Quitar', f'¿Quitar «{item.title}» de este equipo? Los proyectos '
-                                                   'que lo usan dirán que falta hasta que lo vuelvas a bajar.',
-                                                   icon='warning', parent=self):
+    def uninstall(self, entry):
+        what = entry.package or entry.title
+        if not messagebox.askyesno('Quitar', f'¿Quitar «{what}» de este equipo? Los proyectos que lo usan dirán que '
+                                   'falta hasta que lo vuelvas a bajar.', icon='warning', parent=self.app):
             return
-        self.app.guard(self.app.backend.crs.uninstall, item.id)
-        self.refresh()
+        self.app.guard(self.app.backend.crs.uninstall, entry.item_id)
+        self.app.networks_cache = None
+        self.reload()
 
     def cancel(self):
         if self.worker:
@@ -298,8 +447,3 @@ class CrsPage(ttk.Frame):
 
     def busy(self):
         return self.worker is not None
-
-    def default_changed(self):
-        choice = self.chooser.get()
-        self.app.settings.save(crs_id=choice.crs_id, zone=choice.zone, geoid_id=choice.geoid_id)
-        self.saved_label.configure(text='Guardado como sistema por omisión.')

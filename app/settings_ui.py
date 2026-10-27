@@ -78,6 +78,13 @@ class SettingsPage(ttk.Frame):
         self.decimals = tk.StringVar(value=str(v.decimals))
         ttk.Spinbox(row, from_=0, to=4, textvariable=self.decimals, width=4, state='readonly',
                     command=self.touch).pack(side='left')
+        from app.crs_ui import CoordinateChooser
+        frame, inner = card(body, 'Sistema de coordenadas por omisión',
+                            'El que se propone en cada proyecto nuevo; cada proyecto guarda el suyo. Los sistemas y '
+                            'geoides se bajan en «Sistemas y geoides».')
+        frame.pack(fill='x', pady=(16, 0))
+        self.chooser = CoordinateChooser(inner, app, app.settings.coordinates(), changed=self.touch)
+        self.chooser.pack(fill='x')
         frame, inner = card(body, 'Carpeta de datos', 'Donde se proponen los proyectos nuevos y se guardan las '
                                                       'descargas (RINEX de las redes, efemérides, sistemas y geoides).')
         frame.pack(fill='x', pady=(16, 0))
@@ -275,6 +282,8 @@ class SettingsPage(ttk.Frame):
         changes = {key: var.get().strip() for key, var in self.vars.items()}
         changes.update(units=units, decimals=int(self.decimals.get()), theme=self.theme.get(),
                        reduce_motion=self.reduce.get(), check_updates=self.check_updates.get())
+        choice = self.chooser.get()
+        changes.update(crs_id=choice.crs_id, zone=choice.zone, geoid_id=choice.geoid_id)
         if self.new_folder is not None:
             try:
                 self.new_folder.mkdir(parents=True, exist_ok=True)
@@ -295,7 +304,7 @@ class SettingsPage(ttk.Frame):
         self.app.set_status('Ajustes guardados.')
 
     def on_show(self):
-        pass
+        self.chooser.reload()
 
 
 def licenses_text() -> str:

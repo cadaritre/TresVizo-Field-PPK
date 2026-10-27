@@ -267,3 +267,17 @@ def test_networks_adapter_with_engine_api():
     assert found[0].origin == 'instalada' and found[0].country == 'BR' and found[0].stations == [station]
     assert networks.guide_text(core, found[0], station, None, None) == 'guía INEG'
     assert networks.can_download(core, station)
+
+
+def test_catalog_page_sections_search_and_detail(app):
+    page = app.show('Sistemas y geoides')
+    pump(app, lambda: page.entries)
+    page.pick('geoid')
+    assert 'Geoides' in page.segment_buttons['geoid'].cget('text')
+    page.query.set('ggm25')
+    app.update()
+    entry = page.selected_entry()
+    assert entry is not None and entry.cls == 'geoid' and 'GGM25' in entry.title
+    page.pick_state('available')
+    app.update()
+    assert all(not e.installed or e.update for e in page.visible)
