@@ -37,3 +37,40 @@
   escalado de DPI de Windows (125/150/200 %).
 - Instaladores sin firma de código (Authenticode / Developer ID y notarización): ver `docs/distribucion.md`.
 - Sin lector de pantalla certificado: Tk no expone un árbol de accesibilidad completo; el uso con teclado sí se revisó.
+
+## Sistemas, informes y exportación (§1.3, §5, §1.2.5)
+
+**Hecho y verificado (macOS arm64, Python 3.13.18, pyproj 3.8.0 con PROJ 9.8.1 y EPSG v12.029):**
+- Datos firmados comunes (`tresvizo_ppk/datos/`): Ed25519 en Python puro (vector de la RFC 8032), el índice firmado con
+  la llave de las apps (`1737938db9f9f6bc`) y sus reglas (secuencia que solo crece, rutas, SHA-256, clases
+  desconocidas se saltan), descarga con reintentos y reanudación, e instalación comprobada de cualquier clase
+  registrada (`geoid`, `crs-package`, `datum-grid`, `cors-network`; el motor puede registrar su comprobación de las
+  redes). Probado contra el índice publicado de verdad en `cadaritre/GNSS-TresVizo` (igual byte a byte al incluido,
+  secuencia 3): se bajaron e instalaron `crs-cr`, `crs-sv` y `qgeoidcol2023` con su firma y su SHA-256
+  (`TRESVIZO_PPK_RED=1 pytest tests/test_crs.py`).
+- Sistemas (`tresvizo_ppk/crs/`): de fábrica WGS 84, Mexico ITRF2008 y UTM 11N–16N (definiciones de las apps) y GGM10 y
+  GGM25 **byte a byte** los de las apps. `transform` y `transform_sigma` con PROJ: los 1316 vectores de
+  `crs_reference.json` (262 sistemas, 458 de datum heredado) pasan con ida ≤ 3 nm, vuelta ≤ 5e-14°, escala ≤ 1.1e-11 y
+  convergencia ≤ 2.4e-11° (las apps piden 1 µm, 1e-10°, 1e-9 y 1e-7°); la misma región de transformación en los 458;
+  las 246 proyecciones salen del registro EPSG de PROJ y coinciden con la definición del paquete; NTv2 contra la
+  rejilla sintética de las apps (≤ 1e-9°); las 56 ondulaciones de GGM10/GGM25 de las apps dan **el mismo número**.
+- Informes PDF (`tresvizo_ppk/report/`): línea base y PPK de la jornada con la identidad de los documentos de TresVizo
+  Med, todas las secciones de §5 y las gráficas de RTKLIB (`.pos` y `.stat`); el marco y la época del resultado son
+  los de la coordenada de la base (su red), no fijos. Pruebas con resultados sintéticos (estaciones PRB1–PRB3, que no
+  son de la RGNA) que leen el texto con pypdf; revisión visual de las páginas.
+- Exportar (`tresvizo_ppk/export/`): CSV de TresVizo Field (el escritor reproduce byte a byte `csv_referencia_todas.csv`
+  de las apps), CSV simple, GeoJSON y KML. 41 pruebas en `test_crs.py`, `test_report.py` y `test_export.py`.
+
+**Pendiente o sin verificar:**
+- Informes y exportación probados solo con resultados sintéticos: falta repetirlos con el motor real y datos de la
+  RGNA (los `.pos`/`.stat` que escribe de verdad `rnx2rtkp`; el lector sigue el formato de `rtkpos.c`/`solution.c`).
+- La convención de `ProcessedPoint.delta_from_field_enu` no está escrita en el contrato: el informe y la exportación
+  calculan «posproceso − campo» de las dos posiciones cuando están, y solo usan ese campo si falta la de campo.
+- Sistemas propios (de mina, LDP) y localizaciones de las apps no entran (no hay dónde elegirlos en un proyecto
+  `.tvppk`); los vectores `localDesigns` de `crs_reference.json` no se prueban.
+- Las rejillas NTv2 de IBGE siguen retenidas en el índice; el código las instala y aplica (probado con la sintética).
+- Letra del PDF: Segoe UI en Windows (como TresVizo Med), Arial en macOS, DejaVu Sans en Linux (la de matplotlib si el
+  sistema no trae ninguna). En Windows real no se ha generado un PDF todavía.
+- El paquete de PyInstaller tiene que llevar `tresvizo_ppk/crs/datos/`, `tresvizo_ppk/datos/incluido/` y
+  `assets/marca.png` (el informe la busca también en `sys._MEIPASS`).
+- El formato del paquete `cors-network` lo define el motor: aquí solo se comprueba que sea JSON con el mismo id.

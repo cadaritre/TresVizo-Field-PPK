@@ -19,7 +19,17 @@ from ..version import __version__
 from . import estilo
 
 APP_NAME = "TresVizo Field PPK"
-BRAND = Path(__file__).resolve().parents[2] / "assets" / "marca.png"
+def _brand() -> Path:
+    """La marca del programa: junto al código o, en la app empaquetada, en la carpeta de recursos de PyInstaller."""
+    import sys
+    for base in (Path(__file__).resolve().parents[2], Path(getattr(sys, "_MEIPASS", "")) if getattr(
+            sys, "_MEIPASS", None) else None):
+        if base is not None and (base / "assets" / "marca.png").is_file():
+            return base / "assets" / "marca.png"
+    return Path(__file__).resolve().parents[2] / "assets" / "marca.png"
+
+
+BRAND = _brand()
 PAGE = A4
 CONTENT_WIDTH = PAGE[0] - estilo.MARGINS["left"] - estilo.MARGINS["right"]
 
