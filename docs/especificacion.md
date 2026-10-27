@@ -125,7 +125,7 @@ datos; gráficas; bitácora en anexo.
 ### 5.2 Informe de PPK de la jornada
 
 Resumen (puntos FIJOS/FLOTANTES/sin solución), base y su origen, trayectoria, tabla de puntos (nombre, coordenadas, σ,
-épocas, solución, diferencia con campo), avisos (inclinación, huecos, puntos fuera de la trayectoria), gráficas y anexo.
+épocas, solución, diferencia con campo), avisos (huecos, puntos fuera de la trayectoria), gráficas y anexo.
 
 ## 6. Interfaz
 
