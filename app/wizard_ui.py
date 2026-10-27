@@ -590,6 +590,7 @@ class WizardPage(ttk.Frame):
         self.step = 0
         for child in self.alerts.winfo_children():
             child.destroy()
+        self.shrink_alerts()
         self.build_steps()
         self.go(0)
         self.update_title()
@@ -640,6 +641,12 @@ class WizardPage(ttk.Frame):
         for child in self.alerts.winfo_children():
             if getattr(child, 'key', None) == key:
                 child.destroy()
+        self.shrink_alerts()
+
+    def shrink_alerts(self):
+        """Tk no encoge un marco al quitarle su último hijo: sin avisos, el hueco se cierra a mano."""
+        if not self.alerts.winfo_children():
+            self.alerts.configure(height=1)
 
     def reachable(self) -> int:
         invalid = self.job.first_invalid_step()
@@ -1013,6 +1020,7 @@ class WizardPage(ttk.Frame):
         self.touched = set(range(self.PROCESS_STEP))
         for child in self.alerts.winfo_children():
             child.destroy()
+        self.shrink_alerts()
         self.build_steps()
         self.step = 0
         self.go(0)

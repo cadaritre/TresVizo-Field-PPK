@@ -395,3 +395,14 @@ def test_sidebar_fits_every_name_from_the_start(app):
         time.sleep(0.01)
     needed = max(b.winfo_reqwidth() for b in app.nav_buttons.values())
     assert int(app.nav.cget('width')) >= needed+24
+
+
+def test_cleared_alert_leaves_no_gap(app):
+    """Al quitar el último aviso, su espacio se cierra (Tk no encoge solo un marco vacío)."""
+    page = app.show('Georreferenciar punto')
+    page.show_alert('info', 'Procesado por última vez…', key='processed')
+    app.update()
+    assert page.alerts.winfo_height() > 20
+    page.clear_alert('processed')
+    app.update()
+    assert page.alerts.winfo_height() <= 2
