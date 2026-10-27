@@ -294,6 +294,11 @@ class OptionsPanel(ttk.Frame):
         super().__init__(parent)
         self.app, self.job, self.changed = app, job, changed
         o = job.options
+        frame, body = card(self, 'Proyecto', 'Número o clave que sale en el encabezado del informe (opcional).')
+        frame.pack(fill='x', pady=(0, 16))
+        self.number = tk.StringVar(value=job.number)
+        ttk.Entry(body, textvariable=self.number, width=30).pack(anchor='w')
+        self.number.trace_add('write', lambda *a: self.apply())
         frame, body = card(self, 'Satélites', 'Por omisión: máscara de 15°, todas las constelaciones y frecuencias '
                                               'que tengan el rover y la base.')
         frame.pack(fill='x')
@@ -419,6 +424,7 @@ class OptionsPanel(ttk.Frame):
         except ValueError:
             o.interval_s = None
         o.combined = self.combined.get()
+        self.job.number = self.number.get()
         self.job.coordinates = self.chooser.get()
         self.toggle_precise()
         self.changed()

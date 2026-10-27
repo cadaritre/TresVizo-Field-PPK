@@ -117,7 +117,7 @@ def test_options_validation(tmp_path):
 
 def test_static_project_roundtrip(tmp_path):
     rover, base = touch(tmp_path, 'sesion.bin'), touch(tmp_path, 'chih2990.24o')
-    job = wz.StaticJob(rover_files=[rover], point_name='PV-01', pole_height='1.8',
+    job = wz.StaticJob(rover_files=[rover], point_name='PV-01', pole_height='1.8', number='TOP-2026-114',
                        bases=[wz.BaseEntry([base], station(), name='Chihuahua (INEGI)')])
     project = job.to_project()
     assert project.bases[0].name == 'Chihuahua (INEGI)' and project.pole_height_m == 1.8
@@ -127,7 +127,10 @@ def test_static_project_roundtrip(tmp_path):
     again = wz.StaticJob.from_project(loaded, proj.resolve_inputs(loaded))
     assert again.rover_files == [rover.resolve()] and again.bases[0].station.id == 'CHIH'
     assert again.bases[0].name == 'Chihuahua (INEGI)' and again.pole_height == '1.800'
+    assert loaded.number == 'TOP-2026-114' and again.number == 'TOP-2026-114'
     assert again.first_invalid_step() is None
+    again.number = 'x'*41
+    assert wz.errors(again.step_issues(2))
 
 
 def test_points_own_base_from_project_and_manual(tmp_path):

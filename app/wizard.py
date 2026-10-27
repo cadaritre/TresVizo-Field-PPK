@@ -173,6 +173,12 @@ def options_issues(options: ProcessingOptions, precise_download: bool) -> list[I
     return found
 
 
+def number_issues(number: str) -> list[Issue]:
+    if len(number.strip()) > 40 or any(ord(c) < 32 for c in number):
+        return [Issue('number', 'El número de proyecto admite hasta 40 caracteres.')]
+    return []
+
+
 # --- Estático: georreferenciar un punto ------------------------------------------------------------------------------
 
 @dataclass
@@ -202,6 +208,7 @@ class StaticJob:
     options: ProcessingOptions = field(default_factory=ProcessingOptions)
     coordinates: CoordinateChoice = field(default_factory=CoordinateChoice)
     precise_download: bool = False
+    number: str = ''                         # número o clave del proyecto (sale en el informe)
 
     STEPS = ('Rover', 'Estaciones RGNA', 'Ajustes', 'Proceso', 'Resultado')
 
@@ -244,7 +251,7 @@ class StaticJob:
                                             'con dos o tres el resultado se puede verificar.', 'warning'))
             return found
         if step == 2:
-            return options_issues(self.options, self.precise_download)
+            return options_issues(self.options, self.precise_download)+number_issues(self.number)
         return []
 
     def first_invalid_step(self) -> int | None:
@@ -272,6 +279,7 @@ class StaticJob:
     def to_project(self, project: Project | None = None) -> Project:
         project = project or Project()
         project.kind = 'static'
+        project.number = self.number.strip()
         project.point_name = self.point_name.strip()
         project.pole_height_m = self.pole_height_m()
         project.options = self.options
@@ -287,7 +295,7 @@ class StaticJob:
                  for role, paths in files.items() if role.startswith('base:')]
         return cls(rover_files=files.get('rover', []), point_name=project.point_name,
                    pole_height=f'{project.pole_height_m:.3f}', bases=bases, options=project.options,
-                   coordinates=project.coordinates)
+                   coordinates=project.coordinates, number=project.number)
 
 
 # --- PPK de puntos --------------------------------------------------------------------------------------------------
@@ -308,6 +316,7 @@ class PointsJob:
     options: ProcessingOptions = field(default_factory=ProcessingOptions)
     coordinates: CoordinateChoice = field(default_factory=CoordinateChoice)
     precise_download: bool = False
+    number: str = ''
 
     STEPS = ('Base', 'Rover y puntos', 'Ajustes', 'Proceso', 'Resultado')
 
@@ -360,7 +369,7 @@ class PointsJob:
                 found.append(Issue('csv', 'El archivo de puntos debe ser el CSV de TresVizo Field.'))
             return found
         if step == 2:
-            return options_issues(self.options, self.precise_download)
+            return options_issues(self.options, self.precise_download)+number_issues(self.number)
         return []
 
     def first_invalid_step(self) -> int | None:
@@ -396,6 +405,7 @@ class PointsJob:
         from tresvizo_ppk.project import relative
         project = project or Project()
         project.kind = 'points'
+        project.number = self.number.strip()
         project.base_kind = self.base_kind
         project.options = self.options
         project.coordinates = self.coordinates
@@ -411,7 +421,8 @@ class PointsJob:
         station = project.bases[0] if project.bases else None
         base_files = next((paths for role, paths in files.items() if role.startswith('base:')), [])
         job = cls(base_kind=project.base_kind, rover_files=files.get('rover', []),
-                  csv_file=(files.get('csv') or [None])[0], options=project.options, coordinates=project.coordinates)
+                  csv_file=(files.get('csv') or [None])[0], options=project.options, coordinates=project.coordinates,
+                  number=project.number)
         if project.base_kind == 'rgna':
             job.base = BaseEntry(files=base_files, station=station, name=station.name if station else '')
         else:
