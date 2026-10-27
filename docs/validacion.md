@@ -244,9 +244,142 @@ fija a 100 km dentro de 3σ de la referencia del día, queda flotante con una se
 estático completo (`test_integracion.py`) la línea sale FIJA con su resolución de ambigüedades y la comprobación de
 RTKLIB. Los modelos se prueban contra los casos publicados (GMF y mareas del IERS, LAMBDA de RTKLIB y de Teunissen).
 
+## 7. Verificación fuera de muestra (otros días y otras estaciones)
+
+**Fecha:** 27-10-2026. Auditoría independiente: el motor **sin cambios** (`process_static`, estrategia «auto», máscara
+15°, umbrales de la §3 y la §4) con datos que no se usaron para calibrarlo. **Datos:** RGNA del INEGI de dos días
+lejanos al 20-10, bajados de la página pública «Archivos RINEX de la RGNA» (ZIP horarios, RINEX 3.04 cada 15 s; IMIE
+solo se entrega en RINEX 2.10): **15-07-2026 (día 196, temporada de lluvias)** y **18-02-2026 (día 049, temporada
+seca)**; órbitas y relojes finales de la ESA de los días 195–197 y 048–050. Referencia: PPP de 24 h de RTKLIB como en
+el «Diseño». Además de las tres líneas de la §1, 15 líneas nuevas: ITLA–ICEP 30.7, ITLA–IHID 104.7, INEG–IZAC 107.6
+(540 m de desnivel), TOL2–IHID 131.5, ICEP–IHID 133.0, INEG–ISLP 134.9, VIL2–ICHS 137.8 (607 m, trópico húmedo),
+ITLA–TOL2 150.1, ICEP–TOL2 155.9, MERI–ICAM 156.6 (costa de Yucatán), TOL2–UQRO 164.8 (834 m), ISLP–IZAC 178.8,
+ISLP–UQRO 183.0, TAMP–ICVT 211.5 (costa), ICEP–UVER 218.7 (2147 m de desnivel, costa) e INEG–UQRO 239.6 km.
+Sesiones de 15 min a 24 h repartidas en el día (8 o 12 por duración), difundidas y precisas: 2 772 líneas base con
+los ataques de abajo.
+
+Reproducir (ver la ayuda del script; `--referencia` guarda el PPP, `--limpiar` borra los intermedios de cada sesión,
+`--seguir` deja en el JSON las sesiones que fallan):
+
+    python scripts/validacion_rgna.py --datos DATOS/rgna/20260715 --precisas DATOS/precisas/dia196 \
+        --fecha 2026-07-15 --referencia DATOS/validacion/oos_ref_196.json --limpiar --seguir \
+        --rover INEG --bases IZAC,ISLP,UQRO --sesiones 1,2,4,24 --ventanas 8 --salida DATOS/validacion/oos196_ineg
+
+### Referencia
+
+- Coherente con el movimiento: INEG baja −632.8 → −650.0 → −680.6 mm respecto de su coordenada de 2010.0 el 18-02,
+  el 15-07 y el 20-10 (−4 a −12 cm/año, el hundimiento conocido del valle); las demás se mueven al este −5 a −8 mm en
+  ocho meses (placa).
+- **Su vertical vale ±1–3 cm, no ±1 cm:** el vector UGTO−UQRO en altura sale 35, 22 y 40 mm los tres días; el PPP de
+  24 h cambia 1–3 cm en la altura con la máscara (10° → 15°: IZAC −12 mm, INEG +8, UQRO +10; → 20°: TAMP −32, ICVT
+  −22). Por eso, junto al error contra el PPP se da la diferencia contra la fija de 24 h de la misma línea («vs 24 h»),
+  que no tiene el error de la referencia.
+- Las líneas con **IZAC** quedan 3 cm altas los dos días, igual la fija de 24 h que la flotante (INEG–IZAC +28/+33 mm,
+  ISLP–IZAC +40/+28 mm): es de la referencia o del sitio, no de las ambigüedades; se cuentan aparte.
+
+### Resultado (opciones por omisión; fijos erróneos = fija con algún componente a más de 3σ)
+
+| Día | Líneas | Sesión | Fijas | > 3σ contra el PPP (sin IZAC) | Con IZAC | > 3σ vs 24 h |
+| --- | --- | --- | --- | --- | --- | --- |
+| 15-07 | 30.7 km | 30 min / 45 min / 1 h / 2 h / 4 h | 8/8 · 8/8 · 16/16 · 14/16 · 12/12 | 1 · 0 · 0 · 2 · 0 | — | 1 · 0 · 0 · 0 · 0 |
+| 18-02 | 30.7 km | 30 min / 45 min / 1 h / 2 h / 4 h | 7/8 · 8/8 · 16/16 · 16/16 · 12/12 | 0 · 0 · 0 · 0 · 0 | — | 0 |
+| 15-07 | 100–141 km (8 líneas) | 15 / 30 / 45 min | 0/36 · 0/84 · 0/84 (cortas) | — | — | — |
+| 18-02 | 100–141 km (8 líneas) | 15 / 30 / 45 min | 0/36 · 0/76 · 0/76 (cortas) | — | — | — |
+| 15-07 | 100–141 km | 1 h / 2 h / 4 h / 24 h | 166/168 · 168/168 · 108/108 · 18/18 | 3 · 0 · 0 · 0 | 5 · 7 · 8 · 2 | 2 · 0 · 1 · — |
+| 18-02 | 100–141 km | 1 h / 2 h / 4 h / 24 h | 150/152 · 152/152 · 96/96 · 16/16 | 2 · 1 · 0 · 0 | 11 · 16 · 12 · 2 | 2 · 2 · 0 · — |
+| 15-07 | 150–183 km | 1 h / 2 h / 4 h / 24 h | 78/80 · 80/80 · 60/60 · 10/10 | 0 · 1 · 0 · 0 | 4 · 9 · 9 · 2 | 0 |
+| 18-02 | 150–183 km | 1 h / 2 h / 4 h / 24 h | 94/96 · 96/96 · 72/72 · 12/12 | 1 · 2 · 0 · 0 | 0 · 2 · 3 · 1 | 2 · 2 · 0 · — |
+| 15-07 | 211–240 km | 1 h / 2 h / 4 h / 24 h | 39/48 · 48/48 · 36/36 · **0/6** | 1 · 1 · 2 · 0 | — | — |
+| 18-02 | 211–240 km | 1 h / 2 h / 4 h / 24 h | 28/32 · 28/32 · 17/24 · 2/4 | 0 | — | — |
+
+- **Con 1 h a 100–141 km fijó 316 de 320 sesiones** (las 4 flotantes, por la prueba de razón: ITLA–IHID a las 21 h
+  UTC del 15-07 y TOL2–IHID a las 00 h del 18-02). De las fijas, **5 (1.6 %) pasan de 3σ contra el PPP sin contar
+  IZAC y 4 contra la fija de 24 h**, todas en la vertical (3.1–3.7σ, 4–7 cm), a las 00 h o 18–20 h UTC; la flotante de
+  esas sesiones tiene casi el mismo error (es troposfera, no enteros: ver abajo). Con 2 h o más, 1 de 558 contra el PPP.
+- Casos exactos (1 h, sin IZAC): 15-07 UGTO–INEG 18:00 precisas (U −43.2 mm, σ 14.1, 3.1σ; −45.7 contra la de 24 h);
+  15-07 ITLA–IHID 00:00 difundidas (U −47.3, σ 14.2; −43.1 contra 24 h); 15-07 TOL2–IHID 00:00 precisas (U −41.6, σ
+  13.4); 18-02 ITLA–IHID 00:00 difundidas y precisas (U −61.8 y −51.3, σ 16.5 y 15.0; −71.9 y −61.2 contra 24 h);
+  18-02 ITLA–TOL2 (150 km) 00:00 precisas (U −65.8, σ 19.4; −79.7 contra 24 h). Horizontal: 18-02 ICEP–TOL2 00:00
+  precisas, E −34.8 mm contra la de 24 h (σ 10.8). A 30 km con 30 min: 15-07 ITLA–ICEP 21:00 difundidas, N +18.9 mm
+  (σ 5.6, 3.4σ; +18.5 contra 24 h).
+- **Mismo arco, mismo entero:** en ventanas de 1 h desplazadas 10–15 min (UGTO–INEG 15–23 h UTC del 15-07, máscara 15°
+  y 30°), las 1 406 parejas de sesiones que comparten un arco con su entero determinado dan el mismo entero de ancho y
+  de estrecho de carril (0 distintos). La altura de esas fijas recorre −45 → +55 mm en dos horas con los mismos enteros:
+  la troposfera de la tarde de lluvias, que la σ vertical no cubre del todo.
+- **σ:** sin IZAC, el error/σ de las fijas tiene RMS 0.77–0.97 (E), 0.47–0.52 (N) y **1.10–1.14 (U)**, y 0.6–1.4 %
+  de las verticales pasan de 3σ. **Las flotantes la subestiman en el este:** RMS 1.3–1.6 con 15–45 min (hasta 6σ) y
+  2.4 en las de 1 h que no fijaron (ITLA 21 h UTC: 7–9 cm en el este con σ de 1.5–2 cm).
+- Desde 200 km la de 24 h casi nunca fija (0 de 6 el 15-07, 2 de 4 el 18-02: «solo 0–1 combinaciones llegan a la tasa
+  de éxito»), aunque las de 1–4 h sí; su flotante queda a ≤ 2 cm.
+- Velocidad (tres bases, con la comprobación de RTKLIB): 1 h 1–5.5 s, 4 h 4–17 s, 24 h 18–74 s.
+
+### Ataques (UGTO con UQRO, ISLP e INEG, 15-07, difundidas salvo que se diga)
+
+| Prueba | Sesiones | Fijas | > 3σ | Lo que pasó |
+| --- | --- | --- | --- | --- |
+| Cruza la medianoche (ZIP de dos días unidos, órbitas de 3 días) | 1 y 2 h desde 22:30, 23:00, 23:30 | 36/36 | 0 | Bien |
+| Máscara 25° | 1 h y 2 h × 6 | 36/36 | 2 | 1 h 08:00 ISLP U −77 mm (3.6σ); 1 h 16:00 INEG +53 mm (3.1σ) con la flotante a 0 mm |
+| **Máscara 30°** | 1 h y 2 h × 6 | 36/36 | 2 | **1 h 16:00 INEG U +136 mm (6.8σ) con la flotante a +1.5 mm**; 1 h 16:00 UQRO −97 mm (4.2σ); con 2 h, 0 |
+| Solo GPS | 1 h y 2 h × 6 | 29/36 | 1 | 2 h 08:00 ISLP U −46 mm (3.3σ, 7 de 9 combinaciones) |
+| GPS y Galileo | 1 h y 2 h × 6 | 35/36 | 0 | Bien |
+| Rover en RINEX 2.11, bases en 3.04 | 1 h y 2 h × 6 | 36/36 | 1 | 1 h 00:00 UQRO U +65 mm (3.7σ) |
+| Todo en RINEX 2.11 (UQRO, ISLP) | 1 h y 2 h × 6 | 8/24 | 1 | 2 h 20:00 UQRO E −23 mm (3.1σ) con solo 4 combinaciones; las flotantes, hasta 20 cm |
+| Saltos de ciclo sin LLI (4/3 en G14; 4/3 en E07 y E15; 1/1; cinco a la vez) | 1 h y 2 h a las 06:00 | 24/24 | 0 | Todos se ven (arco nuevo); el resultado cambia ≤ 2 mm |
+| **Hueco en el rover** (10 min, 30 min o una sola época) | 1 h y 2 h × 6 | — | — | **Las 24 sesiones fallan** con `ValueError` (abajo) |
+| Posición aproximada del rover movida 54 m o 470 m, o sin ella (puntual de RTKLIB) | 1 h × 4 | 12/12 | 0 | Igual a ±0.1 mm: no hay fuga de la coordenada del rover |
+| Ruta con acentos («validación ñ/José Ñúñez/Vértice 1 – año 2026»), línea de órdenes | 1 h | 2/2 | 0 | Igual a ≤ 1 mm que el script |
+
+### Fallos encontrados (para corregir en el motor)
+
+1. **El procesador de líneas largas se cae si el rover y la base no tienen el mismo número de épocas.**
+   `larga/procesador._pick_pair` compara `rov.values[…]` y `bas.values[…]` completos, sin alinearlos a las épocas
+   comunes (`ir`, `ib`): `ValueError: operands could not be broadcast together with shapes (239,) (240,)`. Pasa con
+   una sola época que falte en un receptor, con un hueco, con una hora que falte en la estación (MERI, 15-07, 12–13 h
+   UTC, en la de 24 h) y **con intervalos distintos** (rover cada 15 s y base cada 30 s; un Meridian a 1 Hz contra la
+   RGNA a 15 s sería este caso). No es `UserError`: la línea base y el proceso entero fallan. Reproducir:
+   `--hueco 30,30.25` en el script, o la línea de órdenes con el rover `UGTO196g_304.zip` y la base UQRO de esa hora
+   diezmada a 30 s (`awk` que deja las épocas de segundo 0 y 30).
+2. **Con máscara de 25–30° hay fijos claramente erróneos con 1 h** (el de +136 mm, 6.8σ, con razón 10 y tasa de éxito
+   99.999 %): con la máscara alta la altura y la troposfera no se separan en una hora y la covarianza no lo ve.
+   Reproducir: `--rover UGTO --bases UQRO,ISLP,INEG --sesiones 1 --inicios 2026-07-15T16:00 --efemerides broadcast
+   --mascara 30`.
+3. **Pocos satélites comunes dan una «flotante» de kilómetros en vez de un error.** MEXI (Alloy, L2C) con IMIE (NetR9,
+   RINEX 2.10, solo P2 en L2): el propio deja fuera los satélites con L2C (clases de señal distintas) y procesa con 2
+   satélites o ninguna doble diferencia; devuelve flotantes con 14 m a 96 000 km de error (con σ del mismo orden) y el
+   aviso solo dice «quedó FLOTANTE»; en otras sesiones RTKLIB no da solución y falla la línea. Hace falta un mínimo de
+   satélites y dobles diferencias para entregar una solución.
+4. **IMIE no se puede usar como la entrega el INEGI:** sus ZIP traen el almanaque `.26a`, que la lectura rechaza («No
+   se reconocen estos archivos») y con él todo el conjunto. Un ZIP horario dañado en el servidor del INEGI
+   (`MERI196m_304.zip`, 15-07) también hace fallar toda la estación; podría dejarse fuera esa hora con aviso.
+5. El script de validación pasa al motor solo el SP3 con «precisas» (sin el CLK de 30 s), aquí y en la §1: las cifras
+   «precisas» son con los relojes del SP3 cada 5 min.
+
+### Recomendación de umbrales (con estos datos)
+
+- **1 h desde 60 km se sostiene para fijar** (316/320 a 100–141 km y 172/176 a 150–183 km), pero no «sin fijos
+  erróneos»: 1–2 % de las verticales pasan de 3σ. **Subir la σ vertical de la fija ×1.15** (el piso de
+  (4 + 6/√T + 2) a ≈ (4.6 + 6.9/√T + 2.3) mm a 100 km) deja el RMS en 1 y cinco de los seis casos de 1 h dentro de 3σ.
+- **σ de la flotante: ×1.6 en el este con 15–45 min y ×2.4 cuando una sesión de 1 h o más queda flotante;** en la
+  vertical ×1.2–1.6. La de ahora promete 1–2 cm donde hay 4–9 cm.
+- **Máscara alta:** con máscara de más de 20°, pedir 2 h (con 2 h, 0 de 36 fuera de 3σ) o no fijar.
+- **Menos de 60 km:** con 30 min, 1 de 16 fuera de 3σ (3.4σ en el norte) y 1 de 16 flotante; con 45 min, 16/16 sin
+  ninguno. Pasar el mínimo de 30 a 45 min (de 20 a 30 km sigue sin datos).
+- `NL_MIN_FIXED`, la razón y la tasa de éxito: no separan los fijos erróneos (con 4–5, 6–7, 8–9, 10–11 y 12 o más
+  combinaciones fijadas pasan de 3σ el 1.8, 2.0, 0, 5.9 y 1.2 %, con razón de 3.2 a 27 y tasa ≥ 99.9 %), ni el
+  salto de la fija respecto de la flotante. No conviene tocarlos con estos datos; el remedio es la σ y la máscara.
+
+### Lo que no se pudo probar
+
+- **20–30 km:** la RGNA no tiene pares a esa distancia (la más cercana es ITLA–ICEP, 30.7 km).
+- **Receptores mixtos:** el único par posible (MEXI–IMIE) no se procesa (fallos 3 y 4); ningún Meridian.
+- **Satélite malo:** en los mensajes de los dos días solo G13 sale enfermo (salud 63, 15-07 desde las 12 h): con
+  difundidas no entra; con precisas sí entra con el SP3 de la ESA, sin efecto visible. No se buscó en las notas NANU.
+- **Costa y carga oceánica:** MERI–ICAM, TAMP–ICVT e ICEP–UVER fijan con errores como los del interior, pero la
+  referencia (PPP sin carga oceánica, vertical ±1–3 cm) no alcanza para medir el efecto de 5–10 mm.
+
 ## Lo que esta validación no cubre
 
-- **Un solo día y una sola marca de receptor y antena:** todas las estaciones son Trimble Alloy con TRM115000.00 NONE.
+- **Un solo día (la §7 añade dos más y 15 líneas) y una sola marca de receptor y antena:** todas las estaciones son Trimble Alloy con TRM115000.00 NONE.
   Con receptores distintos (un MeridianV o MeridianVI contra la RGNA) los sesgos de código y fase entre clases de señal
   no se cancelan: el motor solo forma dobles diferencias con la misma clase en los dos receptores (lo que no coincide
   queda flotante), pero eso no se ha probado con datos reales mixtos. La antena de los Meridian no tiene calibración:

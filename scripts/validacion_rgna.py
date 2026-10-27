@@ -16,6 +16,23 @@ Uso:
         [--rover UGTO] [--bases UQRO,ISLP,INEG] [--sesiones 1,2,4,24] [--ventanas 4] [--fecha 2026-10-20]
     python scripts/validacion_rgna.py --resumen DIR/validacion.json [otro.json …]
 
+Verificación fuera de muestra (docs/validacion.md, «Verificación fuera de muestra»): con las opciones de abajo se
+corre otro día y se ataca el motor sin cambiarlo; sin ellas el resultado es el mismo de antes.
+    --datos DIR_DIA DIR_DIA_SIGUIENTE   los ZIP de varios días (sesiones que cruzan la medianoche); la referencia
+                                        PPP usa solo el primero
+    --referencia ppp.json               guarda y reutiliza la referencia PPP de 24 h de cada estación
+    --inicios 2026-07-15T23:30,…        inicios de sesión explícitos (en vez de --ventanas)
+    --mascara 25 --sistemas GPS,Galileo máscara de elevación y constelaciones de la app
+    --aprox-desplazada E,N,U | ninguna  mueve la posición aproximada del rover (m) o la quita (puntual de RTKLIB):
+                                        el resultado no debe depender de ella
+    --hueco 20,30                       quita al rover las épocas entre esos minutos desde el inicio de la sesión
+    --saltos G05:4:3@30,E11:4:3@30      salto de ciclo sin indicador LLI en el rover: n1 ciclos en las fases de la
+                                        banda 1 y n2 en las demás, desde ese minuto
+    --datos-rover DIR                   los ZIP del rover de otra carpeta (p. ej. RINEX 2.11 contra bases en 3.04)
+    --seguir                            una sesión que falla queda en el JSON con su error y se sigue
+    --limpiar                           borra los intermedios de cada sesión en cuanto guarda su resultado (cada
+                                        sesión copia los archivos del día: decenas de MB por estación)
+
 Cada línea base guarda su motor (RTKLIB o el procesador propio de líneas largas), su solución, la resolución de
 ambigüedades (combinaciones fijadas, razón, tasa de éxito o por qué quedó flotante), el error del vector frente a
 la referencia del día y su σ. `--resumen` imprime las tablas de docs/validacion.md: por línea, duración y
@@ -30,6 +47,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import shutil
 import sys
 import time
@@ -77,7 +95,19 @@ def ppp_truth(obs_path: Path, station, nav: list[Path], sp3: list[Path], clk: li
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--datos", type=Path)
+    parser.add_argument("--datos", type=Path, nargs="+")
+    parser.add_argument("--datos-rover", type=Path, nargs="+")
+    parser.add_argument("--referencia", type=Path, help="JSON con la referencia PPP de cada estación (se completa)")
+    parser.add_argument("--inicios", default="", help="inicios de sesión ISO separados por comas")
+    parser.add_argument("--mascara", type=float, default=None)
+    parser.add_argument("--sistemas", default="", help="constelaciones, p. ej. GPS,Galileo")
+    parser.add_argument("--aprox-desplazada", default="", help="E,N,U en metros, o «ninguna»")
+    parser.add_argument("--hueco", default="", help="minutos desde el inicio: desde,hasta")
+    parser.add_argument("--saltos", default="", help="SAT:n1:n2@minuto, separados por comas")
+    parser.add_argument("--seguir", action="store_true",
+                        help="si una sesión falla, guarda el error en el resultado y sigue con la siguiente")
+    parser.add_argument("--limpiar", action="store_true",
+                        help="borra los intermedios de cada sesión al guardar su resultado (y los del día al final)")
     parser.add_argument("--precisas", type=Path)
     parser.add_argument("--salida", type=Path)
     parser.add_argument("--ventanas", type=int, default=4, help="sesiones por duración repartidas en el día")
@@ -102,13 +132,25 @@ def main() -> int:
     print("Preparando las observaciones del día…", flush=True)
     full = {}
     for sid in ids:
-        full[sid] = prepare_observations(sorted((args.datos / sid).glob("*.zip")), out / "dia" / sid)
+        dirs = args.datos_rover if (sid == args.rover and args.datos_rover) else args.datos
+        full[sid] = prepare_observations(sorted(p for d in dirs for p in (d / sid).glob("*.zip")), out / "dia" / sid)
     stations = {sid: find_station(sid) for sid in ids}
 
     print("PPP de 24 h de cada estación (referencia del día)…", flush=True)
     truth = {}
+    cache = json.loads(args.referencia.read_text(encoding="utf-8")) if args.referencia and \
+        args.referencia.is_file() else {}
     for sid in ids:
-        truth[sid] = ppp_truth(full[sid].obs[0], stations[sid], full[sid].nav, sp3, clk, out / "ppp")
+        if sid in cache:
+            truth[sid] = np.array(cache[sid])
+            continue
+        day_obs = full[sid] if len(args.datos) == 1 else prepare_observations(
+            sorted((args.datos[0] / sid).glob("*.zip")), out / "dia_ppp" / sid)
+        truth[sid] = ppp_truth(day_obs.obs[0], stations[sid], day_obs.nav, sp3, clk, out / "ppp")
+        if args.referencia:
+            cache[sid] = [float(v) for v in truth[sid]]
+            args.referencia.parent.mkdir(parents=True, exist_ok=True)
+            args.referencia.write_text(json.dumps(cache, indent=1), encoding="utf-8")
     rover_off = stations[args.rover].position
     R0 = np.array([rover_off.x, rover_off.y, rover_off.z])
     motion = {}
@@ -119,27 +161,59 @@ def main() -> int:
 
     results = {"fecha": args.fecha, "rover": args.rover, "bases": args.bases.split(","),
                "ppp_menos_oficial_mm": motion, "sesiones": []}
+    attack = {k: v for k, v in (("mascara", args.mascara), ("sistemas", args.sistemas),
+                                ("aprox_desplazada", args.aprox_desplazada), ("hueco", args.hueco),
+                                ("saltos", args.saltos), ("inicios", args.inicios)) if v not in (None, "")}
+    if attack:
+        results["prueba"] = attack
     for hours in [float(h) for h in args.sesiones.split(",")]:
         n_windows = 1 if hours >= 24 else min(args.ventanas, int(24 // hours))
         starts = [day + timedelta(hours=k * (24 / n_windows)) for k in range(n_windows)] if hours < 24 else [day]
+        if args.inicios:
+            starts = [datetime.fromisoformat(t).replace(tzinfo=timezone.utc) for t in args.inicios.split(",")]
         for eph in args.efemerides.split(","):
             for start in starts:
                 end = start + timedelta(hours=hours)
-                label = f"{hours:g}h_{start:%H}_{eph}"
+                label = f"{hours:g}h_{start:%H}_{eph}" if not args.inicios else \
+                    f"{hours:g}h_{start:%d%H%M}_{eph}"
                 print(f"Sesión {label}…", flush=True)
                 work = out / "sesiones" / label
                 t0 = time.monotonic()
-                rover = prepare_observations([full[args.rover].obs[0]] + full[args.rover].nav, work / "rover",
-                                             window=(start, end))
-                bases = []
-                for sid in args.bases.split(","):
-                    bases.append((stations[sid], prepare_observations([full[sid].obs[0]] + full[sid].nav,
-                                                                      work / sid, window=(start, end))))
-                options = ProcessingOptions()
-                if eph == "precise":
-                    options.ephemeris = Ephemeris.PRECISE
-                    options.precise_files = list(sp3)
-                result = process_static(rover, bases, options, work / "proceso")
+                try:
+                    rover = prepare_observations([full[args.rover].obs[0]] + full[args.rover].nav, work / "rover",
+                                                 window=(start, end))
+                    if args.hueco or args.saltos:
+                        edited = _edit_rinex(rover.obs[0], work / "rover_editado" / rover.obs[0].name, start,
+                                             args.hueco, args.saltos)
+                        rover = prepare_observations([edited] + full[args.rover].nav, work / "rover2")
+                    if args.aprox_desplazada:
+                        rover.approx_position = _shift_approx(rover.approx_position, args.aprox_desplazada)
+                    bases = []
+                    for sid in args.bases.split(","):
+                        bases.append((stations[sid], prepare_observations([full[sid].obs[0]] + full[sid].nav,
+                                                                          work / sid, window=(start, end))))
+                    options = ProcessingOptions()
+                    if args.mascara is not None:
+                        options.elevation_mask_deg = args.mascara
+                    if args.sistemas:
+                        options.constellations = tuple(args.sistemas.split(","))
+                    if eph == "precise":
+                        options.ephemeris = Ephemeris.PRECISE
+                        options.precise_files = list(sp3)
+                    result = process_static(rover, bases, options, work / "proceso")
+                except Exception as error:  # noqa: BLE001 (--seguir: el fallo queda en el resultado)
+                    if not args.seguir:
+                        raise
+                    results["sesiones"].append({"sesion": label, "horas": hours, "inicio": start.isoformat(),
+                                                "efemerides": eph, "lineas": [],
+                                                "segundos": round(time.monotonic() - t0, 1),
+                                                "error": f"{type(error).__name__}: {error}"})
+                    (out / "validacion.json").write_text(json.dumps(results, ensure_ascii=False, indent=1),
+                                                         encoding="utf-8")
+                    print(f"Sesión {label}: FALLÓ ({type(error).__name__}: {error})", flush=True)
+                    if args.limpiar:
+                        shutil.rmtree(work, ignore_errors=True)
+                    continue
                 elapsed = time.monotonic() - t0
                 row = {"sesion": label, "horas": hours, "inicio": start.isoformat(), "efemerides": eph,
                        "segundos": round(elapsed, 1), "lineas": []}
@@ -186,6 +260,11 @@ def main() -> int:
                                                      encoding="utf-8")
                 print(json.dumps({k: row[k] for k in ("sesion", "final_menos_oficial_mm")}, ensure_ascii=False),
                       [(l["base"], l["solucion"], l["error_vector_mm"]) for l in row["lineas"]], flush=True)
+                if args.limpiar:
+                    shutil.rmtree(work, ignore_errors=True)
+    if args.limpiar:
+        for folder in ("dia", "dia_ppp", "sesiones"):
+            shutil.rmtree(out / folder, ignore_errors=True)
     print(f"Listo: {out / 'validacion.json'}")
     return 0
 
@@ -222,6 +301,81 @@ def summary(paths: list[Path]) -> int:
                       f" | {sum(fixed)}/{len(group)} | {rms[0]:.1f} | {rms[1]:.1f} | {rms[2]:.1f} | {mh:.1f} | "
                       f"{mv:.1f} | {wrong} |")
     return 0
+
+
+def _shift_approx(approx, spec: str):
+    """Posición aproximada del rover movida E, N, U metros (o None con «ninguna»): prueba de fugas."""
+    from tresvizo_ppk.model import Ecef
+    if spec == "ninguna":
+        return None
+    e, n, u = (float(v) for v in spec.split(","))
+    xyz = np.array([approx.x, approx.y, approx.z])
+    lat = math.atan2(xyz[2], math.hypot(xyz[0], xyz[1]))
+    lon = math.atan2(xyz[1], xyz[0])
+    sl, cl, so, co = math.sin(lat), math.cos(lat), math.sin(lon), math.cos(lon)
+    d = e * np.array([-so, co, 0.0]) + n * np.array([-sl * co, -sl * so, cl]) + u * np.array([cl * co, cl * so, sl])
+    p = xyz + d
+    return Ecef(float(p[0]), float(p[1]), float(p[2]), approx.frame, approx.epoch)
+
+
+def _edit_rinex(src: Path, dst: Path, start: datetime, gap: str, slips: str) -> Path:
+    """Copia del RINEX 3 del rover con un hueco (minutos desde el inicio) y saltos de ciclo sin LLI.
+
+    `slips`: «G05:4:3@30»: desde el minuto 30, n1 = 4 ciclos en las fases de la banda 1 y n2 = 3 en las demás (sin
+    marcar el indicador de pérdida de enganche). Un salto 4/3 cambia la Melbourne-Wübbena en un ciclo y la libre de
+    geometría en 2.9 cm en GPS y 0.3 cm en Galileo E1/E5a: es el caso más difícil de ver."""
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    t0 = start.replace(tzinfo=None)
+    g0 = g1 = None
+    if gap:
+        a, b = (float(v) for v in gap.split(","))
+        g0, g1 = t0 + timedelta(minutes=a), t0 + timedelta(minutes=b)
+    plan = {}
+    for item in filter(None, slips.split(",")):
+        m = re.fullmatch(r"([A-Z]\d\d):(-?\d+):(-?\d+)@([\d.]+)", item.strip())
+        if not m:
+            raise SystemExit(f"--saltos: no entiendo «{item}»")
+        plan[m[1]] = (int(m[2]), int(m[3]), t0 + timedelta(minutes=float(m[4])))
+    lines = src.read_text(encoding="ascii", errors="replace").splitlines()
+    end = next(i for i, l in enumerate(lines) if l[60:].strip() == "END OF HEADER")
+    if not lines[0][:9].strip().startswith("3"):
+        raise SystemExit("--hueco y --saltos piden RINEX 3")
+    types: dict[str, list[str]] = {}
+    cur = None
+    for l in lines[:end]:
+        if l[60:].strip() == "SYS / # / OBS TYPES":
+            if l[0] != " ":
+                cur = l[0]
+                types[cur] = []
+            types[cur] += l[7:60].split()
+    out = lines[:end + 1]
+    i = end + 1
+    while i < len(lines):
+        head = lines[i]
+        n = int(head[32:35])
+        when = datetime(int(head[2:6]), int(head[7:9]), int(head[10:12]), int(head[13:15]), int(head[16:18])) + \
+            timedelta(seconds=float(head[18:29]))
+        block = lines[i + 1:i + 1 + n]
+        i += 1 + n
+        if g0 is not None and g0 <= when < g1:
+            continue
+        new = []
+        for rec in block:
+            sat = rec[:3].replace(" ", "0")
+            if sat in plan and when >= plan[sat][2]:
+                n1, n2 = plan[sat][:2]
+                rec = rec.ljust(3 + 16 * len(types[sat[0]]))
+                fields = [rec[3 + 16 * k:3 + 16 * (k + 1)] for k in range(len(types[sat[0]]))]
+                for k, t in enumerate(types[sat[0]]):
+                    if t[0] == "L" and fields[k][:14].strip():
+                        v = float(fields[k][:14]) + (n1 if t[1] == "1" else n2)
+                        fields[k] = f"{v:14.3f}" + fields[k][14:]
+                rec = (rec[:3] + "".join(fields)).rstrip()
+            new.append(rec)
+        out.append(head)
+        out += new
+    dst.write_text("\n".join(out) + "\n", encoding="ascii")
+    return dst
 
 
 def _sigma_enu(origin, cov):
