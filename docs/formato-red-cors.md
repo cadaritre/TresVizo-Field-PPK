@@ -1,4 +1,4 @@
-# Formato de paquete de red CORS (`cors-network`), versión 1
+# Formato de paquete de red de estaciones de referencia (CORS, `cors-network`), versión 1
 
 Una **red de estaciones de referencia** (RGNA de México, RBMC de Brasil, MAGNA-ECO de Colombia, RAMSAC de Argentina,
 la red de Chile, NOAA CORS…) se agrega a TresVizo Field PPK publicando un paquete, **sin sacar versión nueva del

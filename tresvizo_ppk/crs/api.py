@@ -201,7 +201,7 @@ def _geoid_citation(m: dict) -> str:
     parts = [f"{m.get('name', '')} {m.get('version', '')}".strip(), str(m.get("authority", "")), str(m.get("frame", ""))]
     if m.get("frameEpoch") is not None:
         parts.append(f"época {float(m['frameEpoch']):.1f}")
-    parts.append(f"malla {float(m.get('gridStepArcMinutes', 0)):.1f}′")
+    parts.append(f"resolución {float(m.get('gridStepArcMinutes', 0)):.1f}′")
     kind = "normal" if m.get("heightKind") == "normal" else "ortométrica"
     parts.append(f"altura {kind}")
     if m.get("verticalDatum"):

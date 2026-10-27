@@ -16,7 +16,7 @@
   pruebas pasan aquí); altura del bastón y nombre del punto de la sesión por omisión; todo lo del encabezado (o del
   catálogo de la red, que gana y avisa) llega en el `ObservationSet` con su origen (`field_sources`).
 - Control de calidad tipo TEQC (épocas, huecos, saltos de ciclo, multitrayectoria MP, señales, traslape).
-- Redes CORS como paquetes `cors-network` (formato en `docs/formato-red-cors.md`, comprobación registrada en
+- Redes de estaciones de referencia (CORS) como paquetes `cors-network` (formato en `docs/formato-red-cors.md`, comprobación registrada en
   `tresvizo_ppk/datos/`): la RGNA incluida (31 estaciones del INEGI, ITRF2008 2010.0, con atribución), redes de otros
   países instalables del índice firmado con su marco y época, descarga por plantilla https documentada o guía.
 - Coordenada de la base sin pedirla a mano: la oficial de su red; base propia: encabezado RINEX o media autónoma

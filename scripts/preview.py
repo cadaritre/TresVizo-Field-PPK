@@ -70,6 +70,10 @@ def main():
                  [make('uagu2970.26d.Z', 1_900_000), make('uagu2970.26n.Z', 88_000)]]
         csv = make('Levantamiento predio Las Flores.csv', 4_000)
         config = folder/'preferencias'
+        # La carpeta de datos temporal va en las preferencias **antes** de crear la app: la app la aplica al arrancar,
+        # y lo que se instale en la vista previa (sistemas, geoides, índice) no toca los datos reales.
+        from app.settings import Settings
+        Settings(config).save(data_dir=str(folder/'TresVizo Field PPK'))
         backend = dobles.backend(delay=args.delay, real_report=True)
         app = Application(config, backend=backend)
 

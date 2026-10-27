@@ -78,7 +78,7 @@ configuración de RTKLIB, `.pos`, `.stat`) quedan junto al proyecto, para que el
 ### 3.0 Redes de estaciones de referencia (CORS), no solo la RGNA
 
 Decisión del propietario (26-10-2026): la app se venderá también en Sudamérica. Nada queda atado al INEGI: la app
-trabaja con **redes CORS** como paquetes de datos (`kind` `cors-network` en el **mismo índice firmado** de los
+trabaja con **redes de estaciones de referencia (CORS)** como paquetes de datos (`kind` `cors-network` en el **mismo índice firmado** de los
 sistemas y geoides de TresVizo Field, publicado en `cadaritre/GNSS-TresVizo`). Cada red declara su clave y nombre
 («RGNA — INEGI, México»), el país, su **marco y época oficial** (RGNA: ITRF2008 2010.0; RBMC de Brasil: SIRGAS2000
 2000.4; MAGNA-ECO de Colombia, RAMSAC de Argentina, la red de Chile, NOAA CORS…, cada una la suya), el catálogo de

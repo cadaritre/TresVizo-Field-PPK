@@ -99,9 +99,9 @@ def decode(data: bytes) -> Grid:
     meta_bytes, plain_bytes = struct.unpack_from("<II", data, 50)
     compression = data[58] if version >= 2 else 0
     if rows < 2 or columns < 2 or rows * columns > MAXIMUM_SAMPLES:
-        raise FormatError(f"El geoide declara una malla de {rows}×{columns}: no es válida.")
+        raise FormatError(f"El archivo del geoide declara {rows}×{columns} nodos: no es válido.")
     if not (math.isfinite(dlat) and math.isfinite(dlon) and dlat > 0 and dlon > 0):
-        raise FormatError("El geoide declara un paso de malla no válido.")
+        raise FormatError("El archivo del geoide declara una resolución no válida.")
     start = HEADER_BYTES + meta_bytes
     if len(data) < start:
         raise FormatError("El geoide está truncado (metadatos).")
@@ -117,13 +117,13 @@ def decode(data: bytes) -> Grid:
         body = bytes(stored)
     elif compression == _RAW_DEFLATE:
         if plain_bytes != expected:
-            raise FormatError("El tamaño declarado de los datos del geoide no corresponde a su malla.")
+            raise FormatError("El tamaño declarado de los datos del geoide no corresponde a sus nodos: archivo dañado.")
         try:
             diffs = zlib.decompress(stored, -15)
         except zlib.error:
             raise FormatError("Los datos del geoide no se pudieron descomprimir: archivo dañado.") from None
         if len(diffs) != expected:
-            raise FormatError("Los datos del geoide no tienen el tamaño de su malla: archivo dañado.")
+            raise FormatError("Los datos del geoide no tienen el tamaño que declara: archivo dañado.")
         d = np.frombuffer(diffs, dtype="<u2").reshape(rows, columns)
         # Camino de vuelta del predictor plano, módulo 2¹⁶: suma por filas (e) y luego por columnas.
         e = np.cumsum(d, axis=1, dtype=np.uint16)

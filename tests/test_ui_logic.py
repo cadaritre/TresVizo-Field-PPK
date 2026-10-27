@@ -345,6 +345,14 @@ def test_every_country_of_the_bundled_index_has_its_name_and_region():
         name, region = cv.country_region(code)
         assert name != code and region in cv.REGIONS and region != 'Mundo', code
 
+
+def test_station_label_never_repeats_the_code():
+    from types import SimpleNamespace as N
+    from tresvizo_ppk.nombres import station_label
+    assert station_label(N(id='ICEP', name='ICEP — Puebla, Pue.')) == 'ICEP — Puebla, Pue.'
+    assert station_label(N(id='ICEP', name='Puebla, Pue.')) == 'ICEP (Puebla, Pue.)'
+    assert station_label(N(id='BASE', name='')) == 'BASE'
+
 def test_spanish_display_names_and_plurals():
     from tresvizo_ppk.nombres import display_name
     from app.formatting import plural

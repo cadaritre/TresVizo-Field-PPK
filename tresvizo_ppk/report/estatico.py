@@ -98,6 +98,7 @@ def _status(result: StaticResult, min_ratio: float) -> tuple[str, str, list[str]
                        "comprobar con otra.")
     longs = {b.base.id for b in result.baselines if is_long_float(b) or (is_own(b) and b.solution == Solution.FLOAT)}
     reasons += [w for w in result.warnings if w not in reasons
+                and not (len(result.baselines) == 1 and w.startswith("Con una sola base"))  # ya dicho arriba
                 and not any(w.startswith(f"La línea base con {bid}") for bid in excluded)
                 and not any(w.startswith(f"La línea base {bid} ") and "quedó FLOTANTE" in w for bid in longs)]
     reasons = list(dict.fromkeys(reasons))

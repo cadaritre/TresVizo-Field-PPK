@@ -82,7 +82,7 @@ def test_csv_de_tresvizo_field(result, tmp_path):
         assert row["Solution status"] == ("FIX" if p.solution == Solution.FIXED else "FLOAT")
         assert row["Correction type"] == "PPK" and row["Mount point"] == "" and row["Caster"] == ""
         assert row["Base receiver"] == "TRIMBLE NETR9" and row["Base elevation reference"] == "ARP"
-        assert row["PPK base"] == "PRB1 Estación de prueba 1" and row["Processed with"].startswith("TresVizo Field PPK")
+        assert row["PPK base"] == "PRB1 (Estación de prueba 1)" and row["Processed with"].startswith("TresVizo Field PPK")
         assert row["Field easting"] and float(row["Field delta horizontal"]) < 0.1
         assert row["PPK epochs"] == str(p.epochs_total)
         assert row["Samples"] == str(p.epochs_fixed if p.solution == Solution.FIXED else p.epochs_total)

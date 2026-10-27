@@ -31,6 +31,7 @@ from xml.sax.saxutils import escape
 from ..crs import api as crs
 from ..errors import UserError
 from ..model import CoordinateChoice, Ecef, Enu, PointsResult, ProcessedPoint, Solution, TransformedCoordinate
+from ..nombres import station_label
 from ..version import __version__
 from . import columnas
 
@@ -308,7 +309,7 @@ def _field_csv(result: PointsResult, choice: CoordinateChoice) -> bytes:
             "ppkEastingSigma": number(comp.sigma.e, 3) if comp.sigma else "",
             "ppkNorthingSigma": number(comp.sigma.n, 3) if comp.sigma else "",
             "ppkElevationSigma": number(comp.sigma.u, 3) if comp.sigma else "",
-            "ppkBase": neutralized(f"{base.id} {base.name}".strip()),
+            "ppkBase": neutralized(station_label(base)),
             "ppkBaseline": number(pp.distance_to_base_m, 3),
             "fieldEasting": field_e, "fieldNorthing": field_n,
             "fieldElevation": comp.elevation(choice, comp.field) if comp.field else "",
@@ -410,12 +411,12 @@ def _metadata(result: PointsResult, choice: CoordinateChoice, sample: Transforme
         "sistema_de_las_propiedades": f"{sample.crs_code} {sample.label}" if sample else choice.crs_id,
         "marco": pos.frame,
         "epoca_marco": pos.epoch,
-        "base": f"{result.base.id} {result.base.name}".strip(),
+        "base": station_label(result.base),
         "base_fuente": result.base.source or ("oficial" if result.base.official else "manual"),
-        "cota": "la geometria lleva la altura elipsoidal del punto en el suelo; la cota del sistema va en cota_m",
+        "cota": "la geometría lleva la altura elipsoidal del punto en el suelo; la cota del sistema va en cota_m",
         "geoide": (sample.geoid_name if sample and sample.orthometric_height_m is not None else
                    (f"{choice.geoid_id} no aplicado" if choice.geoid_id else "ninguno")),
-        "plomeado": "en posproceso todo se asume plomeado: el punto es la antena menos la altura vertical del baston",
+        "plomeado": "en posproceso todo se asume plomeado: el punto es la antena menos la altura vertical del bastón",
         "puntos": len(result.points) - len(skipped),
     }
     if sample is not None and sample.attribution:

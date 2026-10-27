@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..crs import api as crs
 from ..errors import UserError
+from .. import nombres
 from ..nombres import display_name
 from ..model import (CoordinateChoice, DataQuality, Ecef, Ephemeris, ObservationSet, ProcessingOptions, Project,
                      Solution, Station, TransformedCoordinate)
@@ -292,5 +293,4 @@ def frame_text(position: Ecef) -> str:
 
 
 def station_label(s: Station) -> str:
-    """«UQRO — Querétaro, Qro.» sin repetir la clave cuando el nombre ya la trae."""
-    return s.name if s.name.startswith(s.id) else f"{s.id} ({s.name})" if s.name else s.id
+    return nombres.station_label(s)

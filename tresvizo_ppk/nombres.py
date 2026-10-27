@@ -42,3 +42,10 @@ def display_name(name: str, spanish: str | None = None) -> str:
     for pattern, replacement in TERMS:
         text = pattern.sub(replacement, text)
     return re.sub(r'\s{2,}', ' ', text).strip()
+
+
+def station_label(station) -> str:
+    """«UQRO — Querétaro, Qro.» sin repetir la clave cuando el nombre ya la trae; si no, «ICEP (Puebla, Pue.)»."""
+    if not station.name:
+        return station.id
+    return station.name if station.name.startswith(station.id) else f"{station.id} ({station.name})"

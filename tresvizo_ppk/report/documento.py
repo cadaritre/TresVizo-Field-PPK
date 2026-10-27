@@ -245,7 +245,8 @@ class Report:
                                 rightMargin=estilo.MARGINS["right"], topMargin=estilo.MARGINS["top"],
                                 bottomMargin=estilo.MARGINS["bottom"], title=self.title,
                                 author=self.user.company or self.user.surveyor or "", subject=subject,
-                                creator=f"{APP_NAME} {__version__}", lang="es-MX")
+                                creator=f"{APP_NAME} {__version__}", producer=f"{APP_NAME} {__version__}",
+                                lang="es-MX")
         footer = self._footer
         doc.build(self.story, canvasmaker=lambda *a, **k: _NumberedCanvas(*a, footer=footer, **k))
         tmp.replace(out)
