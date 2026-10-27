@@ -204,6 +204,10 @@ class FieldPoint:
     field_position: Ecef | None = None         # lo que se midió en campo
     field_solution: str = ""                   # «FIJO», «FLOTANTE», «AUTÓNOMO»…
     row: dict[str, str] = field(default_factory=dict)   # la fila original, para reexportarla
+    # Añadido por el motor (columnas del CSV; antenna_height_m es la «Altura de antena»: vertical del jalón):
+    antenna_offset_m: float | None = None      # «Antenna offset»: base del receptor → ARP (case)
+    antenna_pco_m: float = 0.0                 # «Antenna PCO»: ARP → centro de fase (0 sin calibrar)
+    total_height_m: float | None = None        # «Total antenna height»: marca → ARP (jalón + case)
 
 
 @dataclass
