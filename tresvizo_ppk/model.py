@@ -71,6 +71,7 @@ class ObservationSet:
     interval_s: float | None = None
     rinex_version: str = ""
     source_files: list[Path] = field(default_factory=list)   # lo que entregó el usuario, tal cual
+    antenna_pco_measured: bool | None = None  # PCO de la antena medido (True), sin medir (False) o no se sabe (None)
 
 
 @dataclass
@@ -266,6 +267,7 @@ class Project:
     version: int = 1
     kind: str = "static"                       # «static» o «points»
     name: str = ""
+    number: str = ""                           # número o clave del proyecto que da el usuario (sale en el informe)
     folder: Path | None = None
     inputs: dict[str, list[str]] = field(default_factory=dict)   # rutas relativas por papel («rover», «base:CHIH»…)
     hashes: dict[str, str] = field(default_factory=dict)         # ruta relativa → SHA-256
