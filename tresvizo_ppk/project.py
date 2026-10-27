@@ -200,6 +200,7 @@ def _parse_options(d: dict, folder: Path) -> ProcessingOptions:
 def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
     return {"formato": FORMAT, "version": FORMAT_VERSION, "app_version": app_version,
             "kind": project.kind, "name": project.name, "number": project.number, "place": project.place, "point_name": project.point_name,
+            "point_code": project.point_code, "point_description": project.point_description,
             "pole_height_m": project.pole_height_m, "inputs": project.inputs, "hashes": project.hashes,
             "options": _options(project.options, folder),
             "coordinates": {"crs_id": project.coordinates.crs_id, "zone": project.coordinates.zone,
@@ -233,6 +234,8 @@ def from_dict(data: dict, folder: Path) -> Project:
                                                     label=str(c.get("label", ""))),
                        pole_height_m=float(data.get("pole_height_m", 0.0)),
                        point_name=str(data.get("point_name", "")), number=str(data.get("number", "")),
+                       point_code=str(data.get("point_code", "")),
+                       point_description=str(data.get("point_description", "")),
                        place=str(data.get("place", "")),
                        created=_parse_time(data.get("created")), processed=_parse_time(data.get("processed")),
                        bases=[_parse_station(s) for s in data.get("bases", [])],

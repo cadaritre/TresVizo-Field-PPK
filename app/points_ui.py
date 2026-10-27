@@ -20,13 +20,13 @@ from app.wizard import COMMON_FRAMES, PointsJob, classify, distance_m, epoch_tex
 from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text,
                            network_catalog, station_label)
 from app.static_ui import RECORDING_TYPES
+from app.export_ui import CUSTOM_CSV_LABEL, POINT_FORMATS, ExportActions, csv_options
+from tresvizo_ppk.export.columnas import PPK_COLUMNS
 
-EXPORTS = [('field_csv', 'CSV de TresVizo Field…', '.csv', 'CSV de TresVizo Field'),
-           ('csv', 'CSV simple (nombre, X, Y, Z, código)…', '.csv', 'CSV'),
-           ('geojson', 'GeoJSON…', '.geojson', 'GeoJSON'), ('kml', 'KML (Google Earth)…', '.kml', 'KML')]
+EXPORTS = POINT_FORMATS
 
 
-class PointsPage(WizardPage):
+class PointsPage(ExportActions, WizardPage):
     TITLE = 'PPK de puntos'
     ICON = 'route'
     JOB = PointsJob
@@ -557,37 +557,56 @@ class PointsPage(WizardPage):
     def make_report(self, report, output, project, user, out):
         return report.points_report(output['result'], project, user, out)
 
+    EXPORT_STEM = 'puntos'
+
     def export_button(self, parent):
         button = ttk.Menubutton(parent, text='Exportar')
         self.app.icons.bind(button, 'share')
         menu = tk.Menu(button, tearoff=False)
         for formato, label, suffix, kind in EXPORTS:
             menu.add_command(label=label, command=lambda f=formato, s=suffix, k=kind: self.export(f, s, k))
+        menu.add_command(label=CUSTOM_CSV_LABEL, command=self.export_custom_csv)
+        menu.add_separator()
+        menu.add_command(label='Exportar trayectoria (.pos de RTKLIB)…', command=lambda: self.export_trajectory('pos'))
+        menu.add_command(label='Exportar trayectoria (CSV)…', command=lambda: self.export_trajectory('csv'))
+        self.add_rinex_item(menu)
         button.configure(menu=menu)
         if not self.app.backend.available('export'):
             button.state(['disabled'])
         return button
 
-    def export(self, formato, suffix, kind):
+    def export(self, formato, suffix, kind, csv=None):
         export = self.app.backend.export
         if export is None or self.output is None:
             return
-        stem = self.path.stem if self.path else 'puntos'
-        target = filedialog.asksaveasfilename(parent=self.app, title='Exportar puntos', defaultextension=suffix,
-                                              initialdir=str(self.path.parent if self.path else Path.home()),
-                                              initialfile=f'{stem} posproceso{suffix}',
-                                              filetypes=[(kind, '*'+suffix)])
+        target = self.ask_export_file('Exportar puntos', suffix, kind, f'{self.export_stem()} posproceso{suffix}')
         if not target:
             return
         result, choice = self.output['result'], self.output['choice']
+        project = self.project.name if self.project else ''
+        options = {} if csv is None else {'csv_options': csv_options(export, csv)}
+        if formato in ('dxf', 'landxml'):
+            options['project'] = project
+        self.run_export(lambda p, c: export.export_points(result, choice, formato, Path(target), **options),
+                        lambda path: f'Puntos exportados: {path.name}.')
 
-        def done(path):
-            self.app.set_status(f'Puntos exportados: {Path(path).name}.', Path(path).parent)
+    def export_custom_csv(self):
+        options = self.ask_csv_options(PPK_COLUMNS)
+        if options is not None:
+            self.export('csv', '.csv', 'CSV', csv=options)
 
-        def failed(kind_, message, detail):
-            self.app.show_error(kind_, message, detail, 'No se pudo exportar')
-        tasks.run(self, lambda p, c: export.export_points(result, choice, formato, Path(target)), on_done=done,
-                  on_error=failed)
+    def export_trajectory(self, formato):
+        export = self.app.backend.export
+        if export is None or self.output is None:
+            return
+        suffix, kind = ('.pos', 'Trayectoria de RTKLIB') if formato == 'pos' else ('.csv', 'CSV')
+        target = self.ask_export_file('Exportar trayectoria', suffix, kind, f'{self.export_stem()} trayectoria{suffix}')
+        if not target:
+            return
+        result, choice = self.output['result'], self.output['choice']
+        self.run_export(lambda p, c: export.export_trajectory(result, choice, formato, Path(target), progress=p,
+                                                              cancel=c),
+                        lambda path: f'Trayectoria exportada: {path.name}.')
 
     # --- Resultado ----------------------------------------------------------------------------------------------
 

@@ -50,6 +50,7 @@ class Preferences:
     last_folder: str = ''
     check_updates: bool = False
     text_size: str = 'normal'               # «normal», «grande» o «muy grande» (accesibilidad)             # buscar actualizaciones al abrir (solo si el usuario lo activa)
+    csv_export: dict = field(default_factory=dict)   # «Opciones de CSV» de la última exportación a medida
 
 
 def validate(p: Preferences) -> Preferences:
@@ -65,6 +66,8 @@ def validate(p: Preferences) -> Preferences:
         raise SettingsError('Tamaño de letra desconocido.')
     if p.theme not in BUILTINS:
         raise SettingsError('Apariencia desconocida.')
+    if not isinstance(p.csv_export, dict):
+        raise SettingsError('Opciones de CSV inválidas.')
     if not isinstance(p.recents, list) or not all(isinstance(r, str) for r in p.recents):
         raise SettingsError('Lista de recientes inválida.')
     return p

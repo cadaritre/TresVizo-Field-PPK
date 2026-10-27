@@ -4,6 +4,7 @@ from __future__ import annotations
 from copy import deepcopy
 from dataclasses import replace
 import math
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk
 
@@ -12,6 +13,7 @@ from tresvizo_ppk.model import Ephemeris, Solution
 from app import tasks
 from tresvizo_ppk.nombres import display_name
 from app.charts import BarChart, PlanChart, enu_of, enu_sigma
+from app.export_ui import CUSTOM_CSV_LABEL, POINT_FORMATS, ExportActions, csv_options
 from app.components import DropZone, FileList, LabeledEntry, Tooltip, card, later, wrap_label
 from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
@@ -30,7 +32,7 @@ def baseline_station_text(station) -> str:
     return station.id if not name or name == station.id else f'{station.id}\n{name}'
 
 
-class StaticPage(WizardPage):
+class StaticPage(ExportActions, WizardPage):
     TITLE = 'Georreferenciar punto'
     ICON = 'map-pin'
     JOB = StaticJob
@@ -68,12 +70,21 @@ class StaticPage(WizardPage):
                                               'Sale en el informe y en el nombre del proyecto.')
         self.height_field = height = LabeledEntry(inner, 'Altura del bastón o trípode (m)', self.height_var,
                                                   self.POLE_HINT)
-        self.point_fields = (name, height)
+        self.code_var = tk.StringVar(value=self.job.point_code)
+        self.description_var = tk.StringVar(value=self.job.point_description)
+        code = LabeledEntry(inner, 'Código (opcional)', self.code_var,
+                            'El de la biblioteca de las apps («BN», «VERT»): la capa del DXF y el código del CSV y '
+                            'del LandXML.')
+        description = LabeledEntry(inner, 'Descripción (opcional)', self.description_var,
+                                   'Sale en el CSV, el DXF y el LandXML («Mojón de concreto junto al camino»).')
+        self.point_fields = (name, height, code, description)
         inner.bind('<Configure>', lambda e: self.arrange_point(e.width), add='+')
         self.arrange_point(900)
         self.set_rover(self.job.rover_files, notify=False)
         self.name_var.trace_add('write', lambda *a: self.edit(point_name=self.name_var.get()))
         self.height_var.trace_add('write', lambda *a: self.edit(pole_height=self.height_var.get()))
+        self.code_var.trace_add('write', lambda *a: self.edit(point_code=self.code_var.get()))
+        self.description_var.trace_add('write', lambda *a: self.edit(point_description=self.description_var.get()))
 
     POLE_HINT = ('Vertical, del punto en el suelo a la rosca del receptor. La distancia de la rosca a la referencia de '
                  'la antena la suma el programa.')
@@ -85,15 +96,17 @@ class StaticPage(WizardPage):
         if getattr(self, '_point_columns', None) == columns:
             return
         self._point_columns = columns
-        name, height = self.point_fields
-        name.master.columnconfigure((0, 1), weight=1 if columns == 2 else 0, uniform='point' if columns == 2 else '')
-        name.master.columnconfigure(0, weight=1)
-        if columns == 2:
-            name.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
-            height.grid(row=0, column=1, sticky='nsew', padx=(12, 0), pady=0)
-        else:
-            name.grid(row=0, column=0, columnspan=2, sticky='nsew', padx=0)
-            height.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=0, pady=(12, 0))
+        fields = self.point_fields
+        master = fields[0].master
+        master.columnconfigure((0, 1), weight=1 if columns == 2 else 0, uniform='point' if columns == 2 else '')
+        master.columnconfigure(0, weight=1)
+        for index, widget in enumerate(fields):
+            if columns == 2:
+                row, column = divmod(index, 2)
+                widget.grid(row=row, column=column, columnspan=1, sticky='nsew', padx=(0, 12) if column == 0 else
+                            (12, 0), pady=(0 if row == 0 else 12, 0))
+            else:
+                widget.grid(row=index, column=0, columnspan=2, sticky='nsew', padx=0, pady=(0 if index == 0 else 12, 0))
 
     def rover_inspected(self, obs):
         files = self.job.rover_files
@@ -355,6 +368,8 @@ class StaticPage(WizardPage):
     def make_report(self, report, output, project, user, out):
         return report.static_report(output['result'], project, user, out)
 
+    EXPORT_STEM = 'vertice'
+
     def export_button(self, parent):
         button = ttk.Menubutton(parent, text='Exportar')
         self.app.icons.bind(button, 'share')
@@ -362,8 +377,39 @@ class StaticPage(WizardPage):
         menu.add_command(label='Copiar coordenadas', command=self.copy_coordinates)
         if self.app.backend.available('report'):
             menu.add_command(label='Guardar informe PDF…', command=self.view_report)
+        if self.app.backend.available('export'):
+            menu.add_separator()
+            for formato, label, suffix, kind in POINT_FORMATS:
+                menu.add_command(label=label, command=lambda f=formato, s=suffix, k=kind: self.export(f, s, k))
+            menu.add_command(label=CUSTOM_CSV_LABEL, command=self.export_custom_csv)
+            menu.add_separator()
+            self.add_rinex_item(menu)
         button.configure(menu=menu)
         return button
+
+    def export(self, formato, suffix, kind, csv=None):
+        """El vértice en un archivo, con los formatos del PPK (`export_static`)."""
+        export = self.app.backend.export
+        if export is None or self.output is None:
+            return
+        result, choice = self.output['result'], self.output['choice']
+        target = self.ask_export_file('Exportar vértice', suffix, kind,
+                                      f'{result.point_name or self.export_stem()}{suffix}')
+        if not target:
+            return
+        options = {'code': self.job.point_code.strip(), 'description': self.job.point_description.strip()}
+        if csv is not None:
+            options['csv_options'] = csv_options(export, csv)
+        if formato in ('dxf', 'landxml'):
+            options['project'] = self.project.name if self.project else ''
+        self.run_export(lambda p, c: export.export_static(result, choice, formato, Path(target), **options),
+                        lambda path: f'Vértice exportado: {path.name}.')
+
+    def export_custom_csv(self):
+        export = self.app.backend.export
+        options = self.ask_csv_options(getattr(export, 'STATIC_COLUMNS', []))
+        if options is not None:
+            self.export('csv', '.csv', 'CSV', csv=options)
 
     def copy_coordinates(self):
         out = self.output

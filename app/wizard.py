@@ -189,6 +189,14 @@ def _name_issues(field_name: str, text: str, what: str, limit: int = 40) -> list
     return []
 
 
+def _text_issues(field_name: str, text: str, what: str, limit: int) -> list[Issue]:
+    """Un texto opcional: hasta `limit` caracteres y sin saltos de línea ni caracteres de control."""
+    value = text.strip()
+    if len(value) > limit or any(ord(c) < 32 for c in value):
+        return [Issue(field_name, f'{what} admite hasta {limit} caracteres, en una sola línea.')]
+    return []
+
+
 def options_issues(options: ProcessingOptions, precise_download: bool) -> list[Issue]:
     found = []
     if not 0 <= options.elevation_mask_deg <= 30:
@@ -243,6 +251,8 @@ BASE_KINDS = {'obs', 'nav', 'zip'}
 class StaticJob:
     rover_files: list[Path] = field(default_factory=list)
     point_name: str = ''
+    point_code: str = ''                     # código y descripción del vértice (CSV, DXF, LandXML)
+    point_description: str = ''
     pole_height: str = ''
     bases: list[BaseEntry] = field(default_factory=list)
     options: ProcessingOptions = field(default_factory=ProcessingOptions)
@@ -272,7 +282,9 @@ class StaticJob:
             elif kinds and kinds <= {'obs'}:
                 found.append(Issue('rover', 'Sin navegación del rover: se usará la de las estaciones.', 'warning'))
             return found+_name_issues('point_name', self.point_name, 'del punto') + \
-                _height_issues('pole_height', self.pole_height, 'del bastón o trípode')
+                _height_issues('pole_height', self.pole_height, 'del bastón o trípode') + \
+                _text_issues('point_code', self.point_code, 'El código', 40) + \
+                _text_issues('point_description', self.point_description, 'La descripción', 200)
         if step == 1:
             found = []
             if not self.bases:
@@ -334,6 +346,8 @@ class StaticJob:
         project.number = self.number.strip()
         project.place = self.place.strip()
         project.point_name = self.point_name.strip()
+        project.point_code = self.point_code.strip()
+        project.point_description = self.point_description.strip()
         project.pole_height_m = self.pole_height_m()
         project.options = self.options
         project.coordinates = self.coordinates
@@ -347,6 +361,7 @@ class StaticJob:
                            name=stations[role.split(':', 1)[1]].name if role.split(':', 1)[1] in stations else '')
                  for role, paths in files.items() if role.startswith('base:')]
         return cls(rover_files=files.get('rover', []), point_name=project.point_name,
+                   point_code=project.point_code, point_description=project.point_description,
                    pole_height=f'{project.pole_height_m:.3f}', bases=bases, options=project.options,
                    coordinates=project.coordinates, number=project.number, place=project.place)
 

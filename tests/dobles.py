@@ -233,13 +233,36 @@ class FakeReport:
 
 
 class FakeExport:
+    STATIC_COLUMNS = [('staticSolution', 'Static solution', 'Solución del estático')]
+
     def __init__(self):
         self.calls = []
 
-    def export_points(self, result, choice, formato, out):
-        self.calls.append((formato, choice.crs_id, Path(out).name))
+    @staticmethod
+    def CsvOptions(**options):
+        return dict(options)
+
+    def export_points(self, result, choice, formato, out, **options):
+        self.calls.append((formato, choice.crs_id, Path(out).name, options))
         Path(out).write_text('\n'.join(p.point.name for p in result.points), encoding='utf-8')
         return Path(out)
+
+    def export_static(self, result, choice, formato, out, **options):
+        self.calls.append(('static', formato, choice.crs_id, Path(out).name, options))
+        Path(out).write_text(result.point_name, encoding='utf-8')
+        return Path(out)
+
+    def export_trajectory(self, result, choice, formato, out, progress=None, cancel=None):
+        self.calls.append(('trajectory', formato, Path(out).name))
+        Path(out).write_text('trayectoria', encoding='utf-8')
+        return Path(out)
+
+    def export_rinex(self, observations, folder):
+        self.calls.append(('rinex', Path(folder).name))
+        Path(folder).mkdir(parents=True, exist_ok=True)
+        out = Path(folder)/'SESION.26O'
+        out.write_text('rinex', encoding='utf-8')
+        return [out]
 
 
 def backend(delay=0.0, fail=None, crs=True, real_report=False):

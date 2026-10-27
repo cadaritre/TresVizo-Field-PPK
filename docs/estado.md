@@ -177,6 +177,11 @@
   las apps en lo que es de puntos y **validado contra `LandXML-1.2.xsd`**; **CSV a medida** (Todas, PENZD, PNEZD,
   NXYZD, Personalizada; separadores, idioma, sin encabezado, BOM, coma decimal); **trayectoria** del PPK (`.pos` y
   CSV por época) y **RINEX de la sesión**.
+  En la interfaz (`app/export_ui.py`): el menú «Exportar» del estático y del PPK con los seis formatos, «CSV a medida»
+  con «Opciones de CSV» (los textos de las apps, recordadas en las preferencias), la trayectoria (.pos y CSV) y «Exportar
+  RINEX de la sesión»; el estático pide código y descripción del vértice (opcionales, guardados en el proyecto).
+  Pruebas con los dobles en `tests/test_ui_export.py`. El diálogo no se revisó en una captura de pantalla (este equipo
+  no da permiso de grabar la pantalla a la terminal).
 
 **Pendiente o sin verificar:**
 - Exportación para CAD: el DXF y el LandXML no se han abierto en AutoCAD ni en Civil 3D (no hay dónde); se leyeron con
