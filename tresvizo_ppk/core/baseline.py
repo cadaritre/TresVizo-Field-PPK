@@ -1,22 +1,28 @@
-"""Una línea base estática con RTKLIB: estrategia según la longitud, proceso combinado y `BaselineSolution`.
+"""Una línea base estática: estrategia según la longitud, proceso y `BaselineSolution`.
 
 Estrategia (`ProcessingOptions.ionosphere`), ajustada con las pruebas sobre la RGNA (docs/validacion.md):
 - «auto»:
-  - menos de 20 km: ionosfera del mensaje de navegación, troposfera Saastamoinen, ambigüedades enteras;
-  - de 20 a 60 km: lo mismo con el retardo cenital troposférico estimado y, además, la solución libre de
-    ionosfera (flotante); se queda la fija solo si fijó al menos la mitad de las épocas y coincide con la libre de
-    ionosfera dentro de su tolerancia; si no, la libre de ionosfera;
-  - 60 km o más: libre de ionosfera (combinación L1/L2), ambigüedades flotantes, troposfera estimada. Es lo que
-    resuelve bien RTKLIB en líneas largas; con sesiones de horas da centímetros.
-- «iono-free»: siempre libre de ionosfera (flotante). «broadcast»: siempre con la ionosfera del mensaje y
+  - menos de 20 km: RTKLIB con la ionosfera del mensaje de navegación, troposfera Saastamoinen y ambigüedades
+    enteras;
+  - 20 km o más: el **procesador propio** (`larga`): libre de ionosfera de GPS, Galileo y BeiDou, troposfera
+    estimada con gradientes, ambigüedades de ancho y estrecho de carril con LAMBDA, solución fija solo si pasa la
+    tasa de éxito, la prueba de razón, la prueba χ² de la distancia entera y la duración mínima validada (30 min hasta
+    60 km, 1 h desde ahí). En la validación fijó todas las sesiones de 1 h o más a 30 y a 100–141 km, con error de
+    centímetro, y su flotante es mejor que la libre de ionosfera de RTKLIB. RTKLIB corre además la libre de ionosfera
+    como comprobación independiente (y sus gráficas de cielo, satélites y residuos van al informe); si las dos no
+    concuerdan, se avisa. Entre 20 y 60 km, si el propio queda flotante, se prueba como antes la fija de RTKLIB con la
+    ionosfera del mensaje y se queda solo si fijó la mitad de las épocas y coincide con la libre de ionosfera.
+    Si el procesador propio no puede con los datos (sin señales comunes, muy pocas épocas), se usa RTKLIB como antes.
+- «iono-free»: siempre libre de ionosfera de RTKLIB (flotante). «broadcast»: siempre con la ionosfera del mensaje y
   ambigüedades enteras. «estimated»: ionosfera estimada por satélite (opción de RTKLIB; en las pruebas no fijó).
-- Ambigüedades enteras solo de GPS, Galileo y QZSS: las de GLONASS (sesgos entre canales) y BeiDou impidieron
+- RTKLIB: ambigüedades enteras solo de GPS, Galileo y QZSS: las de GLONASS (sesgos entre canales) y BeiDou impidieron
   fijar en las pruebas (ver docs/validacion.md); esos satélites entran en la solución con ambigüedad flotante.
 
-Coordenada final de la línea: mediana de las épocas de la solución combinada adelante/atrás con la mejor calidad
-(fijas; si no hay, flotantes). Covarianza: la formal de RTKLIB más un modelo de error realista (ver `ERROR_MODEL`),
-porque la formal de un estático largo es de décimas de milímetro y no incluye órbitas, troposfera ni
-multitrayectoria; el ajuste de red pone a prueba ese modelo con su chi².
+Coordenada final de una línea de RTKLIB: mediana de las épocas de la solución combinada adelante/atrás con la mejor
+calidad (fijas; si no hay, flotantes). Covarianza: la formal de RTKLIB más un modelo de error realista (ver
+`ERROR_MODEL`), porque la formal de un estático largo es de décimas de milímetro y no incluye órbitas, troposfera ni
+multitrayectoria; el ajuste de red pone a prueba ese modelo con su chi². La del procesador propio trae su propio
+modelo calibrado (`larga.procesador.ERROR_FLOOR`).
 """
 from __future__ import annotations
 
@@ -35,8 +41,12 @@ from . import antex, rtklib, tools
 from .geodesy import (azimuth_zenith, covariance_ecef_to_enu, covariance_enu_to_ecef, ecef_delta_to_enu,
                       gps_to_utc, utc_to_gps)
 
-SHORT_BASELINE_M = 20_000.0      # «auto»: hasta aquí, ionosfera del mensaje y ambigüedades enteras
-LONG_BASELINE_M = 60_000.0       # «auto»: desde aquí, solo libre de ionosfera (flotante)
+SHORT_BASELINE_M = 20_000.0      # «auto»: hasta aquí, ionosfera del mensaje y ambigüedades enteras (RTKLIB)
+LONG_BASELINE_M = 60_000.0       # «auto»: desde aquí, RTKLIB solo libre de ionosfera (flotante)
+OWN_BASELINE_M = 20_000.0        # «auto»: desde aquí, el procesador propio de líneas largas (`larga`)
+CHECK_H_M = 0.03                 # tolerancia mínima propio ↔ libre de ionosfera de RTKLIB (o 3σ combinada)
+CHECK_V_M = 0.06
+SYSTEM_CODES = {"GPS": "G", "Galileo": "E", "BeiDou": "C"}
 MIN_FIX_RATE_AUTO = 0.5          # «auto», línea media: mínimo de épocas fijas para quedarse con la fija
 AGREEMENT_H_M = 0.03             # tolerancia fija ↔ libre de ionosfera (o 3σ de la libre, lo que sea mayor)
 AGREEMENT_V_M = 0.06
@@ -198,6 +208,7 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
     approx = approx_position(rover, nav, workdir, cancel=cancel, log=log)
     length = float(np.linalg.norm(approx - base_xyz))
     plan = strategies(length, options, mode)
+    use_own = own_applies(length, options, mode)
     interval = options.interval_s or max(rover.interval_s or 1.0, base.interval_s or 1.0) if mode == "static" \
         else options.interval_s
     start_g = utc_to_gps(start).replace(tzinfo=None)
@@ -219,7 +230,8 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
         cfg.write(conf)
         pos = workdir / f"{name}.pos"
         log.append(f"Línea base {station.id}: {strategy.text} ({length / 1000:.1f} km).")
-        frac0, frac1 = k / len(plan), (k + 1) / len(plan)
+        span = 0.5 if use_own else 1.0
+        frac0, frac1 = span * k / len(plan), span * (k + 1) / len(plan)
         rtklib.run_rnx2rtkp(conf, pos, rover.obs[0], base.obs[0], nav, [Path(p) for p in options.precise_files],
                             workdir=workdir, start_gpst=start_g, end_gpst=end_g, interval_s=interval,
                             progress=lambda f, m: step(frac0 + (frac1 - frac0) * f, m), cancel=cancel, log=log,
@@ -228,23 +240,177 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
         run = RunResult(strategy, epochs, pos, Path(str(pos) + ".stat"), conf)
         runs.append(run)
         log.append(f"  épocas: {len(epochs)}, fijas: {100 * run.fix_rate:.0f} %")
+    own = None
+    if use_own:
+        tools.check(cancel)
+        try:
+            own = _process_own(rover, station, base, options, base_xyz, approx, rover_choice, base_choice, rover_h,
+                               base_h, start_g, end_g, workdir, log,
+                               progress=lambda f, m: step(0.5 + 0.5 * f, m), cancel=cancel)
+        except UserError as error:
+            warnings.append(f"Línea base {station.id} ({length / 1000:.1f} km): el procesador de líneas largas no pudo "
+                            f"con estos datos ({error}); se usa RTKLIB.")
+            log.append(f"  procesador propio: {error}")
     chosen = runs[0]
+    rtk_fixed_ok = False
     if len(runs) == 2:
         fixed_run, float_run = runs
         agree, detail = _agreement(fixed_run, float_run, base_xyz)
-        log.append(f"  fija frente a libre de ionosfera: {detail}")
-        if fixed_run.fix_rate >= MIN_FIX_RATE_AUTO and agree:
+        log.append(f"  fija de RTKLIB frente a su libre de ionosfera: {detail}")
+        rtk_fixed_ok = fixed_run.fix_rate >= MIN_FIX_RATE_AUTO and agree
+        if rtk_fixed_ok:
             chosen = fixed_run
         else:
             chosen = float_run
-            reason = (f"solo {100 * fixed_run.fix_rate:.0f} % de épocas fijas" if fixed_run.fix_rate <
-                      MIN_FIX_RATE_AUTO else f"la fija no coincide con la libre de ionosfera ({detail})")
-            warnings.append(f"Línea base {station.id} ({length / 1000:.1f} km): {reason}; se usa la solución libre "
-                            "de ionosfera (flotante).")
-    elif chosen.strategy.key == "libre-de-ionosfera" and (options.ionosphere or "auto") == "auto":
+            if own is None:
+                reason = (f"solo {100 * fixed_run.fix_rate:.0f} % de épocas fijas" if fixed_run.fix_rate <
+                          MIN_FIX_RATE_AUTO else f"la fija no coincide con la libre de ionosfera ({detail})")
+                warnings.append(f"Línea base {station.id} ({length / 1000:.1f} km): {reason}; se usa la solución "
+                                "libre de ionosfera (flotante).")
+    elif chosen.strategy.key == "libre-de-ionosfera" and (options.ionosphere or "auto") == "auto" and own is None:
         log.append(f"  {length / 1000:.1f} km: línea larga, solución libre de ionosfera.")
+    if own is not None and (own.fixed or not rtk_fixed_ok):
+        control = runs[-1]
+        solution = summarize_own(own, rover, station, base_xyz, options, control, warnings, notes)
+        _cross_check(solution, control, rover, station, base_xyz, options, log)
+        return solution, control
+    if own is not None:
+        log.append(f"  procesador propio flotante ({own.reason}); la fija de RTKLIB con la ionosfera del mensaje "
+                   "coincide con la libre de ionosfera y se usa esa.")
     solution = summarize(chosen, rover, station, base_xyz, options, warnings, notes)
     return solution, chosen
+
+
+def own_applies(length_m: float, options: ProcessingOptions, mode: str = "static") -> bool:
+    """El procesador propio se usa en estático, «auto», doble frecuencia, desde `OWN_BASELINE_M`."""
+    return (mode == "static" and (options.ionosphere or "auto").lower() == "auto" and options.frequencies >= 2
+            and length_m >= OWN_BASELINE_M and any(c in options.constellations for c in SYSTEM_CODES))
+
+
+def _process_own(rover, station, base, options, base_xyz, approx, rover_choice, base_choice, rover_h, base_h,
+                 start_g, end_g, workdir, log, *, progress=None, cancel=None):
+    from .larga import antena as larga_antena
+    from .larga import procesador
+    from .larga.astro import gps_seconds
+
+    def full(choice):
+        return larga_antena.receiver_antenna(choice.model.type, choice.model.radome) if choice.model else None
+
+    systems = "".join(code for name, code in SYSTEM_CODES.items() if name in options.constellations)
+    rover_ep = procesador.Endpoint(rover.obs[0], np.array(approx, dtype=float), rover_h, full(rover_choice),
+                                   rover.marker)
+    base_ep = procesador.Endpoint(base.obs[0], base_xyz, base_h, full(base_choice), station.id)
+    nav = list(dict.fromkeys(list(rover.nav) + list(base.nav)))
+    precise = [Path(p) for p in options.precise_files] if options.ephemeris == Ephemeris.PRECISE else []
+    result = procesador.process(rover_ep, base_ep, nav, precise, mask_deg=options.elevation_mask_deg,
+                                start=gps_seconds(start_g), end=gps_seconds(end_g), interval_s=options.interval_s,
+                                systems=systems, progress=progress, cancel=cancel)
+    log.append(f"Línea base {station.id}: procesador propio de líneas largas.")
+    log.extend(f"  {line}" for line in result.log)
+    log.extend(f"  {line}" for line in result.notes)
+    if result.fixed:
+        log.append(f"  FIJA: {result.n_nl_fixed} combinaciones enteras de {result.n_nl_candidates} candidatas "
+                   f"({result.n_amb} dobles diferencias), razón {result.ratio:.1f}, tasa de éxito "
+                   f"{100 * result.success:.2f} %.")
+    else:
+        log.append(f"  FLOTANTE: {result.reason}.")
+    return result
+
+
+def summarize_own(own, rover: ObservationSet, station: Station, base_xyz: np.ndarray, options: ProcessingOptions,
+                  control: "RunResult", warnings: list[str], notes: list[str]) -> BaselineSolution:
+    """`BaselineSolution` del procesador propio (las gráficas de cielo, satélites y residuos son las de la libre de
+    ionosfera de RTKLIB que corre como control)."""
+    from ..model import AmbiguityResolution
+    from .larga import procesador
+    xyz = np.asarray(own.position, dtype=float)
+    cov = np.asarray(own.covariance, dtype=float)
+    vector = xyz - base_xyz
+    length = float(np.linalg.norm(vector))
+    e, n, u = ecef_delta_to_enu(base_xyz, vector)
+    az, zen = azimuth_zenith(base_xyz, vector)
+    solution = Solution.FIXED if own.fixed else Solution.FLOAT
+    formal = own.formal_covariance if own.formal_covariance is not None else cov
+    cov_enu_formal = covariance_ecef_to_enu(base_xyz, formal)
+    float_enu = covariance_ecef_to_enu(own.float_position, own.float_covariance)
+    frame, epoch = station.position.frame, station.position.epoch
+    groups = [f"{g.label}: {', '.join(g.satellites)}" + ("" if g.ar else f" (flotantes: {g.note})")
+              for g in own.groups]
+    excluded = list(own.notes) + ["GLONASS no entra en las líneas largas: cada satélite transmite en su frecuencia "
+                                  "(FDMA) y los sesgos entre canales dependen del receptor; QZSS tampoco (pocos "
+                                  "satélites visibles)."]
+    amb = AmbiguityResolution(
+        fixed=own.fixed, reason=own.reason, double_differences=own.n_amb, widelane_fixed=own.n_wl_fixed,
+        narrowlane_candidates=own.n_nl_candidates, narrowlane_fixed=own.n_nl_fixed, ratio=own.ratio,
+        min_ratio=procesador.NL_MIN_RATIO, success_rate=own.success, min_success_rate=procesador.NL_MIN_SUCCESS,
+        min_session_h=own.min_hours, sigma0=own.sigma0_fixed if own.fixed else own.sigma0_float,
+        rms_phase_m=own.rms_phase_m, troposphere_interval_h=own.trop_step_h, gradient_interval_h=own.grad_step_h,
+        signal_groups=groups, excluded=excluded,
+        float_position=Ecef(*(float(v) for v in own.float_position), frame, epoch),
+        float_sigma_enu=Enu(*(math.sqrt(max(0.0, float(float_enu[i, i]))) for i in range(3))),
+        observations=own.observations, rejected=own.rejected)
+    km = length / 1000.0
+    if own.fixed:
+        text = (f"procesador propio: libre de ionosfera ({_systems_text(own)}), troposfera estimada cada "
+                f"{own.trop_step_h:g} h con gradientes, ambigüedades de ancho y estrecho de carril con LAMBDA: fijas "
+                f"({own.n_nl_fixed} de {own.n_nl_candidates} combinaciones, razón {own.ratio:.1f}, tasa de éxito "
+                f"{100 * own.success:.2f} %)")
+    else:
+        text = (f"procesador propio: libre de ionosfera ({_systems_text(own)}), troposfera estimada cada "
+                f"{own.trop_step_h:g} h con gradientes, ambigüedades flotantes ({own.reason})")
+        warnings.append(f"La línea base {station.id} ({km:.1f} km) quedó FLOTANTE: {own.reason}.")
+    start_t = gps_to_utc(own.start.replace(tzinfo=timezone.utc))
+    end_t = gps_to_utc(own.end.replace(tzinfo=timezone.utc)) + timedelta(seconds=own.interval_s)
+    return BaselineSolution(
+        base=station, rover_marker=rover.marker, start=start_t, end=end_t, epochs_used=own.epochs,
+        satellites=list(own.satellites), solution=solution, ratio=own.ratio if own.fixed else None,
+        rms_m=own.rms_phase_m,
+        vector_ecef=Ecef(float(vector[0]), float(vector[1]), float(vector[2]), frame, epoch),
+        vector_enu=Enu(e, n, u), length_m=length, azimuth_deg=az, zenith_deg=zen,
+        covariance_ecef=tuple(tuple(float(v) for v in row) for row in cov),
+        rover_position=Ecef(float(xyz[0]), float(xyz[1]), float(xyz[2]), frame, epoch),
+        ephemeris=options.ephemeris, pos_file=None, stat_file=control.stat_file, warnings=warnings,
+        fix_rate=1.0 if own.fixed else 0.0, strategy=text, config_file=control.config_file,
+        formal_sigma_enu=Enu(*(math.sqrt(max(0.0, float(cov_enu_formal[i, i]))) for i in range(3))),
+        antenna_notes=notes, engine="TresVizo", ambiguity=amb)
+
+
+def _systems_text(own) -> str:
+    names = []
+    for g in own.groups:
+        name = g.label.split(" ")[0].split("-")[0]
+        if name not in names:
+            names.append(name)
+    return " + ".join(names)
+
+
+def _cross_check(solution: BaselineSolution, control: "RunResult", rover: ObservationSet, station: Station,
+                 base_xyz: np.ndarray, options: ProcessingOptions, log: list[str]) -> None:
+    """Compara la solución propia con la libre de ionosfera de RTKLIB (comprobación independiente) y avisa si no
+    concuerdan dentro de 3σ combinada (o `CHECK_H_M`/`CHECK_V_M`)."""
+    if not control.epochs:
+        log.append("  comprobación con RTKLIB: sin solución de RTKLIB para comparar.")
+        return
+    try:
+        other = summarize(control, rover, station, base_xyz, options, [], [])
+    except UserError:
+        log.append("  comprobación con RTKLIB: sin solución de RTKLIB para comparar.")
+        return
+    a = np.array([solution.rover_position.x, solution.rover_position.y, solution.rover_position.z])
+    b = np.array([other.rover_position.x, other.rover_position.y, other.rover_position.z])
+    d = ecef_delta_to_enu(base_xyz, a - b)
+    cov = np.array(solution.covariance_ecef) + np.array(other.covariance_ecef)
+    ce = covariance_ecef_to_enu(base_xyz, cov)
+    tol_h = max(CHECK_H_M, 3.0 * math.sqrt(max(0.0, ce[0, 0] + ce[1, 1])))
+    tol_v = max(CHECK_V_M, 3.0 * math.sqrt(max(0.0, ce[2, 2])))
+    dh = math.hypot(d[0], d[1])
+    text = (f"diferencia con la libre de ionosfera de RTKLIB: {dh * 100:.1f} cm en horizontal y {d[2] * 100:+.1f} cm "
+            f"en vertical (tolerancia {tol_h * 100:.1f} / {tol_v * 100:.1f} cm)")
+    log.append(f"  comprobación independiente: {text}.")
+    if dh > tol_h or abs(d[2]) > tol_v:
+        solution.warnings.append(f"Línea base {station.id}: la solución del procesador de líneas largas no concuerda "
+                                 f"con la comprobación independiente ({text}). Revisa los datos de las dos "
+                                 "estaciones.")
 
 
 def _best_epochs(run: "RunResult") -> tuple[np.ndarray | None, np.ndarray | None]:

@@ -40,7 +40,13 @@ def test_static_one_base(tmp_path):
     b = result.baselines[0]
     assert result.adjustment is None and result.point_name == "ITLA-prueba"
     assert 30_600 < b.length_m < 30_800 and b.solution in (Solution.FIXED, Solution.FLOAT)
-    assert b.pos_file.is_file() and b.stat_file == Path(str(b.pos_file) + ".stat") and b.stat_file.is_file()
+    if b.engine == "TresVizo":
+        # procesador propio (≥ 20 km): sin .pos propio; las gráficas de datos son las de la libre de ionosfera de
+        # RTKLIB que corre como comprobación; 20 min a 30 km es menos de la duración mínima para fijar
+        assert b.pos_file is None and b.stat_file.is_file() and b.ambiguity is not None
+        assert b.solution == Solution.FLOAT and "corta" in b.ambiguity.reason
+    else:
+        assert b.pos_file.is_file() and b.stat_file == Path(str(b.pos_file) + ".stat") and b.stat_file.is_file()
     assert b.config_file.is_file() and len(b.satellites) > 15 and b.rms_m is not None
     assert result.position.frame == "ITRF2008" and result.position.epoch == 2010.0
     assert any("una sola base" in w.lower() for w in result.warnings)

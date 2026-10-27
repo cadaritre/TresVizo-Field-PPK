@@ -100,3 +100,37 @@ def test_static_excludes_single_bad_line(monkeypatch, tmp_path):
     assert a.excluded_baselines == ["INEG"] and a.passed and a.degrees_of_freedom == 3
     assert any("se dejó fuera" in w for w in result.warnings)
     assert abs(result.position.x - a.position.x) < 1e-12
+
+
+def test_static_excludes_bad_line_when_the_rest_agree_by_w(monkeypatch, tmp_path):
+    """Con líneas fijas (σ de milímetros) las dos bases buenas difieren unos 2 cm por su movimiento desde 2010: no
+    pasan la χ² pero sí la prueba w, así que la mala (INEG, 0.7 m) se deja fuera igual y se avisa de la diferencia."""
+    from tresvizo_ppk.core import static
+    from tresvizo_ppk.model import (BaselineSolution, DataQuality, Ecef, Enu, ObservationSet, ProcessingOptions,
+                                    Solution, Station)
+    from datetime import datetime, timezone
+    offsets = {"UQRO": (0.008, -0.004, 0.008), "ISLP": (-0.008, 0.004, -0.008), "INEG": (0.010, -0.018, 0.735)}
+    t0 = datetime(2026, 10, 20, 14, tzinfo=timezone.utc)
+
+    def fake_baseline(rover, station, base, options, workdir, **kw):
+        obs = line(station.id, offsets[station.id], (0.004, 0.004, 0.008))
+        pos = Ecef(*obs.position)
+        return BaselineSolution(base=station, rover_marker="UGTO", start=t0, end=t0, epochs_used=10, satellites=[],
+                                solution=Solution.FIXED, ratio=5.0, rms_m=0.01, vector_ecef=pos,
+                                vector_enu=Enu(0, 0, 0), length_m=1e5, azimuth_deg=0, zenith_deg=90,
+                                covariance_ecef=tuple(map(tuple, obs.covariance)), rover_position=pos,
+                                ephemeris=options.ephemeris), None
+
+    monkeypatch.setattr(static, "process_baseline", fake_baseline)
+    monkeypatch.setattr(static, "trim", lambda obs, *a, **k: obs)
+    monkeypatch.setattr(static.quality, "assess", lambda obs, cancel=None: DataQuality())
+    rover = ObservationSet(obs=[], marker="UGTO", start=t0, end=t0)
+    bases = [(Station(id=s, name=s, position=Ecef(*P)), ObservationSet(obs=[], start=t0, end=t0)) for s in offsets]
+    result = static.process_static(rover, bases, ProcessingOptions(), tmp_path)
+    a = result.adjustment
+    assert a.excluded_baselines == ["INEG"] and not a.passed and a.chi2 > a.chi2_upper
+    assert max(max(abs(w.e), abs(w.n), abs(w.u)) for w in a.standardized_residuals.values()) <= a.critical_value
+    assert any("se dejó fuera" in w for w in result.warnings)
+    assert any("cuadran por la prueba w" in w and "movimiento de las estaciones" in w for w in result.warnings)
+    # sin INEG: la media de UQRO e ISLP, lejos de los 0.7 m de INEG
+    assert np.linalg.norm(np.array([a.position.x, a.position.y, a.position.z]) - np.array(P)) < 0.01

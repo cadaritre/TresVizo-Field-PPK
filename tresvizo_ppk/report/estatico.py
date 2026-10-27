@@ -13,29 +13,55 @@ from .documento import Report, text
 from .estilo import num, signed
 
 TITLE = "Informe de posproceso de línea base"
-LONG_LINE_M = 60_000.0      # desde aquí el motor usa libre de ionosfera con ambigüedades flotantes (§4, validación)
+LONG_LINE_M = 60_000.0      # RTKLIB: desde aquí, libre de ionosfera con ambigüedades flotantes (§4, validación)
+OWN_ENGINE = "TresVizo"     # procesador propio de líneas largas (ancho/estrecho de carril con LAMBDA)
 
 
 def is_long_float(b) -> bool:
-    """Una línea larga flotante es lo esperado, no un fallo: libre de ionosfera con ambigüedades flotantes."""
-    return b.solution == Solution.FLOAT and b.length_m >= LONG_LINE_M
+    """Una línea larga flotante de RTKLIB (libre de ionosfera) es lo esperado de RTKLIB, no un fallo. Las del
+    procesador propio, que sí resuelve ambigüedades a esa distancia, dicen por qué quedaron flotantes."""
+    return b.solution == Solution.FLOAT and b.length_m >= LONG_LINE_M and b.engine != OWN_ENGINE
+
+
+def is_own(b) -> bool:
+    return b.engine == OWN_ENGINE and b.ambiguity is not None
 
 
 def _is_long_float_warning(w: str, b) -> bool:
-    """El aviso «quedó FLOTANTE» del motor no es un fallo en una línea larga: lo sustituye la explicación."""
-    return is_long_float(b) and "FLOTANTE" in w and b.base.id in w
+    """El aviso «quedó FLOTANTE» del motor no se repite: lo sustituye la explicación de la línea larga."""
+    return (is_long_float(b) or (is_own(b) and b.solution == Solution.FLOAT)) and "FLOTANTE" in w and b.base.id in w
+
+
+def _sigmas(b) -> tuple[float, float]:
+    lat, lon, _ = calculos.geodetic(b.base.position)
+    ce = calculos.cov_enu(b.covariance_ecef, lat, lon)
+    return math.sqrt(max(ce[0][0] + ce[1][1], 0.0)), math.sqrt(max(ce[2][2], 0.0))
 
 
 def long_float_text(b) -> str:
-    lat, lon, _ = calculos.geodetic(b.base.position)
-    ce = calculos.cov_enu(b.covariance_ecef, lat, lon)
-    sh = math.sqrt(max(ce[0][0] + ce[1][1], 0.0))
-    sv = math.sqrt(max(ce[2][2], 0.0))
+    sh, sv = _sigmas(b)
     hours = (b.end - b.start).total_seconds() / 3600
     return (f"Línea larga ({num(b.length_m / 1000, 1)} km): se calcula libre de ionosfera con ambigüedades flotantes, "
             f"que es lo correcto a esta distancia; con sesiones largas da precisión de centímetro (≤ 1 cm con 4 h en "
             f"la validación del motor). Esta sesión de {num(hours, 1)} h: σ horizontal {num(sh, 3)} m, σ vertical "
             f"{num(sv, 3)} m.")
+
+
+def own_text(b) -> str:
+    """Lo que hizo el procesador de líneas largas con esta línea, en una frase para el resumen."""
+    a = b.ambiguity
+    sh, sv = _sigmas(b)
+    km = num(b.length_m / 1000, 1)
+    if b.solution == Solution.FIXED:
+        return (f"Línea {km} km desde {b.base.id}: FIJA con el procesador de líneas largas (ancho y estrecho de carril "
+                f"con LAMBDA): {a.narrowlane_fixed} combinaciones enteras de {a.narrowlane_candidates} candidatas, "
+                f"razón {num(a.ratio, 1)} (mínimo {a.min_ratio:g}), tasa de éxito {num(100 * a.success_rate, 2)} % "
+                f"(mínimo {num(100 * a.min_success_rate, 1)} %). σ horizontal {num(sh, 3)} m, σ vertical "
+                f"{num(sv, 3)} m.")
+    return (f"Línea {km} km desde {b.base.id}: FLOTANTE. El procesador de líneas largas no la fijó porque "
+            f"{a.reason}. Se usa la solución flotante libre de ionosfera, con su precisión: σ horizontal {num(sh, 3)} m, "
+            f"σ vertical {num(sv, 3)} m." + (f" Para fijar a esta distancia, observa al menos "
+                                              f"{num(a.min_session_h * 60, 0)} min." if "corta" in a.reason else ""))
 
 
 def _status(result: StaticResult, min_ratio: float) -> tuple[str, str, list[str]]:
@@ -54,6 +80,9 @@ def _status(result: StaticResult, min_ratio: float) -> tuple[str, str, list[str]
     for b in result.baselines:
         if is_long_float(b) or b.base.id in excluded:
             continue
+        if is_own(b) and b.solution == Solution.FLOAT:
+            reasons.append(own_text(b))
+            continue
         if b.solution != Solution.FIXED:
             reasons.append(f"La línea base desde {b.base.id} quedó {secciones.SOLUTION_NAMES[b.solution].lower()}.")
         elif b.ratio is not None and b.ratio < min_ratio:
@@ -67,10 +96,10 @@ def _status(result: StaticResult, min_ratio: float) -> tuple[str, str, list[str]
     if len(result.baselines) == 1:
         reasons.append("Con una sola base no hay redundancia: la coordenada sale de esa línea base y no se puede "
                        "comprobar con otra.")
-    longs = {b.base.id for b in result.baselines if is_long_float(b)}
+    longs = {b.base.id for b in result.baselines if is_long_float(b) or (is_own(b) and b.solution == Solution.FLOAT)}
     reasons += [w for w in result.warnings if w not in reasons
                 and not any(w.startswith(f"La línea base con {bid}") for bid in excluded)
-                and not any(w.startswith(f"La línea base {bid} quedó FLOTANTE") for bid in longs)]
+                and not any(w.startswith(f"La línea base {bid} ") and "quedó FLOTANTE" in w for bid in longs)]
     reasons = list(dict.fromkeys(reasons))
     usable = [b for b in result.baselines if b.solution == Solution.FIXED or is_long_float(b)]
     if usable and not [
@@ -105,6 +134,9 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
     longs = [long_float_text(b) for b in result.baselines if is_long_float(b)]
     if longs:
         r.callout("info", "Líneas largas con solución flotante", longs)
+    owns = [own_text(b) for b in result.baselines if is_own(b) and b.solution == Solution.FIXED]
+    if owns:
+        r.callout("info", "Líneas largas fijas", owns)
     r.h2("Coordenada final en el sistema elegido")
     r.fields(secciones.coordinate_fields(c, result.position, choice), columns=2, label_width=110)
     r.h2(f"Coordenada final en el marco de la base ({secciones.frame_text(result.position)})")
@@ -222,8 +254,10 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
     r.h1("Gráficas")
     chart_notes: list[str] = []
     for b in result.baselines:
-        chart_notes += secciones.rtklib_charts(r, b.pos_file, b.stat_file, options, b.base.id,
-                                               heading=f"Línea base desde {b.base.id}")
+        heading = f"Línea base desde {b.base.id}"
+        if is_own(b):
+            heading += " · datos (cielo, satélites y residuos de la comprobación libre de ionosfera de RTKLIB)"
+        chart_notes += secciones.rtklib_charts(r, b.pos_file, b.stat_file, options, b.base.id, heading=heading)
     if chart_notes:
         r.callout("info", "Gráficas que faltan", chart_notes)
 
@@ -298,6 +332,46 @@ def _baseline(r: Report, b, options) -> None:
               ("Distancia cenital", f"{estilo.azimuth_dms(zen)} ({num(zen, 6)}°)"),
               ("Desnivel elipsoidal", signed(b.vector_enu.u, 4, "m"))], columns=2, label_width=90)
     _covariance(r, b.covariance_ecef, "Matriz de covarianza del vector (ECEF, m²)")
+    if is_own(b):
+        _ambiguity_section(r, b)
     shown = [w for w in b.warnings if not _is_long_float_warning(w, b)]
     if shown:
         r.callout("warning", "Avisos de la línea base", shown)
+
+
+def _ambiguity_section(r: Report, b) -> None:
+    """Resolución de ambigüedades del procesador de líneas largas: cómo se fijó (o por qué no), con sus pruebas."""
+    a = b.ambiguity
+    r.h2("Resolución de ambigüedades (procesador de líneas largas)")
+    result_text = "FIJA" if a.fixed else f"FLOTANTE: {a.reason}"
+    rows = [("Método", "libre de ionosfera; ancho de carril de la Melbourne-Wübbena por arco, carril estrecho con "
+                       "LAMBDA y resolución parcial"),
+            ("Resultado", result_text),
+            ("Dobles diferencias", str(a.double_differences)),
+            ("Ancho de carril fijo", f"{a.widelane_fixed} de {a.double_differences}"),
+            ("Carril estrecho", f"{a.narrowlane_fixed} combinaciones enteras fijadas de {a.narrowlane_candidates} "
+                                "candidatas" if a.fixed else f"{a.narrowlane_candidates} candidatas, ninguna fijada"),
+            ("Prueba de razón", (f"{num(a.ratio, 2)} (mínimo {a.min_ratio:g})" if a.ratio is not None else "—")),
+            ("Tasa de éxito (bootstrapping)", (f"{num(100 * a.success_rate, 3)} % (mínimo "
+                                               f"{num(100 * a.min_success_rate, 1)} %)"
+                                               if a.success_rate is not None else "—")),
+            ("Duración mínima para fijar", f"{num(a.min_session_h * 60, 0)} min a esta distancia (validación)"),
+            ("σ0 a posteriori", num(a.sigma0, 2)),
+            ("RMS de los residuos de fase", num(a.rms_phase_m, 4, "m")),
+            ("Troposfera", f"retardo húmedo cenital de cada estación cada {num(a.troposphere_interval_h, 1)} h y "
+                           f"gradientes cada {num(a.gradient_interval_h, 1)} h"),
+            ("Observaciones", f"{a.observations} ({a.rejected} descartadas por aberrantes)")]
+    r.fields(rows, columns=1, label_width=150)
+    if a.fixed and a.float_position is not None:
+        fp = a.float_position
+        lat, lon, _ = calculos.geodetic(b.base.position)
+        d = calculos.to_enu((b.rover_position.x - fp.x, b.rover_position.y - fp.y, b.rover_position.z - fp.z),
+                            lat, lon)
+        fs = a.float_sigma_enu
+        r.para(text(f"Fija − flotante: E {signed(d[0], 4)}, N {signed(d[1], 4)}, U {signed(d[2], 4)} m (σ de la "
+                    f"flotante: {num(fs.e, 3)} / {num(fs.n, 3)} / {num(fs.u, 3)} m)."), "small")
+    if a.signal_groups:
+        r.para(text("Grupos de dobles diferencias (misma señal en los dos receptores): " + "; ".join(a.signal_groups)
+                    + "."), "small")
+    if a.excluded:
+        r.para(text(" ".join(a.excluded)), "small")

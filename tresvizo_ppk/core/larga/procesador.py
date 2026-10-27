@@ -93,7 +93,7 @@ class GroupInfo:
 class LongResult:
     fixed: bool
     position: np.ndarray             # rover (marca), ECEF
-    covariance: np.ndarray           # 3×3, m² (formal escalada: σ0² y correlación temporal)
+    covariance: np.ndarray           # 3×3, m²: la formal más el error que no ve (`realistic_covariance`)
     float_position: np.ndarray
     float_covariance: np.ndarray
     reason: str = ""                 # por qué quedó flotante (vacío si fijó)
@@ -117,6 +117,7 @@ class LongResult:
     satellites: list[str] = field(default_factory=list)
     groups: list[GroupInfo] = field(default_factory=list)
     trop_step_h: float = 1.0
+    grad_step_h: float = 6.0
     ztd_rover: list[tuple[datetime, float]] = field(default_factory=list)    # retardo húmedo estimado
     ztd_base: list[tuple[datetime, float]] = field(default_factory=list)
     observations: int = 0
@@ -128,6 +129,7 @@ class LongResult:
     length_km: float = 0.0
     hours: float = 0.0
     ambiguities: list["AmbiguityRow"] = field(default_factory=list)
+    formal_covariance: np.ndarray | None = None   # la formal escalada (σ0² y correlación temporal), sin el piso
 
 
 @dataclass
@@ -197,8 +199,8 @@ def _pick_pair(sat: str, rov: observaciones.Observations, bas: observaciones.Obs
 
 
 def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: list[Path], *, mask_deg: float,
-            start: float, end: float, interval_s: float | None = None, progress: tools.Progress | None = None,
-            cancel: threading.Event | None = None) -> LongResult:
+            start: float, end: float, interval_s: float | None = None, systems: str = "GEC",
+            progress: tools.Progress | None = None, cancel: threading.Event | None = None) -> LongResult:
     """Procesa la línea base rover–base (tiempos en segundos GPS) y devuelve la solución fija o flotante."""
     step = progress or (lambda f, m: None)
     log: list[str] = []
@@ -241,7 +243,10 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     when = gps_datetime(times[0]).replace(tzinfo=None)
 
     # Satélites y parejas
-    common = [s for s in rov.sats if s in bas.sats and s in orbits.satellites]
+    common = [s for s in rov.sats if s in bas.sats and s in orbits.satellites and s[0] in systems]
+    off_systems = [senales.SYSTEM_NAMES[c] for c in "GEC" if c not in systems]
+    if off_systems:
+        notes.append("Sin " + ", ".join(off_systems) + " (apagados en las opciones).")
     sats: list[_Sat] = []
     groups: dict[str, GroupInfo] = {}
     skipped: dict[str, list[str]] = {}
@@ -453,6 +458,8 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
                         precise=precise, length_km=length_km, hours=hours)
     trop_r = x_float[layout.trop0 + off["zr"]:layout.trop0 + off["zr"] + nz] + rover_frame.zwd
     trop_b = x_float[layout.trop0 + off["zb"]:layout.trop0 + off["zb"] + nz] + base_frame.zwd
+    result.formal_covariance = q_float[:3, :3]
+    result.grad_step_h = grad_h
     result.ztd_rover = [(gps_datetime(t), float(v)) for t, v in zip(zwd_nodes, trop_r)]
     result.ztd_base = [(gps_datetime(t), float(v)) for t, v in zip(zwd_nodes, trop_b)]
 
@@ -541,6 +548,7 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
     result.fixed = True
     result.position = rover_xyz + x_fix[:3]
     result.covariance = realistic_covariance(q_fix[:3, :3], result.position, length_km, hours, precise, fixed=True)
+    result.formal_covariance = q_fix[:3, :3]
     result.n_nl_fixed = fix.n_fixed
     result.sigma0_fixed = s0_fix
     log.append(f"Fija: σ0 = {s0_fix:.2f}, cambio respecto de la flotante "
