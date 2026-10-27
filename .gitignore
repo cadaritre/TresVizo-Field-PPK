@@ -12,5 +12,5 @@ dist/
 /datos/
 /trabajo/
 *.tvppk.bak
-# Binarios compilados de RTKLIB (los arma scripts/ y la CI)
-third_party/rtklib/bin/
+# Binarios compilados de RTKLIB y RNXCMP (los arma scripts/build_rtklib.py y la CI)
+third_party/bin/
