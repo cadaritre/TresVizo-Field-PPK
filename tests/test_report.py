@@ -94,7 +94,7 @@ def test_informe_de_puntos_completo(points_pdf):
                    "Calidad de cada punto", "Épocas fijas / total", "Trayectoria Épocas", "SIN SOLUCIÓN",
                    "FLOTANTE", "Anexo: bitácora del proceso"):
         assert needle in t, needle
-    zone = crs.transform(result.base.position, project.coordinates).zone
+    zone = crs.transform(result.points[0].position, project.coordinates).zone
     choice = CoordinateChoice(project.coordinates.crs_id, zone, project.coordinates.geoid_id)
     for p in result.points:
         assert p.point.name in t

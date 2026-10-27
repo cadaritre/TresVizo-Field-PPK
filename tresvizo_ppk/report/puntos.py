@@ -64,11 +64,14 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     points = result.points
     counts = Counter(p.solution for p in points)
 
-    # Para que todos los puntos salgan en la misma zona que la base (una sola cuadrícula en el informe).
     base_c, base_problem = secciones.transform_or_none(result.base.position, choice)
+    # Una sola cuadrícula en todo el informe: la zona del primer punto posprocesado (la misma regla que la exportación).
     point_choice = choice
-    if base_c is not None and choice.crs_id in crs.FAMILIES and not choice.zone:
-        point_choice = CoordinateChoice(choice.crs_id, base_c.zone, choice.geoid_id, choice.label)
+    ref = next((p.position for p in points if p.position is not None and p.solution != Solution.NONE), None)
+    if choice.crs_id in crs.FAMILIES and not choice.zone.strip():
+        ref_c, _ = secciones.transform_or_none(ref or result.base.position, CoordinateChoice(choice.crs_id, "", None))
+        if ref_c is not None:
+            point_choice = CoordinateChoice(choice.crs_id, ref_c.zone, choice.geoid_id, choice.label)
     coords: list[tuple[ProcessedPoint, object, str]] = []
     for p in points:
         c, problem = secciones.transform_or_none(p.position, point_choice)
