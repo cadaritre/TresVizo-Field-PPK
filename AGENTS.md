@@ -13,7 +13,7 @@
 - **Sin telemetría ni conexiones automáticas.** La red solo se usa cuando el usuario pide una descarga (datos de la
   RGNA, efemérides precisas, sistemas de coordenadas y geoides), y siempre se dice qué se baja y de dónde.
 - No atribuir autoría, colaboración, firmas, créditos o marcas a herramientas automáticas en código, documentación,
-  interfaz, instaladores, informes o metadatos. Sin trailers de autoría automática (Co-Authored-By, Generated with…).
+  interfaz, instaladores, informes o metadatos. No agregar trailers de autoría automática.
 - Identidad Git del propietario (`cadaritre <cadaritre@gmail.com>`); no inventar identidades ni reescribir historia.
   Commits pequeños que pasan sus pruebas; nunca `git add .`/`-A`, `commit -a`, amend, rebase ni force-push.
 - Conservar las licencias y avisos de terceros (RTKLIB demo5 BSD-2, Lucide ISC, ANTEX de la IGS, datos del INEGI con
