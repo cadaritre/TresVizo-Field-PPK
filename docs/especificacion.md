@@ -75,6 +75,18 @@ configuración de RTKLIB, `.pos`, `.stat`) quedan junto al proyecto, para que el
 
 ## 3. Datos externos (todos con su fuente, licencia y fecha)
 
+### 3.0 Redes de estaciones de referencia (CORS), no solo la RGNA
+
+Decisión del propietario (26-10-2026): la app se venderá también en Sudamérica. Nada queda atado al INEGI: la app
+trabaja con **redes CORS** como paquetes de datos (`kind` `cors-network` en el **mismo índice firmado** de los
+sistemas y geoides de TresVizo Field, publicado en `cadaritre/GNSS-TresVizo`). Cada red declara su clave y nombre
+(«RGNA — INEGI, México»), el país, su **marco y época oficial** (RGNA: ITRF2008 2010.0; RBMC de Brasil: SIRGAS2000
+2000.4; MAGNA-ECO de Colombia, RAMSAC de Argentina, la red de Chile, NOAA CORS…, cada una la suya), el catálogo de
+estaciones, cómo se bajan sus RINEX (adaptador de descarga o guía), la atribución y la licencia de uso. Una red nueva
+se agrega publicando su paquete, **sin sacar versión nueva de la app**. En la 1.0 viene completa la RGNA; el código
+(catálogo, descarga, marco del resultado, textos del informe) no supone México en ningún sitio, y una base «propia» o
+de otra red con su coordenada y marco escritos a mano funciona igual.
+
 ### 3.1 Catálogo de estaciones de la RGNA
 
 Nombre, clave, coordenadas oficiales (ITRF2008 época 2010.0) con sus σ, tipo de antena y radomo, altura de antena,
@@ -97,6 +109,16 @@ A petición del usuario. Si no hay, se procesa con difundidas y el informe lo di
 La RGNA da coordenadas en ITRF2008 época 2010.0. Con la estación fija en esa coordenada, el resultado queda en ese
 mismo marco y época (es lo que pide la norma del INEGI para ligar a la RGNA). La app no transforma épocas en la 1.0 (lo
 mismo que las apps de campo): lo dice en el informe.
+
+### 3.5 Actualizaciones de la app
+
+Decisión del propietario (26-10-2026): la app busca actualizaciones en **GitHub Releases** de
+`cadaritre/TresVizo-Field-PPK`. Botón «Buscar actualizaciones» en Ajustes y, si el usuario lo autoriza ahí, revisión al
+abrir (sin ninguna otra conexión ni telemetría). Lee la última versión publicada, compara con la instalada, muestra
+las novedades, baja el instalador de su sistema (MSI o DMG) y **verifica su firma Ed25519** (manifiesto de la versión
+con el SHA-256 de cada instalador, firmado con la llave de publicación de la app) antes de abrirlo; sin firma válida
+no instala nada y lo dice. La llave privada la genera y la guarda el propietario (nunca en el repo ni en la CI sin su
+decisión); el repo trae el script que la usa y la llave pública dentro de la app.
 
 ## 4. Motor
 
