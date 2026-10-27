@@ -28,7 +28,7 @@ import numpy as np
 
 from ...errors import UserError
 from .. import tools
-from ..geodesy import covariance_enu_to_ecef
+from ..geodesy import covariance_ecef_to_enu, covariance_enu_to_ecef, ecef_delta_to_enu
 from ..adjust import chi2_ppf
 from . import ajuste, efemerides, geometria, observaciones, preproceso, senales
 from .astro import gps_datetime
@@ -53,10 +53,21 @@ NL_MIN_SUCCESS = 0.999
 NL_MIN_RATIO = 3.0
 NL_MIN_FIXED = 4
 # Duración mínima de la sesión para fijar el carril estrecho: (menos de MIN_FIX_LONG_KM, desde ahí), en horas.
-# De la validación (docs/validacion.md): a 30 km fijó bien desde 30 min; a 100–141 km, con 45 min ya hubo un fijo a
-# más de 3σ en la vertical y con 1 h ninguno. Con menos, la línea queda flotante y el informe lo dice.
-MIN_FIX_HOURS = (0.5, 1.0)
+# De la validación (docs/validacion.md): a 100–141 km, con 45 min ya hubo fijos a más de 3σ en la vertical y con 1 h
+# se fijan casi todas; a 30 km, con 30 min 1 de 16 pasó de 3σ en otro día (§7) y con 45 min ninguna. Con menos, la
+# línea queda flotante y el informe lo dice.
+MIN_FIX_HOURS = (0.75, 1.0)
 MIN_FIX_LONG_KM = 60.0
+# Con máscara de elevación alta la altura y la troposfera no se separan en una hora (sin observaciones bajas el
+# retardo cenital y la vertical se confunden): con más de HIGH_MASK_DEG hacen falta HIGH_MASK_MIN_HOURS para fijar
+# (§7: con 25–30° y 1 h, 4 de 36 fijas pasaron de 3σ, una a 6.8σ; con 2 h, ninguna).
+HIGH_MASK_DEG = 20.0
+HIGH_MASK_MIN_HOURS = 2.0
+# Prueba de coherencia fija–flotante: con enteros correctos la fija cae dentro de la región de confianza de la
+# flotante (que no depende de los enteros). Si algún componente se aleja más de FIX_FLOAT_K σ de la flotante (con la
+# σ realista de la flotante), los enteros no son confiables aunque pasen la razón y la tasa de éxito, y no se fija.
+# Atrapa el fijo de +136 mm de la §7 (flotante a +1.5 mm) y casi no cuesta fijas (0.4 % en la §8).
+FIX_FLOAT_K = 3.0
 # Datos mínimos para entregar una solución (si no, InsufficientData y no hay solución): dobles diferencias por época
 # (posición + troposfera con redundancia) en al menos la mitad de las épocas; σ formal de la flotante; coherencia de
 # la solución de las fases con la de código.
@@ -77,10 +88,17 @@ OUTLIER_SIGMAS = 4.0
 #     σ = a + b·(L/100 km)/√T + c·(L/100 km) [solo con efemérides difundidas]   (T en horas)
 # Calibrado con la validación sobre la RGNA (docs/validacion.md, 168 sesiones de 15 min a 4 h): con él, el error
 # frente a la referencia PPP del día queda con RMS de ≤ 1σ por componente y ninguno pasa de 3σ.
+#
+# Revisado con la verificación fuera de muestra (docs/validacion.md, §7 y §8; tres días): la vertical de la fija ×1.15
+# (el RMS de error/σ en U era 1.10–1.14) y, en la flotante, el este y la vertical por FLOAT_FACTOR (su RMS de
+# error/σ era 1.3–1.9 en el este con 15–45 min los tres días): «corta» es la flotante de una sesión más corta que la
+# duración mínima, la que se espera; «fallida» la de una sesión que debía fijar y no fijó, que es de datos peores
+# (con 1 h o más, 4–9 cm en el este donde la σ decía 1.5–2 cm).
 ERROR_FLOOR = {
-    "fixed": {"h": (0.003, 0.004, 0.001), "v": (0.004, 0.006, 0.002)},
+    "fixed": {"h": (0.003, 0.004, 0.001), "v": (0.0046, 0.0069, 0.0023)},
     "float": {"h": (0.006, 0.0055, 0.001), "v": (0.005, 0.0075, 0.0025)},
 }
+FLOAT_FACTOR = {"corta": (1.6, 1.0, 1.2), "fallida": (2.4, 1.0, 1.4)}      # E, N, U
 MAX_ITER = 6
 # Tolerancia para tomar como la misma época las etiquetas de tiempo de los dos receptores (y como múltiplo del
 # intervalo de proceso): los receptores sin reloj gobernado etiquetan a unos ms del segundo (saltos de 1 ms). La
@@ -546,7 +564,14 @@ def _process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: li
     _check_float(pos_float, q_float[:3, :3], pos_code, sigma_code)
     length_km = float(np.linalg.norm(rover_xyz - base.xyz)) / 1000.0
     hours = max((times[-1] - times[0] + proc) / 3600.0, 0.05)
-    cov_float = realistic_covariance(q_float[:3, :3], pos_float, length_km, hours, precise, fixed=False)
+    min_hours = min_fix_hours(length_km, mask_deg)
+    expected = "corta" if hours + 1e-6 < min_hours else "fallida"
+    cov_float = realistic_covariance(q_float[:3, :3], pos_float, length_km, hours, precise, fixed=False,
+                                     float_kind=expected)
+    # la de la flotante «corta» es la que se compara con la fija (prueba de coherencia): la «fallida» solo se usa si
+    # la sesión, que debía fijar, queda flotante
+    cov_float_test = realistic_covariance(q_float[:3, :3], pos_float, length_km, hours, precise, fixed=False,
+                                          float_kind="corta")
     result = LongResult(fixed=False, position=pos_float, covariance=cov_float, float_position=pos_float,
                         float_covariance=cov_float, n_amb=n_amb, sigma0_float=s0, correlation_factor=corr,
                         rms_phase_m=rms_phase, rms_code_m=rms_code, epochs=len(times),
@@ -571,11 +596,16 @@ def _process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: li
     step(0.8, "Ambigüedades del carril estrecho (LAMBDA)…")
     cand = [(j, n_w) for j, n_w in wl.items() if n_w is not None]
     result.n_nl_candidates = len(cand)
-    result.min_hours = min_fix_hours(length_km)
+    result.min_hours = min_hours
     if hours + 1e-6 < result.min_hours:
-        result.reason = (f"la sesión de {hours * 60:.0f} min es corta para fijar a {length_km:.0f} km: hacen falta "
-                         f"{result.min_hours * 60:.0f} min o más (con menos, la validación dio fijos con error de "
-                         "varias σ)")
+        if mask_deg > HIGH_MASK_DEG and min_hours > min_fix_hours(length_km):
+            result.reason = (f"con máscara de elevación de {mask_deg:g}° la sesión de {hours * 60:.0f} min es corta "
+                             f"para fijar: hacen falta {min_hours:g} h o más (sin satélites bajos la altura y la "
+                             "troposfera no se separan; la validación dio fijos con error de varias σ)")
+        else:
+            result.reason = (f"la sesión de {hours * 60:.0f} min es corta para fijar a {length_km:.0f} km: hacen "
+                             f"falta {result.min_hours * 60:.0f} min o más (con menos, la validación dio fijos con "
+                             "error de varias σ)")
         return result
     if len(cand) < NL_MIN_FIXED:
         result.reason = (f"solo {len(cand)} ambigüedades con el ancho de carril fijo (mínimo {NL_MIN_FIXED})"
@@ -643,14 +673,27 @@ def _process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: li
     delta = float(misclosure @ np.linalg.solve(g @ sol.n_inv @ g.T, misclosure))
     s0_fix = math.sqrt((sol.vtpv + delta) / max(1, sol.dof + fix.n_fixed))
     q_fix = q_fix * (s0_fix ** 2 / s0 ** 2 if s0 > 0 else 1.0)
+    pos_fix = rover_xyz + x_fix[:3]
+    jump = _fix_float_jump(pos_fix, pos_float, cov_float_test)
+    de, dn, du = jump[0] * 1000.0
+    log.append(f"Fija: σ0 = {s0_fix:.2f}, cambio respecto de la flotante "
+               f"{np.linalg.norm(pos_fix - pos_float) * 1000:.1f} mm (E {de:+.1f}, N {dn:+.1f}, U {du:+.1f}; hasta "
+               f"{np.max(jump[1]):.1f}σ de la flotante).")
+    worst = int(np.argmax(jump[1]))
+    if jump[1][worst] > FIX_FLOAT_K:
+        name = ("en el este", "en el norte", "en la vertical")[worst]
+        result.reason = (f"la solución fija se aleja {abs(jump[0][worst]) * 1000:.0f} mm de la flotante {name} "
+                         f"({jump[1][worst]:.1f} veces su σ; el máximo es {FIX_FLOAT_K:g}): las ambigüedades no son "
+                         "confiables aunque pasen la prueba de razón")
+        result.n_nl_fixed = fix.n_fixed
+        return result
     result.fixed = True
-    result.position = rover_xyz + x_fix[:3]
+    result.position = pos_fix
     result.covariance = realistic_covariance(q_fix[:3, :3], result.position, length_km, hours, precise, fixed=True)
+    result.float_covariance = cov_float_test
     result.formal_covariance = q_fix[:3, :3]
     result.n_nl_fixed = fix.n_fixed
     result.sigma0_fixed = s0_fix
-    log.append(f"Fija: σ0 = {s0_fix:.2f}, cambio respecto de la flotante "
-               f"{np.linalg.norm(result.position - pos_float) * 1000:.1f} mm.")
     return result
 
 
@@ -702,27 +745,40 @@ def _few_epochs_text(rov, bas, n: int, proc: float) -> str:
             "(unos 5 minutos) para la línea larga.")
 
 
-def min_fix_hours(length_km: float) -> float:
-    """Duración mínima para fijar el carril estrecho (`MIN_FIX_HOURS`)."""
-    return MIN_FIX_HOURS[1] if length_km >= MIN_FIX_LONG_KM else MIN_FIX_HOURS[0]
+def min_fix_hours(length_km: float, mask_deg: float = 15.0) -> float:
+    """Duración mínima para fijar el carril estrecho (`MIN_FIX_HOURS`; con máscara alta, `HIGH_MASK_MIN_HOURS`)."""
+    hours = MIN_FIX_HOURS[1] if length_km >= MIN_FIX_LONG_KM else MIN_FIX_HOURS[0]
+    if mask_deg > HIGH_MASK_DEG:
+        hours = max(hours, HIGH_MASK_MIN_HOURS)
+    return hours
 
 
-def error_floor_enu(length_km: float, hours: float, precise: bool, fixed: bool) -> np.ndarray:
-    """σ (E, N, U) del error que no ve la covarianza formal (`ERROR_FLOOR`)."""
+def error_floor_enu(length_km: float, hours: float, precise: bool, fixed: bool,
+                    float_kind: str = "corta") -> np.ndarray:
+    """σ (E, N, U) del error que no ve la covarianza formal (`ERROR_FLOOR`, y `FLOAT_FACTOR` en la flotante)."""
     model = ERROR_FLOOR["fixed" if fixed else "float"]
     scale = length_km / 100.0
     out = []
     for comp in ("h", "h", "v"):
         a, b, c = model[comp]
         out.append(a + b * scale / math.sqrt(max(hours, 0.05)) + (0.0 if precise else c * scale))
-    return np.array(out)
+    floor = np.array(out)
+    return floor if fixed else floor * np.array(FLOAT_FACTOR[float_kind])
 
 
 def realistic_covariance(formal_ecef: np.ndarray, xyz: np.ndarray, length_km: float, hours: float, precise: bool,
-                         *, fixed: bool) -> np.ndarray:
+                         *, fixed: bool, float_kind: str = "corta") -> np.ndarray:
     """Covarianza formal (escalada por σ0² y la correlación temporal) más el error que no ve (`ERROR_FLOOR`)."""
-    floor = error_floor_enu(length_km, hours, precise, fixed)
+    floor = error_floor_enu(length_km, hours, precise, fixed, float_kind)
     return formal_ecef + covariance_enu_to_ecef(xyz, np.diag(floor ** 2))
+
+
+def _fix_float_jump(pos_fix: np.ndarray, pos_float: np.ndarray, cov_float: np.ndarray
+                    ) -> tuple[np.ndarray, np.ndarray]:
+    """Diferencia fija − flotante en E, N, U (m) y en veces la σ realista de la flotante."""
+    d = np.array(ecef_delta_to_enu(pos_float, pos_fix - pos_float))
+    sig = np.sqrt(np.maximum(np.diag(covariance_ecef_to_enu(pos_float, cov_float)), 1e-12))
+    return d, np.abs(d) / sig
 
 
 def _check_float(pos_float: np.ndarray, q_pos: np.ndarray, pos_code: np.ndarray, sigma_code: float) -> None:

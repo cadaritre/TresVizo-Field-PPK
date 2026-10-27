@@ -73,5 +73,47 @@ def test_short_session_stays_float_with_reason(larga_data):
 
 
 def test_minimum_duration_rule():
-    assert procesador.min_fix_hours(30.0) == pytest.approx(0.5)
+    assert procesador.min_fix_hours(30.0) == pytest.approx(0.75)
     assert procesador.min_fix_hours(100.0) == pytest.approx(1.0)
+
+
+def test_minimum_duration_with_high_mask():
+    """Con máscara de más de 20° hacen falta 2 h (§7: con 25–30° y 1 h hubo fijos a 3.6 y 6.8σ; con 2 h, ninguno)."""
+    assert procesador.min_fix_hours(100.0, 20.0) == pytest.approx(1.0)
+    assert procesador.min_fix_hours(100.0, 25.0) == pytest.approx(2.0)
+    assert procesador.min_fix_hours(30.0, 30.0) == pytest.approx(2.0)
+
+
+def test_error_floor_revision():
+    fixed = procesador.error_floor_enu(100.0, 1.0, False, True)
+    assert fixed[2] == pytest.approx(1.15 * (0.004 + 0.006 + 0.002))
+    base = procesador.error_floor_enu(100.0, 1.0, False, False, "corta") / np.array([1.6, 1.0, 1.2])
+    failed = procesador.error_floor_enu(100.0, 1.0, False, False, "fallida")
+    assert failed == pytest.approx(base * np.array([2.4, 1.0, 1.4]))
+
+
+def test_high_mask_one_hour_stays_float_with_reason(larga_data):
+    rover = _endpoint("UGTO", larga_data["ugto"], _official("UGTO") + np.array([2.0, -3.0, 1.5]))
+    base = _endpoint("UQRO", larga_data["uqro"], _official("UQRO"))
+    start = gps_seconds(datetime(2026, 10, 20, 0, 0))
+    res = procesador.process(rover, base, [larga_data["nav"]], [], mask_deg=25.0, start=start, end=start + 3599)
+    assert not res.fixed and "máscara de elevación de 25°" in res.reason and "2 h" in res.reason
+    assert res.min_hours == pytest.approx(2.0)
+
+
+def test_fix_float_coherence(larga_data, monkeypatch):
+    """La fija se compara con la flotante: si se aleja más de FIX_FLOAT_K veces la σ de la flotante, no se fija.
+    Con la sesión buena el salto es pequeño; con un límite artificial de 0.01σ la misma sesión queda flotante."""
+    good = _run(larga_data, 60)
+    assert good.fixed
+    d, k = procesador._fix_float_jump(good.position, good.float_position, good.float_covariance)
+    assert np.all(k < procesador.FIX_FLOAT_K) and np.all(np.abs(d) < 0.03)
+    assert any("σ de la flotante" in line for line in good.log)
+    monkeypatch.setattr(procesador, "FIX_FLOAT_K", 0.01)
+    res = _run(larga_data, 60)
+    assert not res.fixed and "se aleja" in res.reason and "de la flotante" in res.reason
+    assert res.position == pytest.approx(res.float_position)
+    # la flotante de una sesión que debía fijar y no fijó lleva la σ de «fallida» (mayor)
+    sig_fail = np.sqrt(np.diag(covariance_ecef_to_enu(_official("UGTO"), res.covariance)))
+    sig_short = np.sqrt(np.diag(covariance_ecef_to_enu(_official("UGTO"), good.float_covariance)))
+    assert sig_fail[0] > sig_short[0] and sig_fail[2] > sig_short[2]

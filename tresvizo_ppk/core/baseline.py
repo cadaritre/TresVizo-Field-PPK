@@ -6,9 +6,10 @@ Estrategia (`ProcessingOptions.ionosphere`), ajustada con las pruebas sobre la R
     enteras;
   - 20 km o más: el **procesador propio** (`larga`): libre de ionosfera de GPS, Galileo y BeiDou, troposfera
     estimada con gradientes, ambigüedades de ancho y estrecho de carril con LAMBDA, solución fija solo si pasa la
-    tasa de éxito, la prueba de razón, la prueba χ² de la distancia entera y la duración mínima validada (30 min hasta
-    60 km, 1 h desde ahí). En la validación fijó todas las sesiones de 1 h o más a 30 y a 100–141 km, con error de
-    centímetro, y su flotante es mejor que la libre de ionosfera de RTKLIB. RTKLIB corre además la
+    tasa de éxito, la prueba de razón, la prueba χ² de la distancia entera, la duración mínima validada (45 min hasta
+    60 km, 1 h desde ahí, 2 h con máscara de más de 20°) y la coherencia de la fija con la flotante (a menos de 3σ).
+    En la validación (tres días de la RGNA, docs/validacion.md) fijó casi todas las sesiones de 1 h o más a 30–183 km,
+    con error de centímetro, y su flotante es mejor que la libre de ionosfera de RTKLIB. RTKLIB corre además la
     libre de ionosfera como comprobación independiente (y sus gráficas de cielo, satélites y residuos van al informe);
     si las dos no concuerdan, se avisa (es una comprobación gruesa: con su tolerancia no avisó en ninguno de los fijos
     a más de 3σ de la §7). La fija de RTKLIB con la ionosfera del mensaje (la «media» de antes, entre 20 y 60 km) ya no
