@@ -217,6 +217,42 @@ class CoordinateChoice:
     label: str = ""                            # cómo se llama en el informe
 
 
+@dataclass(frozen=True)
+class TransformedCoordinate:
+    """Una posición del marco oficial expresada en el sistema, datum y geoide elegidos (`crs.api.transform`).
+
+    Latitud y longitud son las del **datum del sistema** (el heredado, si lo es); `receiver_*` son las del marco de la
+    base, que es en el que están de verdad las alturas (las alturas no se transforman entre datums). Lo que no aplica
+    va en None: norte y este en un sistema geográfico, la cota sin geoide o fuera de su cobertura.
+    """
+    latitude_deg: float
+    longitude_deg: float
+    ellipsoidal_height_m: float                # sobre el elipsoide del marco de la base
+    northing_m: float | None = None
+    easting_m: float | None = None
+    orthometric_height_m: float | None = None  # H = h − N (ortométrica o normal, según `height_kind`)
+    undulation_m: float | None = None          # N del geoide (o anomalía de altura en un cuasigeoide)
+    zone: str = ""                             # «14N», si el sistema es una zona
+    convergence_deg: float | None = None       # convergencia de meridianos (cuadrícula − geodésico)
+    scale_factor: float | None = None          # factor de escala de la proyección en el punto
+    receiver_latitude_deg: float = 0.0         # en el marco de la base
+    receiver_longitude_deg: float = 0.0
+    crs_code: str = ""                         # «EPSG:6369»
+    crs_name: str = ""                         # «Mexico ITRF2008 / UTM zona 14N»
+    frame_text: str = ""                       # «ITRF2008, época 2010.0»
+    axis_order: str = "E,N"                    # «E,N» en proyectadas, «N,E» en geográficas
+    geoid_id: str | None = None
+    geoid_name: str = ""                       # cita del modelo («GGM10 2010 · INEGI · …»)
+    height_kind: str = ""                      # «ortométrica» o «normal»; vacío sin cota
+    geoid_uncertainty_m: float | None = None   # la del modelo, no la del GNSS
+    transformation: str = ""                   # transformación de datum usada (nombre y código), si hubo
+    transformation_accuracy_m: float | None = None
+    inside_transformation_area: bool = True
+    label: str = ""                            # «Mexico ITRF2008 / UTM zona 14N + GGM10 height» (CS name del CSV)
+    attribution: tuple[str, ...] = ()          # créditos y avisos que exige la licencia del geoide
+    warnings: tuple[str, ...] = ()
+
+
 @dataclass
 class UserProfile:
     company: str = ""
