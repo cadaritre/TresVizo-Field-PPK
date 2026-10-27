@@ -140,3 +140,41 @@ teclado, contraste verificado, ventanas que se acomodan a pantallas chicas.
 Pruebas unitarias del motor, de los sistemas, del ajuste, de la unión de RINEX, del CSV y del informe (que se arme y
 diga lo que tiene que decir); pruebas de punta a punta con datos públicos pequeños; CI en GitHub Actions (gratis en
 repo público) en Windows, macOS y Linux. `docs/estado.md` dice qué está verificado y qué no.
+
+## 8. Funciones entre módulos (la interfaz solo llama a estas)
+
+Progreso: `progress(fraccion: float, mensaje: str)`; cancelar: un `threading.Event`. Los errores que ve el usuario son
+`tresvizo_ppk.errors.UserError(mensaje_en_español)`; lo demás es un error de programa.
+
+**Motor, `tresvizo_ppk/core/api.py`:**
+- `prepare_observations(paths, workdir, *, pole_height_m=None, marker=None, progress=None, cancel=None) -> ObservationSet`
+  (grabación `.bin`/`.part` del Meridian o RINEX en cualquier forma; une, descomprime y recorta)
+- `assess_quality(obs) -> DataQuality`
+- `rgna_catalog() -> list[Station]`, `find_station(marker) -> Station | None`
+- `download_rgna(station_id, start, end, workdir, progress=None, cancel=None) -> list[Path]` (si §3.2 lo permite)
+- `download_precise_products(start, end, workdir, progress=None, cancel=None) -> list[Path]`
+- `process_static(rover, bases: list[tuple[Station, ObservationSet]], options, workdir, progress=None, cancel=None) -> StaticResult`
+- `read_field_csv(path) -> list[FieldPoint]`
+- `process_points(rover, base: tuple[Station, ObservationSet], points, options, workdir, progress=None, cancel=None) -> PointsResult`
+- Línea de órdenes: `python -m tresvizo_ppk estatico …` y `python -m tresvizo_ppk puntos …`.
+
+**Sistemas, `tresvizo_ppk/crs/api.py`:** `catalog()` (instalados y descargables), `download_index(progress, cancel)`,
+`install(item_id, progress, cancel)`, `transform(position: Ecef, choice: CoordinateChoice) -> TransformedCoordinate`
+(dataclass nueva en `model.py`: latitud, longitud, altura elipsoidal, norte, este, altura ortométrica, ondulación,
+zona, convergencia, factor de escala y los nombres para el informe) y `transform_sigma(...)` para pasar σ al sistema.
+
+**Informe, `tresvizo_ppk/report/api.py`:** `static_report(result, project, user, out_pdf) -> Path` y
+`points_report(result, project, user, out_pdf) -> Path`.
+
+**Exportar, `tresvizo_ppk/export/api.py`:** `export_points(result, choice, formato, out) -> Path` con formato
+`field_csv`, `csv`, `geojson` o `kml`.
+
+Fuentes que hay que leer (del propietario, mismos repos de siempre):
+- CSV de TresVizo Field: `~/Documents/TresVizoField/TresVizoField/docs/csv-export.md` (y el lector de Android).
+- Sistemas y geoides: `~/Documents/TresVizoField/TresVizoField/docs/sistemas-coordenadas.md`, `tools/crs/`,
+  `tools/geoides/` (formato `.mvgeoid`, índice firmado `indice.py`/`ed25519.py`) y la llave pública en
+  `TresVizo Field/Packages/MeridianVCore/Sources/MeridianVCore/DataIndex/DataIndex.swift`.
+- Grabación a RINEX: `~/Documents/MeridianV/tools/rinex/` (se incluye en `tresvizo_ppk/core/meridian_rinex/` con la
+  nota de dónde sale y cómo se sincroniza).
+- Estilo: `cadaritre/TresVizo-Med` (público, MIT): `app/themes.py`, `app/widgets.py`, `app/icons.py`, `docs/estilo.md`,
+  `scripts/generate_msi.py`.
