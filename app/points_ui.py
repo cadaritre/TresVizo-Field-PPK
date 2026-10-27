@@ -172,7 +172,7 @@ class PointsPage(WizardPage):
         self.job.coord_format = self.format_var.get()
         if self.job.coord_format == 'geodetic':
             names = ('Latitud', 'Longitud', 'Altura elipsoidal (m)')
-            hint = 'Grados decimales o «19 25 12.3456 N»; longitud oeste con W o con signo menos. ITRF2008 2010.0.'
+            hint = 'Grados decimales o «19 25 12.3456 N»; longitud oeste con O (o W) o con signo menos. ITRF2008 2010.0.'
         else:
             names = ('X (m)', 'Y (m)', 'Z (m)')
             hint = 'Geocéntricas en ITRF2008, época 2010.0.'
@@ -457,7 +457,7 @@ class PointsPage(WizardPage):
             if c is not None and projected and c.northing_m is not None:
                 a, b = format_length(c.easting_m, prefs), format_length(c.northing_m, prefs)
             elif c is not None:
-                a, b = dms(c.latitude_deg, 'N', 'S', 4), dms(c.longitude_deg, 'E', 'W', 4)
+                a, b = dms(c.latitude_deg, 'N', 'S', 4), dms(c.longitude_deg, 'E', 'O', 4)
             else:
                 a = b = '—'
             h = '—' if c is None else format_length(c.orthometric_height_m if c.orthometric_height_m is not None else

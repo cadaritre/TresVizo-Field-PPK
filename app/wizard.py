@@ -79,8 +79,9 @@ def parse_angle(text: str, positive: str, negative: str) -> float:
     """Grados decimales o «gg° mm' ss.sss" H» (H = hemisferio). Negativo con signo o con la letra del sur/oeste."""
     raw = str(text).strip().upper().replace(',', '.')
     sign = 1.0
-    if raw and raw[-1] in (positive, negative):
-        sign = -1.0 if raw[-1] == negative else 1.0
+    negatives = {negative, 'O'} if negative == 'W' else {negative}   # oeste: W u O
+    if raw and (raw[-1] == positive or raw[-1] in negatives):
+        sign = -1.0 if raw[-1] in negatives else 1.0
         raw = raw[:-1].strip()
     if raw.startswith('-'):
         sign, raw = -sign, raw[1:]

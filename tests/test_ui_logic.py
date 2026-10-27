@@ -50,6 +50,7 @@ def test_numbers_and_angles():
     assert wz.parse_angle('19°25\'12.0"N', 'N', 'S') == pytest.approx(19.42)
     assert wz.parse_angle('99 07 48 W', 'E', 'W') == pytest.approx(-99.13)
     assert wz.parse_angle('-99.13', 'E', 'W') == pytest.approx(-99.13)
+    assert wz.parse_angle('99 07 48 O', 'E', 'W') == pytest.approx(-99.13)
     with pytest.raises(ValueError):
         wz.parse_angle("19 75 00", 'N', 'S')
 

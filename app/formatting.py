@@ -54,7 +54,7 @@ def coordinate_rows(coordinate, prefs: Preferences, sigma: Enu | None = None) ->
         rows += [east, north] if coordinate.axis_order.startswith('E') else [north, east]
         if coordinate.zone:
             rows.append(('Zona', coordinate.zone))
-    rows += [('Latitud', dms(coordinate.latitude_deg, 'N', 'S')), ('Longitud', dms(coordinate.longitude_deg, 'E', 'W')),
+    rows += [('Latitud', dms(coordinate.latitude_deg, 'N', 'S')), ('Longitud', dms(coordinate.longitude_deg, 'E', 'O')),
              ('Altura elipsoidal', format_length(coordinate.ellipsoidal_height_m, prefs))]
     if coordinate.orthometric_height_m is not None:
         kind = coordinate.height_kind or 'ortométrica'
