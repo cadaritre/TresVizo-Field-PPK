@@ -149,6 +149,8 @@ def _load_dir(folder: Path | None, bundled: bool) -> list[Network]:
     if folder is None or not folder.is_dir():
         return out
     for path in sorted(folder.glob("*.json")):
+        if path.name.endswith(".item.json"):          # la entrada del índice que guarda la biblioteca
+            continue
         try:
             network = parse_package(json.loads(path.read_text(encoding="utf-8")), path)
         except (OSError, ValueError, KeyError, TypeError):
@@ -162,7 +164,8 @@ def _stamp(folder: Path | None) -> str:
     parts = []
     for d in (BUNDLED_DIR, folder):
         if d is not None and d.is_dir():
-            parts += [f"{p}:{p.stat().st_mtime_ns}:{p.stat().st_size}" for p in sorted(d.glob("*.json"))]
+            parts += [f"{p}:{p.stat().st_mtime_ns}:{p.stat().st_size}" for p in sorted(d.glob("*.json"))
+                      if not p.name.endswith(".item.json")]
     return "|".join(parts)
 
 
@@ -355,3 +358,30 @@ def download_station_rinex(station: Station, start: datetime, end: datetime, wor
     if missing and progress:
         progress(1.0, f"Faltan {len(missing)} archivo(s) en el servidor de {net.short_name}.")
     return files
+
+
+# --- Registro en la biblioteca de datos firmados ----------------------------------------------------------------------
+
+def validate_download(item: dict, data: bytes) -> None:
+    """Comprobación de un paquete `cors-network` bajado del índice firmado, antes de instalarlo."""
+    title = item.get("title", item.get("id", "red"))
+    try:
+        doc = json.loads(data.decode("utf-8"))
+        net = parse_package(doc)
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise UserError(f"{title}: el archivo no es JSON legible; no se instala.") from None
+    except (PackageError, KeyError, TypeError, ValueError) as error:
+        raise UserError(f"{title}: el paquete de red no es válido ({error}); no se instala.") from None
+    if net.id != item.get("id"):
+        raise UserError(f"{title}: el archivo trae otra red («{net.id}»); no se instala.")
+
+
+def _register() -> None:
+    try:
+        from ..datos import biblioteca
+        biblioteca.register_kind(KIND, "redes", ".json", validate_download, "Red de estaciones de referencia")
+    except Exception:
+        pass
+
+
+_register()

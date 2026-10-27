@@ -168,3 +168,17 @@ def test_precise_candidates_and_days():
     days = precise.session_days(datetime(2026, 10, 20, 0, 30, tzinfo=timezone.utc),
                                 datetime(2026, 10, 20, 3, tzinfo=timezone.utc))
     assert [d.day for d in days] == [19, 20]
+
+
+def test_registered_in_signed_data_library():
+    from tresvizo_ppk.datos import biblioteca
+    kind = biblioteca.KINDS[networks.KIND]
+    assert kind.validate is networks.validate_download
+    good = json.dumps(_other_network()).encode()
+    kind.validate({"id": "red-prueba", "title": "Prueba"}, good)
+    with pytest.raises(UserError, match="otra red"):
+        kind.validate({"id": "otra", "title": "Prueba"}, good)
+    bad = _other_network()
+    bad["frame"] = {"name": "X"}
+    with pytest.raises(UserError, match="no es válido"):
+        kind.validate({"id": "red-prueba", "title": "Prueba"}, json.dumps(bad).encode())
