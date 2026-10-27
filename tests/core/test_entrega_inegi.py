@@ -95,3 +95,17 @@ def test_real_damaged_inegi_zip_message(tmp_path):
     good = DATA / "UGTO_a.rnx.gz"
     obs = prepare_observations([good, real], tmp_path / "w")
     assert any("MERI196m_304.zip" in w and "hueco" in w for w in obs.warnings)
+
+
+def test_hourly_files_with_a_gap_are_joined(tmp_path, unzip):
+    """La unión de archivos horarios con un hueco entre ellos (una hora que falta) no inventa ni pierde épocas."""
+    import sys
+    sys.path.insert(0, str(DATA.parents[1] / "core" / "larga"))
+    import editar_rinex
+    from datetime import datetime
+    a = unzip("UGTO_a.rnx.gz", "UGTO293o.rnx")
+    b = editar_rinex.keep(unzip("UGTO_b.rnx.gz", "b.rnx"), tmp_path / "UGTO293q.rnx",
+                          lambda t: t >= datetime(2026, 10, 20, 14, 4, 0))
+    obs = prepare_observations([a, b], tmp_path / "w")
+    assert obs.epochs == 13 + 5                     # 14:00:00–14:03:00 y 14:04:00–14:05:00, cada 15 s
+    assert obs.interval_s == 15.0
