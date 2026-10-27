@@ -408,3 +408,72 @@ def test_cleared_alert_leaves_no_gap(app):
     page.clear_alert('processed')
     app.update()
     assert page.alerts.winfo_height() <= 2
+
+
+def static_ready(app, tmp_path, page, name='P1'):
+    """Un proyecto estático completo y guardado, listo para procesar."""
+    f = files(tmp_path)
+    page.job.rover_files = [f['S-20261024-150214.bin']]
+    page.job.point_name, page.job.pole_height = name, '2'
+    page.job.bases[0].files, page.job.bases[0].station = [f['ineg2970.26d.Z']], dobles.STATIONS[0]
+    path = tmp_path/f'{name}.tvppk'
+    page.path = path
+    page.project, page.dirty = page._write(path), False
+    page.build_steps()
+    page.go(3)
+    return path
+
+
+def test_reopen_while_processing_asks_cancels_and_drops_the_old_result(app, tmp_path, monkeypatch):
+    """Abrir un proyecto (el mismo u otro) mientras se procesa: se pregunta, se cancela, se espera y el resultado viejo
+    nunca cae en el proyecto nuevo. Antes: TclError «invalid command name …!progresspanel.!progressbar»."""
+    from tkinter import messagebox
+    app.backend.parts['core'] = dobles.FakeCore(delay=0.15)
+    page = app.show('Georreferenciar punto')
+    path = static_ready(app, tmp_path, page)
+    asked = []
+    monkeypatch.setattr(messagebox, 'askyesno', lambda *a, **k: asked.append(a[:2]) or False)
+    page.process()
+    pump(app, lambda: page.progress.bar['value'] > 0)
+    old = page.worker
+    app.open_project(path)                        # «No»: el proceso sigue y el proyecto no se toca
+    assert asked and asked[-1][0] == 'Hay un proceso en marcha' and page.worker is old and not old.cancel.is_set()
+    monkeypatch.setattr(messagebox, 'askyesno', lambda *a, **k: asked.append(a[:2]) or True)
+    app.open_project(path)                        # «Sí»: se cancela, se espera y se abre
+    assert old.cancel.is_set() and old.finished and page.worker is None
+    assert not old.thread.is_alive() and page.step == 0 and not page.dirty
+    end = time.monotonic()+1.0
+    while time.monotonic() < end:
+        app.update()
+        time.sleep(0.01)
+    assert page.output is None and not app.shown, app.shown
+    # Procesa de nuevo, abre otro proyecto en medio y luego el primero: nada viejo aparece.
+    (tmp_path/'otro').mkdir()
+    other = static_ready(app, tmp_path/'otro', page, 'P2')
+    page.process()
+    pump(app, lambda: page.progress.bar['value'] > 0)
+    app.open_project(path)
+    app.open_project(other)
+    page.process()
+    pump(app, lambda: page.output is not None)
+    assert page.output['result'].point_name == 'P2' and page.path == other and not app.shown, app.shown
+
+
+def test_reload_cancels_pending_file_reads_and_uses_its_own_temporary_folder(app, tmp_path):
+    """Al recargar, las lecturas de archivos en curso se cancelan y su resultado se descarta; cada lectura usa su
+    propia carpeta temporal (antes compartían una que la primera borraba al terminar)."""
+    app.backend.parts['core'] = dobles.FakeCore(delay=0.1)
+    page = app.show('Georreferenciar punto')
+    path = static_ready(app, tmp_path, page)
+    pending = dict(page._inspecting)
+    assert pending                                 # el rover y la estación se están leyendo
+    app.open_project(path)
+    assert all(w.cancel.is_set() for _, w in pending.values())
+    pump(app, lambda: all(w.finished for _, w in pending.values()))
+    end = time.monotonic()+0.8
+    while time.monotonic() < end:
+        app.update()
+        time.sleep(0.01)
+    assert not page.dirty and not app.shown, app.shown
+    temporal = app.settings.data_dir()/'Temporal'
+    assert not temporal.exists() or not any(temporal.iterdir())

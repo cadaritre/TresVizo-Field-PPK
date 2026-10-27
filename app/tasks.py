@@ -128,6 +128,9 @@ def log_error(folder, title: str, detail: str) -> None:
 def run(widget, work, *, on_progress=None, on_done=None, on_error=None, on_cancel=None, interval=60):
     """Arranca `work` y entrega sus eventos en el hilo de Tk. Devuelve el Worker (su `.cancel` es el Event)."""
     worker = Worker(work).start()
+    # En la ventana principal, no en `widget`: un `after` pendiente de un widget destruido puede caer en otro
+    # comando de Tk (ver `components.later`).
+    root = widget._root()
 
     def tick():
         if not widget.winfo_exists():
@@ -144,6 +147,6 @@ def run(widget, work, *, on_progress=None, on_done=None, on_error=None, on_cance
             elif kind in ('user', 'program') and on_error:
                 on_error(kind, event[2], event[3])
         if not worker.finished:
-            widget.after(interval, tick)
-    widget.after(interval, tick)
+            root.after(interval, tick)
+    root.after(interval, tick)
     return worker

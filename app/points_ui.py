@@ -76,8 +76,6 @@ class PointsPage(WizardPage):
         self.own_list = FileList(inner, self.app, self.set_own_files)
         self.own_info = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')
         inner.bind('<Configure>', lambda e: self.own_info.configure(wraplength=max(200, e.width-20)), add='+')
-        if self.job.base_kind == 'own':
-            self.set_own_files(self.job.base.files, notify=False)
         frame, inner = card(parent, 'Datos de la base')
         frame.pack(fill='x', pady=(16, 0))
         inner.columnconfigure((0, 1), weight=1, uniform='own')
@@ -129,6 +127,9 @@ class PointsPage(WizardPage):
         self.switch_format(notify=False)
         self.render_candidates()
         self.switch_source(notify=False)
+        # Al final: si los archivos ya se leyeron, el resultado llega en el acto y llena los campos de arriba.
+        if self.job.base_kind == 'own':
+            self.set_own_files(self.job.base.files, notify=False)
 
     def edit(self, **values):
         for key, value in values.items():
@@ -401,7 +402,7 @@ class PointsPage(WizardPage):
                 self.csv_info.configure(text=f'{path.name}: {message}')
                 if kind == 'program':
                     tasks.log_error(self.app.settings.folder, 'Lectura del CSV', detail)
-        tasks.run(self, lambda p, c: core.read_field_csv(path), on_done=done, on_error=failed)
+        self.run_task(lambda p, c: core.read_field_csv(path), on_done=done, on_error=failed)
 
     # --- Proceso ------------------------------------------------------------------------------------------------
 

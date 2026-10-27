@@ -9,7 +9,7 @@ from tkinter import filedialog, ttk
 from PIL import ImageTk
 
 from app import tasks
-from app.components import scrolled
+from app.components import later, scrolled
 
 
 def render_page(path: Path, page: int, width_px: int):
@@ -71,7 +71,7 @@ class DocumentViewer(tk.Toplevel):
         self.bind('<Control-s>', lambda e: self.save())
         self.bind('<Command-s>', lambda e: self.save())
         app.theme.walk(self)
-        self.after(80, self.fit)
+        later(self, 80, self.fit)
         self.focus_set()
 
     def turn(self, delta):

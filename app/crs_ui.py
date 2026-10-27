@@ -8,7 +8,7 @@ from tresvizo_ppk.model import CoordinateChoice
 from tresvizo_ppk.nombres import display_name
 
 from app import tasks
-from app.components import Banner, ProgressPanel, ScrollFrame, card, scrolled, wrap_label
+from app.components import Banner, ProgressPanel, ScrollFrame, card, later, scrolled, wrap_label
 
 KIND_TEXT = {'factory': 'Sistemas de fábrica', 'crs-package': 'Paquete de sistemas', 'geoid': 'Geoide',
              'datum-grid': 'Transformación de datum', 'cors-network': 'Red de estaciones de referencia'}
@@ -179,7 +179,7 @@ class CrsPage(ttk.Frame):
         entry.pack(side='left')
         from app.components import Tooltip
         Tooltip(entry, 'Nombre, EPSG, país, datum o zona; sin importar acentos ni mayúsculas.', app.theme)
-        self.query.trace_add('write', lambda *a: self.after_idle(self.refresh_list))
+        self.query.trace_add('write', lambda *a: later(self, 'idle', self.refresh_list))
         tools.add(search)
         states = ttk.Frame(tools)
         self.state_buttons = {}

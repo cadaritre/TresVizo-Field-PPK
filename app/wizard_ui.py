@@ -6,6 +6,7 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
@@ -525,6 +526,11 @@ class WizardPage(ttk.Frame):
         super().__init__(parent)
         self.app = app
         self.worker = None
+        # Generación del proyecto en pantalla: cambia al empezar uno nuevo o abrir otro. Lo que termina en segundo plano
+        # (proceso, lecturas, guardado, informe) se descarta si su generación ya no es la actual.
+        self.generation = 0
+        self.background: list[tasks.Worker] = []
+        self._stopping = False
         head = ttk.Frame(self)
         head.pack(fill='x')
         head.columnconfigure(0, weight=1)
@@ -580,7 +586,37 @@ class WizardPage(ttk.Frame):
         job.coordinates = self.app.settings.coordinates()
         return job
 
+    def begin_generation(self):
+        """Un proyecto nuevo en pantalla: las tareas del anterior se cancelan y sus resultados se descartan."""
+        self.generation += 1
+        if isinstance(self.worker, tasks.Worker):
+            self.worker.cancel.set()     # solo si alguien recarga sin pasar por confirm_discard
+        self.worker = None
+        for worker in self.background:
+            worker.cancel.set()
+        self.background = []
+        for _key, worker in self.__dict__.get('_inspecting', {}).values():
+            worker.cancel.set()
+        self.__dict__['_inspecting'] = {}
+
+    def run_task(self, work, **callbacks):
+        """`tasks.run` atado a la generación actual: si el proyecto cambió, sus avisos y su resultado no llegan."""
+        generation = self.generation
+
+        def guard(callback):
+            if callback is None:
+                return None
+
+            def call(*args):
+                if self.generation == generation and self.winfo_exists():
+                    callback(*args)
+            return call
+        worker = tasks.run(self, work, **{k: guard(v) for k, v in callbacks.items()})
+        self.background = [w for w in self.background if not w.finished]+[worker]
+        return worker
+
     def reset(self):
+        self.begin_generation()
         self.job = self.new_job()
         self.path: Path | None = None
         self.project: Project | None = None
@@ -711,9 +747,40 @@ class WizardPage(ttk.Frame):
         return self.worker is not None
 
     def cancel(self):
-        if self.worker is not None:
+        if isinstance(self.worker, tasks.Worker):
             self.worker.cancel.set()
             self.progress.cancelling()
+
+    STOP_TIMEOUT_S = 120.0
+
+    def stop_processing(self) -> bool:
+        """Cancela el proceso en marcha y espera a que su hilo termine (la interfaz sigue respondiendo). False si no
+        se detuvo a tiempo: entonces no se puede reconstruir la página ni tocar su carpeta de trabajo."""
+        worker = self.worker
+        if not isinstance(worker, tasks.Worker):
+            return worker is None
+        self.cancel()
+        self.app.set_status('Cancelando el proceso…')
+        end = time.monotonic()+self.STOP_TIMEOUT_S
+        self._stopping = True
+        try:
+            self.app.configure(cursor='watch')
+            while (self.worker is not None or worker.thread.is_alive()) and time.monotonic() < end:
+                self.app.update()
+                time.sleep(0.02)
+        finally:
+            self._stopping = False
+            if self.app.winfo_exists():
+                self.app.configure(cursor='')
+        if worker.thread.is_alive():
+            messagebox.showwarning('El proceso sigue', 'El proceso todavía no se detiene. Espera a que termine el paso '
+                                   'actual y vuelve a intentarlo.', parent=self.app)
+            return False
+        if self.worker is worker:
+            # El hilo terminó pero su último aviso aún no se entregó: se da por cancelado aquí.
+            self.worker = None
+            self.progress.stop('Cancelado. Los archivos de entrada no cambiaron.')
+        return True
 
     # --- Lectura de los archivos al soltarlos: los campos se llenan solos ------------------------------------------
 
@@ -721,8 +788,8 @@ class WizardPage(ttk.Frame):
         """Lee los archivos en segundo plano (encabezado y sesión) y llama `callback(ObservationSet)` en el hilo de la
         interfaz. Si los archivos cambian antes de terminar, el resultado viejo se descarta. La copia temporal se
         borra al terminar."""
-        import hashlib
         import shutil
+        import tempfile
         core = self.app.backend.core
         files = [Path(p) for p in files]
         if core is None or not files or not all(p.is_file() for p in files):
@@ -738,9 +805,12 @@ class WizardPage(ttk.Frame):
         old = workers.get(slot)
         if old is not None:
             old[1].cancel.set()
-        folder = self.app.settings.data_dir()/'Temporal'/hashlib.sha256(repr(key).encode()).hexdigest()[:16]
+        temporal = self.app.settings.data_dir()/'Temporal'
 
         def work(progress, cancel):
+            # Una carpeta propia por lectura: dos lecturas de los mismos archivos ya no se borran una a otra.
+            temporal.mkdir(parents=True, exist_ok=True)
+            folder = Path(tempfile.mkdtemp(prefix='lectura-', dir=temporal))
             try:
                 obs = core.prepare_observations(files, folder, progress=progress, cancel=cancel)
                 if extra is not None:
@@ -766,8 +836,7 @@ class WizardPage(ttk.Frame):
             if kind == 'program':
                 tasks.log_error(self.app.settings.folder, 'Lectura de archivos', detail)
         self.app.set_status('Leyendo los archivos para llenar los datos que traen…')
-        workers[slot] = (key, tasks.run(self, work, on_done=done, on_error=failed,
-                                        on_cancel=lambda m: None))
+        workers[slot] = (key, self.run_task(work, on_done=done, on_error=failed, on_cancel=lambda m: None))
 
     @staticmethod
     def origin_text(obs, key, fallback='') -> str:
@@ -847,8 +916,8 @@ class WizardPage(ttk.Frame):
 
     def session_window(self, callback):
         """Día y horas UTC de la sesión del rover (se leen de la grabación; la copia temporal se borra)."""
-        import hashlib
         import shutil
+        import tempfile
         files = [Path(p) for p in self.job.rover_files]
         if not files:
             self.app.show_error('user', 'Agrega primero la grabación del rover: de ella salen el día y las horas de '
@@ -863,10 +932,12 @@ class WizardPage(ttk.Frame):
         if cache and cache[0] == key:
             callback(*cache[1])
             return
-        folder = self.app.settings.data_dir()/'Temporal'/hashlib.sha256(repr(key).encode()).hexdigest()[:16]
+        temporal = self.app.settings.data_dir()/'Temporal'
         core = self.app.backend.core
 
         def work(progress, cancel):
+            temporal.mkdir(parents=True, exist_ok=True)
+            folder = Path(tempfile.mkdtemp(prefix='sesion-', dir=temporal))
             try:
                 obs = core.prepare_observations(files, folder, progress=progress, cancel=cancel)
                 return obs.start, obs.end
@@ -881,9 +952,9 @@ class WizardPage(ttk.Frame):
             self._window_cache = (key, window)
             callback(*window)
         self.app.set_status('Leyendo la grabación del rover para saber el día y las horas de la sesión…')
-        tasks.run(self, work, on_done=done,
-                  on_error=lambda kind, message, detail: self.app.show_error(kind, message, detail),
-                  on_cancel=lambda m: self.app.set_status(m))
+        self.run_task(work, on_done=done,
+                      on_error=lambda kind, message, detail: self.app.show_error(kind, message, detail),
+                      on_cancel=lambda m: self.app.set_status(m))
 
     def network_guide(self, entry: BaseEntry):
         """Qué archivos pedir en la página de la red de la estación para cubrir la sesión."""
@@ -936,7 +1007,17 @@ class WizardPage(ttk.Frame):
             self.reset()
 
     def confirm_discard(self, closing=False) -> bool:
-        if not self.dirty or self.busy():
+        if self._stopping:
+            return False
+        if self.busy():
+            if closing:
+                return True      # al salir, la ventana ya preguntó y cancela el proceso
+            if not messagebox.askyesno('Hay un proceso en marcha', f'«{self.TITLE}» está procesando. ¿Cancelarlo?',
+                                       icon='warning', parent=self.app):
+                return False
+            if not self.stop_processing():
+                return False
+        if not self.dirty:
             return True
         answer = messagebox.askyesnocancel('Cambios sin guardar', f'«{self.TITLE}» tiene cambios sin guardar. '
                                            '¿Guardar el proyecto?', parent=self.app)
@@ -992,7 +1073,7 @@ class WizardPage(ttk.Frame):
 
         def failed(kind, message, detail):
             self.app.show_error(kind, message, detail, 'No se pudo guardar el proyecto')
-        tasks.run(self, lambda p, c: self._write(path, p, c), on_done=done, on_error=failed)
+        self.run_task(lambda p, c: self._write(path, p, c), on_done=done, on_error=failed)
 
     def save_sync(self) -> bool:
         path = self.path or self.ask_path()
@@ -1015,6 +1096,7 @@ class WizardPage(ttk.Frame):
 
     def load_project(self, project: Project, path: Path):
         files = projects.resolve_inputs(project)
+        self.begin_generation()
         self.job = self.JOB.from_project(project, files)
         self.project, self.path, self.output, self.dirty = project, Path(path), None, False
         self.touched = set(range(self.PROCESS_STEP))
@@ -1040,8 +1122,8 @@ class WizardPage(ttk.Frame):
                             + text, key='inputs')
             self.touched = set(range(self.PROCESS_STEP))
             self.refresh()
-        tasks.run(self, lambda p, c: projects.check_inputs(project, p, c), on_done=checked,
-                  on_error=lambda kind, message, detail: self.app.show_error(kind, message, detail))
+        self.run_task(lambda p, c: projects.check_inputs(project, p, c), on_done=checked,
+                      on_error=lambda kind, message, detail: self.app.show_error(kind, message, detail))
 
     # --- Proceso ------------------------------------------------------------------------------------------------
 
@@ -1113,8 +1195,8 @@ class WizardPage(ttk.Frame):
         def work(progress, cancel):
             workdir.mkdir(parents=True, exist_ok=True)
             return self.work(job, project, workdir, progress, cancel)
-        self.worker = tasks.run(self, work, on_progress=self.progress.update_progress, on_done=done, on_error=failed,
-                                on_cancel=cancelled)
+        self.worker = self.run_task(work, on_progress=self.progress.update_progress, on_done=done, on_error=failed,
+                                    on_cancel=cancelled)
 
     @staticmethod
     def base_window(rover):
@@ -1197,8 +1279,8 @@ class WizardPage(ttk.Frame):
 
         def failed(kind, message, detail):
             self.app.show_error(kind, message, detail, 'No se pudo armar el informe')
-        tasks.run(self, lambda p, c: self.make_report(report, output, project, user, out), on_done=done,
-                  on_error=failed)
+        self.run_task(lambda p, c: self.make_report(report, output, project, user, out), on_done=done,
+                      on_error=failed)
 
     def make_report(self, report, output, project, user, out):  # pragma: no cover - lo implementan las páginas
         raise NotImplementedError

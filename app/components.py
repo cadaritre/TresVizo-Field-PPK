@@ -9,6 +9,33 @@ from tkinter import filedialog, ttk
 
 from app.wizard import Issue, classify
 
+def later(widget, ms, callback):
+    """`after` seguro: se programa en la ventana principal y no llama si `widget` ya no existe.
+
+    tkinter borra el comando de un `after` pendiente al destruir el widget que lo programó, pero Tcl lo deja en su
+    lista; un comando nuevo puede heredar ese nombre (sale del `id` del objeto) y recibir la llamada con otros
+    argumentos («missing 1 required positional argument»). La ventana principal no se destruye mientras haya
+    interfaz, así que su `after` siempre llega a la función correcta. `ms='idle'` equivale a `after_idle`."""
+    def run():
+        try:
+            alive = bool(widget.winfo_exists())
+        except tk.TclError:
+            alive = False
+        if alive:
+            callback()
+    root = widget._root()
+    return root.after_idle(run) if ms == 'idle' else root.after(ms, run)
+
+
+def cancel_later(widget, pending):
+    if pending is None:
+        return
+    try:
+        widget._root().after_cancel(pending)
+    except (tk.TclError, ValueError):
+        pass
+
+
 KIND_TEXT = {'recording': 'Grabación del receptor', 'obs': 'RINEX de observación', 'nav': 'RINEX de navegación',
              'precise': 'Efemérides precisas', 'csv': 'CSV de puntos', 'project': 'Proyecto', 'zip': 'Archivo ZIP',
              'unknown': 'No reconocido'}
@@ -184,7 +211,7 @@ class Tooltip:
 
     def schedule(self, event=None):
         self.hide()
-        self.pending = self.widget.after(450, self.show)
+        self.pending = later(self.widget, 450, self.show)
 
     def show(self):
         self.hide()
@@ -205,10 +232,7 @@ class Tooltip:
 
     def hide(self, event=None):
         if self.pending is not None:
-            try:
-                self.widget.after_cancel(self.pending)
-            except tk.TclError:
-                pass
+            cancel_later(self.widget, self.pending)
             self.pending = None
         if self.window:
             self.window.destroy()
@@ -431,7 +455,7 @@ class ProgressPanel(ttk.Frame):
             return
         seconds = int(time.monotonic()-self.started)
         self.elapsed.configure(text=f'{seconds//60:d}:{seconds % 60:02d}')
-        self.after(500, self._tick)
+        later(self, 500, self._tick)
 
     def update_progress(self, fraction, message):
         self.bar.configure(value=fraction)
@@ -499,7 +523,7 @@ class Collapsible(ttk.Frame):
 
     def toggle(self):
         if self.animation:
-            self.after_cancel(self.animation)
+            cancel_later(self, self.animation)
             self.animation = None
         self.opened = not self.opened
         self._icon()
@@ -517,7 +541,7 @@ class Collapsible(ttk.Frame):
             portion = index/10
             self.body.configure(height=max(1, int(height*(portion if self.opened else 1-portion))))
             if index < 10:
-                self.animation = self.after(15, lambda: step(index+1))
+                self.animation = later(self, 15, lambda: step(index+1))
             else:
                 self.animation = None
                 self.body.pack_propagate(True)
@@ -539,7 +563,7 @@ class FlowFrame(ttk.Frame):
     def add(self, widget, stretch=False):
         widget.flow_stretch = stretch
         self.items.append(widget)
-        self.after_idle(self._layout)
+        later(self, 'idle', self._layout)
         return widget
 
     def clear(self):
@@ -635,7 +659,7 @@ def fit_columns(tree, app, stretch=None, limit=400, maximum=520):
                 tree.column(c, width=w, minwidth=min(w, 40))
         tree.bind('<Configure>', fit, add='+')
         tree.fit_bound = True
-    tree.after_idle(lambda: tree.winfo_exists() and tree.event_generate('<Configure>'))
+    later(tree, 'idle', lambda: tree.event_generate('<Configure>'))
 
 
 class CellTips:
