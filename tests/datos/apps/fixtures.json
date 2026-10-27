@@ -1,0 +1,389 @@
+{
+ "generatedBy": "tools/geoides/pruebas/fixtures.py",
+ "grid": {
+  "base64": "TVZHRU9JRDECAAUAAAAHAAAAAAAAAAAAM0AAAAAAAOBYwAAAAAAAANA/AAAAAAAA4D/JAQAARgAAAAEAAAAAAHsiYXR0cmlidXRpb24iOiJQcnVlYmEiLCJhdXRob3JpdHkiOiJUcmVzVml6byIsImNvdW50cmllcyI6WyJNWCJdLCJkYXRhQ2hlY2tzdW0iOiIyNzNmMzVjMjYwNmY4YjdhYzczMWQzNDk2NmFlNTg2OTI0YWJhNDNjZjA4ZDUzYjcxOThjMGQzYjY5ZjZkN2MzIiwiZGVjbGFyZWRBY2N1cmFjeU1ldGVycyI6MC4xLCJlbGxpcHNvaWROYW1lIjoiR1JTIDE5ODAiLCJmcmFtZSI6IklUUkYyMDA4IiwiZ3JpZFN0ZXBBcmNNaW51dGVzIjoxNSwiaGVpZ2h0S2luZCI6Im9ydGhvbWV0cmljIiwiaWQiOiJwcnVlYmEiLCJpc0hpc3RvcmljIjpmYWxzZSwibmFtZSI6IlJlamlsbGEgZGUgcHJ1ZWJhIiwicmVzYW1wbGluZ0Vycm9yTWV0ZXJzIjowLCJzY29wZSI6InJlZ2lvbmFsIiwic291cmNlVVJMIjoiaHR0cHM6Ly9leGFtcGxlLmludmFsaWQiLCJ2ZXJpZmljYXRpb24iOiJ2ZXJpZmllZCIsInZlcnNpb24iOiIxIn1jbLjS+vM/DL5oVa1igANeMClfxc5wqxXGewhUrVYF40GAZBUA",
+  "rows": 5,
+  "columns": 7,
+  "latitudeMinimum": 19.0,
+  "longitudeMinimum": -99.5,
+  "latitudeStep": 0.25,
+  "longitudeStep": 0.5,
+  "samples": [
+   -32767,
+   1493,
+   1486,
+   1479,
+   1472,
+   1465,
+   1458,
+   1513,
+   1506,
+   1499,
+   1492,
+   1485,
+   1478,
+   1471,
+   1526,
+   1519,
+   1512,
+   -32768,
+   -32768,
+   1491,
+   1484,
+   1539,
+   1532,
+   1525,
+   1518,
+   1511,
+   1504,
+   1497,
+   1552,
+   1545,
+   1538,
+   1531,
+   1524,
+   1517,
+   32767
+  ]
+ },
+ "bundled": {
+  "ggm10": {
+   "dataChecksum": "0ecd994628631f8976ecf1c0cd7a52f2c9107629265a8d2e8c98fca3690536da",
+   "rows": 456,
+   "columns": 792,
+   "vectors": [
+    {
+     "latitude": 15.89583065934066,
+     "longitude": -115.68750266750948,
+     "undulation": -42.47
+    },
+    {
+     "latitude": 15.916664,
+     "longitude": -115.66666932996208,
+     "undulation": -42.45750000000001
+    },
+    {
+     "latitude": 15.901538994681319,
+     "longitude": -115.6495443264981,
+     "undulation": -42.40409193
+    },
+    {
+     "latitude": 18.77083167032967,
+     "longitude": -94.22916499367889,
+     "undulation": -12.709999999999997
+    },
+    {
+     "latitude": 18.791665010989014,
+     "longitude": -94.20833165613148,
+     "undulation": -12.770000000000005
+    },
+    {
+     "latitude": 18.77654000567033,
+     "longitude": -94.19120665266752,
+     "undulation": -12.72644
+    },
+    {
+     "latitude": 23.520833340659344,
+     "longitude": -102.4791666624526,
+     "undulation": -15.580000000000009
+    },
+    {
+     "latitude": 23.541666681318684,
+     "longitude": -102.45833332490518,
+     "undulation": -15.572500000000002
+    },
+    {
+     "latitude": 23.526541676,
+     "longitude": -102.44120832144122,
+     "undulation": -15.524328070000013
+    },
+    {
+     "latitude": 27.854168197802203,
+     "longitude": -108.7708346017699,
+     "undulation": -28.679999999999968
+    },
+    {
+     "latitude": 27.87500153846154,
+     "longitude": -108.7500012642225,
+     "undulation": -28.557500000000015
+    },
+    {
+     "latitude": 27.85987653314286,
+     "longitude": -108.73287626075853,
+     "undulation": -28.438018069999984
+    },
+    {
+     "latitude": 31.104169340659343,
+     "longitude": -87.64583032869785,
+     "undulation": -29.15
+    },
+    {
+     "latitude": 31.125002681318687,
+     "longitude": -87.62499699115045,
+     "undulation": -29.130000000000003
+    },
+    {
+     "latitude": 31.109877676000004,
+     "longitude": -87.60787198768648,
+     "undulation": -29.113560000000003
+    },
+    {
+     "latitude": 20.31249887912088,
+     "longitude": -96.9791655499368,
+     "undulation": -12.789999999999987
+    },
+    {
+     "latitude": 20.33333221978022,
+     "longitude": -96.95833221238938,
+     "undulation": -12.93000000000001
+    },
+    {
+     "latitude": 20.31820721446154,
+     "longitude": -96.94120720892542,
+     "undulation": -12.898019999999992
+    },
+    {
+     "latitude": 14.02083,
+     "longitude": -118.97917,
+     "undulation": -43.69
+    },
+    {
+     "latitude": 32.97917,
+     "longitude": -86.02083,
+     "undulation": -29.88
+    },
+    {
+     "latitude": 14.02083,
+     "longitude": -86.02083,
+     "undulation": 5.51
+    },
+    {
+     "latitude": 32.97917,
+     "longitude": -118.97917,
+     "undulation": -38.15
+    },
+    {
+     "latitude": 23.5,
+     "longitude": -86.02083,
+     "undulation": -23.219999999999988
+    },
+    {
+     "latitude": 32.97917,
+     "longitude": -102.5,
+     "undulation": -23.815
+    },
+    {
+     "latitude": 14.01983,
+     "longitude": -118.97917,
+     "undulation": null
+    },
+    {
+     "latitude": 32.98017,
+     "longitude": -86.02083,
+     "undulation": null
+    },
+    {
+     "latitude": 14.02083,
+     "longitude": -118.98017,
+     "undulation": null
+    },
+    {
+     "latitude": 14.02083,
+     "longitude": -86.01983,
+     "undulation": null
+    }
+   ]
+  },
+  "ggm25": {
+   "dataChecksum": "e856bb7395fa814c9fa414881e7f918ad1f4b515cd0b8acfa4cfa0c48fc06a28",
+   "rows": 1261,
+   "columns": 2101,
+   "vectors": [
+    {
+     "latitude": 15.09166667666,
+     "longitude": -116.49166667040001,
+     "undulation": -43.04999999999999
+    },
+    {
+     "latitude": 15.10000000999,
+     "longitude": -116.48333333707001,
+     "undulation": -43.04249999999999
+    },
+    {
+     "latitude": 15.093950009992419,
+     "longitude": -116.47648333707275,
+     "undulation": -43.03190193
+    },
+    {
+     "latitude": 18.241666675399998,
+     "longitude": -93.74166667950001,
+     "undulation": -12.060000000000002
+    },
+    {
+     "latitude": 18.250000008729998,
+     "longitude": -93.73333334617001,
+     "undulation": -12.032499999999999
+    },
+    {
+     "latitude": 18.24395000873242,
+     "longitude": -93.72648334617276,
+     "undulation": -12.022068070000007
+    },
+    {
+     "latitude": 23.4916666733,
+     "longitude": -102.49166667600001,
+     "undulation": -15.709999999999999
+    },
+    {
+     "latitude": 23.50000000663,
+     "longitude": -102.48333334267001,
+     "undulation": -15.712499999999997
+    },
+    {
+     "latitude": 23.493950006632417,
+     "longitude": -102.47648334267275,
+     "undulation": -15.702381929999998
+    },
+    {
+     "latitude": 28.3250000047,
+     "longitude": -109.14166667334001,
+     "undulation": -29.01
+    },
+    {
+     "latitude": 28.33333333803,
+     "longitude": -109.13333334001001,
+     "undulation": -28.945
+    },
+    {
+     "latitude": 28.327283338032416,
+     "longitude": -109.12648334001275,
+     "undulation": -28.88383000000002
+    },
+    {
+     "latitude": 31.891666669939998,
+     "longitude": -86.7416666823,
+     "undulation": -28.569999999999997
+    },
+    {
+     "latitude": 31.900000003269998,
+     "longitude": -86.73333334897,
+     "undulation": -28.569999999999993
+    },
+    {
+     "latitude": 31.89395000327242,
+     "longitude": -86.72648334897275,
+     "undulation": -28.56226
+    },
+    {
+     "latitude": 19.97500000804,
+     "longitude": -96.64166667834002,
+     "undulation": -11.16999999999998
+    },
+    {
+     "latitude": 19.98333334137,
+     "longitude": -96.63333334501002,
+     "undulation": -11.27249999999999
+    },
+    {
+     "latitude": 19.97728334137242,
+     "longitude": -96.62648334501276,
+     "undulation": -11.23622192999999
+    },
+    {
+     "latitude": 12.9916666775,
+     "longitude": -119.99166666900001,
+     "undulation": -43.26
+    },
+    {
+     "latitude": 33.9916666691,
+     "longitude": -84.991666683,
+     "undulation": -30.240000000000002
+    },
+    {
+     "latitude": 12.9916666775,
+     "longitude": -84.991666683,
+     "undulation": 6.4599999999999955
+    },
+    {
+     "latitude": 33.9916666691,
+     "longitude": -119.99166666900001,
+     "undulation": -36.16
+    },
+    {
+     "latitude": 23.4916666733,
+     "longitude": -84.991666683,
+     "undulation": -24.45000000000002
+    },
+    {
+     "latitude": 33.9916666691,
+     "longitude": -102.49166667600001,
+     "undulation": -25.130000000000006
+    },
+    {
+     "latitude": 12.9906666775,
+     "longitude": -119.99166666900001,
+     "undulation": null
+    },
+    {
+     "latitude": 33.9926666691,
+     "longitude": -84.991666683,
+     "undulation": null
+    },
+    {
+     "latitude": 12.9916666775,
+     "longitude": -119.99266666900002,
+     "undulation": null
+    },
+    {
+     "latitude": 12.9916666775,
+     "longitude": -84.990666683,
+     "undulation": null
+    }
+   ]
+  }
+ },
+ "index": {
+  "testPublicKey": "CmBAkWBQGvaKMVr3bOFHLecnaF+qHQcQ4EQ1DhbRHwo=",
+  "testKeyID": "f572e7179afb8175",
+  "good": {
+   "format": "tresvizo-signed-index",
+   "formatVersion": 1,
+   "algorithm": "Ed25519",
+   "keyID": "f572e7179afb8175",
+   "payload": "eyJmb3JtYXQiOiJ0cmVzdml6by1kYXRhLWluZGV4IiwiZm9ybWF0VmVyc2lvbiI6MSwiaXRlbXMiOlt7ImF0dHJpYnV0aW9uIjoiUHJ1ZWJhIiwiYXV0aG9yaXR5IjoiVHJlc1Zpem8iLCJib3VuZHMiOnsiZWFzdCI6LTk2LjUsIm5vcnRoIjoyMC4wLCJzb3V0aCI6MTkuMCwid2VzdCI6LTk5LjV9LCJjb3VudHJpZXMiOlsiTVgiXSwiZmlsZSI6eyJieXRlcyI6MTIzNCwicGF0aCI6ImRvd25sb2FkL2RhdG9zLTIwMjYtMTAtMjAvcHJ1ZWJhLXIxLm12Z2VvaWQiLCJzaGEyNTYiOiJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiIn0sImdlb2lkIjp7ImF0dHJpYnV0aW9uIjoiUHJ1ZWJhIiwiYXV0aG9yaXR5IjoiVHJlc1Zpem8iLCJjb3VudHJpZXMiOlsiTVgiXSwiZGF0YUNoZWNrc3VtIjoiMjczZjM1YzI2MDZmOGI3YWM3MzFkMzQ5NjZhZTU4NjkyNGFiYTQzY2YwOGQ1M2I3MTk4YzBkM2I2OWY2ZDdjMyIsImRlY2xhcmVkQWNjdXJhY3lNZXRlcnMiOjAuMSwiZWxsaXBzb2lkTmFtZSI6IkdSUyAxOTgwIiwiZnJhbWUiOiJJVFJGMjAwOCIsImdyaWRTdGVwQXJjTWludXRlcyI6MTUsImhlaWdodEtpbmQiOiJvcnRob21ldHJpYyIsImlkIjoicHJ1ZWJhIiwiaXNIaXN0b3JpYyI6ZmFsc2UsIm5hbWUiOiJSZWppbGxhIGRlIHBydWViYSIsInJlc2FtcGxpbmdFcnJvck1ldGVycyI6MCwic2NvcGUiOiJyZWdpb25hbCIsInNvdXJjZVVSTCI6Imh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkIiwidmVyaWZpY2F0aW9uIjoidmVyaWZpZWQiLCJ2ZXJzaW9uIjoiMSJ9LCJpZCI6InBydWViYSIsImtpbmQiOiJnZW9pZCIsImxpY2Vuc2UiOiJDQyBCWSA0LjAiLCJsaWNlbnNlVVJMIjoiaHR0cHM6Ly9jcmVhdGl2ZWNvbW1vbnMub3JnL2xpY2Vuc2VzL2J5LzQuMC8iLCJyZWdpb24iOiJNw6l4aWNvIiwicmVxdWlyZXMiOltdLCJyZXZpc2lvbiI6MSwidGl0bGUiOiJSZWppbGxhIGRlIHBydWViYSIsInRyYW5zZm9ybWF0aW9uTm90aWNlIjoiIiwidmVyc2lvbiI6IjEifSx7ImF0dHJpYnV0aW9uIjoiRVBTRyBHZW9kZXRpYyBQYXJhbWV0ZXIgRGF0YXNldCIsImF1dGhvcml0eSI6IklHQUMgwrcgRVBTRyIsImJvdW5kcyI6eyJlYXN0IjotNjYuOCwibm9ydGgiOjEzLjQsInNvdXRoIjotNC4zLCJ3ZXN0IjotNzkuMX0sImNvdW50cmllcyI6WyJDTyJdLCJjcnNQYWNrYWdlIjp7ImZvcm1hdCI6InRyZXN2aXpvLWNycy1wYWNrYWdlIiwiZm9ybWF0VmVyc2lvbiI6MSwic3lzdGVtcyI6MTJ9LCJmaWxlIjp7ImJ5dGVzIjo1Njc4LCJwYXRoIjoiZG93bmxvYWQvZGF0b3MtMjAyNi0xMC0yMC9jcnMtY28tcjIuanNvbiIsInNoYTI1NiI6ImNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QifSwiaWQiOiJjcnMtY28iLCJraW5kIjoiY3JzLXBhY2thZ2UiLCJsaWNlbnNlIjoiVMOpcm1pbm9zIGRlIEVQU0ciLCJsaWNlbnNlVVJMIjoiaHR0cHM6Ly9lcHNnLm9yZy90ZXJtcy1vZi11c2UuaHRtbCIsInJlZ2lvbiI6IkNvbG9tYmlhIiwicmVxdWlyZXMiOlsicHJ1ZWJhIl0sInJldmlzaW9uIjoyLCJ0aXRsZSI6IkNvbG9tYmlhIiwidmVyc2lvbiI6IjIwMjYuMTAuMjAifSx7ImF0dHJpYnV0aW9uIjoiSUJHRSIsImF1dGhvcml0eSI6IklCR0UiLCJib3VuZHMiOnsiZWFzdCI6LTMzLjAsIm5vcnRoIjo2LjAsInNvdXRoIjotMzUuMCwid2VzdCI6LTc1LjB9LCJjb3VudHJpZXMiOlsiQlIiXSwiZGF0dW1HcmlkIjp7ImZvcm1hdCI6Im50djIiLCJzb3VyY2VGcmFtZSI6IlNBRDY5IiwidGFyZ2V0RnJhbWUiOiJTSVJHQVMyMDAwIn0sImZpbGUiOnsiYnl0ZXMiOjY3NTEzNiwicGF0aCI6ImRvd25sb2FkL2RhdG9zLTIwMjYtMTAtMjAvYnItc2FkNjktcjEuZ3NiIiwic2hhMjU2IjoiZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZiJ9LCJpZCI6ImJyLXNhZDY5Iiwia2luZCI6ImRhdHVtLWdyaWQiLCJsaWNlbnNlIjoiTGljZW5jaWEgZGUgcHJ1ZWJhIiwibGljZW5zZVVSTCI6bnVsbCwicmVnaW9uIjoiQnJhc2lsIiwicmVxdWlyZXMiOltdLCJyZXZpc2lvbiI6MSwidGl0bGUiOiJTQUQ2OSDihpIgU0lSR0FTMjAwMCIsInZlcnNpb24iOiIyMDA1In1dLCJwdWJsaXNoZWRBdCI6IjIwMjYtMTAtMjBUMjM6MDA6MDBaIiwicmVsZWFzZSI6ImRhdG9zLTIwMjYtMTAtMjAiLCJzZXF1ZW5jZSI6N30=",
+   "signature": "E7UYGrkBOtbzqwodBjLQaezmjBEk7ahvCE10zHSIaSghBl7tjWwl3c2YKgPMatY4W7kfg4RRkH2letgvbua3BA=="
+  },
+  "withUnknownKind": {
+   "format": "tresvizo-signed-index",
+   "formatVersion": 1,
+   "algorithm": "Ed25519",
+   "keyID": "f572e7179afb8175",
+   "payload": "eyJmb3JtYXQiOiJ0cmVzdml6by1kYXRhLWluZGV4IiwiZm9ybWF0VmVyc2lvbiI6MSwiaXRlbXMiOlt7ImF0dHJpYnV0aW9uIjoiUHJ1ZWJhIiwiYXV0aG9yaXR5IjoiVHJlc1Zpem8iLCJib3VuZHMiOnsiZWFzdCI6LTk2LjUsIm5vcnRoIjoyMC4wLCJzb3V0aCI6MTkuMCwid2VzdCI6LTk5LjV9LCJjb3VudHJpZXMiOlsiTVgiXSwiZmlsZSI6eyJieXRlcyI6MTIzNCwicGF0aCI6ImRvd25sb2FkL2RhdG9zLTIwMjYtMTAtMjAvcHJ1ZWJhLXIxLm12Z2VvaWQiLCJzaGEyNTYiOiJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiIn0sImdlb2lkIjp7ImF0dHJpYnV0aW9uIjoiUHJ1ZWJhIiwiYXV0aG9yaXR5IjoiVHJlc1Zpem8iLCJjb3VudHJpZXMiOlsiTVgiXSwiZGF0YUNoZWNrc3VtIjoiMjczZjM1YzI2MDZmOGI3YWM3MzFkMzQ5NjZhZTU4NjkyNGFiYTQzY2YwOGQ1M2I3MTk4YzBkM2I2OWY2ZDdjMyIsImRlY2xhcmVkQWNjdXJhY3lNZXRlcnMiOjAuMSwiZWxsaXBzb2lkTmFtZSI6IkdSUyAxOTgwIiwiZnJhbWUiOiJJVFJGMjAwOCIsImdyaWRTdGVwQXJjTWludXRlcyI6MTUsImhlaWdodEtpbmQiOiJvcnRob21ldHJpYyIsImlkIjoicHJ1ZWJhIiwiaXNIaXN0b3JpYyI6ZmFsc2UsIm5hbWUiOiJSZWppbGxhIGRlIHBydWViYSIsInJlc2FtcGxpbmdFcnJvck1ldGVycyI6MCwic2NvcGUiOiJyZWdpb25hbCIsInNvdXJjZVVSTCI6Imh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkIiwidmVyaWZpY2F0aW9uIjoidmVyaWZpZWQiLCJ2ZXJzaW9uIjoiMSJ9LCJpZCI6InBydWViYSIsImtpbmQiOiJnZW9pZCIsImxpY2Vuc2UiOiJDQyBCWSA0LjAiLCJsaWNlbnNlVVJMIjoiaHR0cHM6Ly9jcmVhdGl2ZWNvbW1vbnMub3JnL2xpY2Vuc2VzL2J5LzQuMC8iLCJyZWdpb24iOiJNw6l4aWNvIiwicmVxdWlyZXMiOltdLCJyZXZpc2lvbiI6MSwidGl0bGUiOiJSZWppbGxhIGRlIHBydWViYSIsInRyYW5zZm9ybWF0aW9uTm90aWNlIjoiIiwidmVyc2lvbiI6IjEifSx7ImF0dHJpYnV0aW9uIjoiRVBTRyBHZW9kZXRpYyBQYXJhbWV0ZXIgRGF0YXNldCIsImF1dGhvcml0eSI6IklHQUMgwrcgRVBTRyIsImJvdW5kcyI6eyJlYXN0IjotNjYuOCwibm9ydGgiOjEzLjQsInNvdXRoIjotNC4zLCJ3ZXN0IjotNzkuMX0sImNvdW50cmllcyI6WyJDTyJdLCJjcnNQYWNrYWdlIjp7ImZvcm1hdCI6InRyZXN2aXpvLWNycy1wYWNrYWdlIiwiZm9ybWF0VmVyc2lvbiI6MSwic3lzdGVtcyI6MTJ9LCJmaWxlIjp7ImJ5dGVzIjo1Njc4LCJwYXRoIjoiZG93bmxvYWQvZGF0b3MtMjAyNi0xMC0yMC9jcnMtY28tcjIuanNvbiIsInNoYTI1NiI6ImNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QifSwiaWQiOiJjcnMtY28iLCJraW5kIjoiY3JzLXBhY2thZ2UiLCJsaWNlbnNlIjoiVMOpcm1pbm9zIGRlIEVQU0ciLCJsaWNlbnNlVVJMIjoiaHR0cHM6Ly9lcHNnLm9yZy90ZXJtcy1vZi11c2UuaHRtbCIsInJlZ2lvbiI6IkNvbG9tYmlhIiwicmVxdWlyZXMiOlsicHJ1ZWJhIl0sInJldmlzaW9uIjoyLCJ0aXRsZSI6IkNvbG9tYmlhIiwidmVyc2lvbiI6IjIwMjYuMTAuMjAifSx7ImF0dHJpYnV0aW9uIjoiSUJHRSIsImF1dGhvcml0eSI6IklCR0UiLCJib3VuZHMiOnsiZWFzdCI6LTMzLjAsIm5vcnRoIjo2LjAsInNvdXRoIjotMzUuMCwid2VzdCI6LTc1LjB9LCJjb3VudHJpZXMiOlsiQlIiXSwiZGF0dW1HcmlkIjp7ImZvcm1hdCI6Im50djIiLCJzb3VyY2VGcmFtZSI6IlNBRDY5IiwidGFyZ2V0RnJhbWUiOiJTSVJHQVMyMDAwIn0sImZpbGUiOnsiYnl0ZXMiOjY3NTEzNiwicGF0aCI6ImRvd25sb2FkL2RhdG9zLTIwMjYtMTAtMjAvYnItc2FkNjktcjEuZ3NiIiwic2hhMjU2IjoiZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZiJ9LCJpZCI6ImJyLXNhZDY5Iiwia2luZCI6ImRhdHVtLWdyaWQiLCJsaWNlbnNlIjoiTGljZW5jaWEgZGUgcHJ1ZWJhIiwibGljZW5zZVVSTCI6bnVsbCwicmVnaW9uIjoiQnJhc2lsIiwicmVxdWlyZXMiOltdLCJyZXZpc2lvbiI6MSwidGl0bGUiOiJTQUQ2OSDihpIgU0lSR0FTMjAwMCIsInZlcnNpb24iOiIyMDA1In0seyJhdHRyaWJ1dGlvbiI6IkVQU0cgR2VvZGV0aWMgUGFyYW1ldGVyIERhdGFzZXQiLCJhdXRob3JpdHkiOiJJR0FDIMK3IEVQU0ciLCJib3VuZHMiOnsiZWFzdCI6LTY2LjgsIm5vcnRoIjoxMy40LCJzb3V0aCI6LTQuMywid2VzdCI6LTc5LjF9LCJjb3VudHJpZXMiOlsiQ08iXSwiY3JzUGFja2FnZSI6eyJmb3JtYXQiOiJ0cmVzdml6by1jcnMtcGFja2FnZSIsImZvcm1hdFZlcnNpb24iOjEsInN5c3RlbXMiOjEyfSwiZmlsZSI6eyJieXRlcyI6NTY3OCwicGF0aCI6ImRvd25sb2FkL2RhdG9zLTIwMjYtMTAtMjAvY3JzLWNvLXIyLmpzb24iLCJzaGEyNTYiOiJjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkIn0sImlkIjoiZnV0dXJvIiwia2luZCI6ImFsZ28tZGVsLWZ1dHVybyIsImxpY2Vuc2UiOiJUw6lybWlub3MgZGUgRVBTRyIsImxpY2Vuc2VVUkwiOiJodHRwczovL2Vwc2cub3JnL3Rlcm1zLW9mLXVzZS5odG1sIiwicmVnaW9uIjoiQ29sb21iaWEiLCJyZXF1aXJlcyI6WyJwcnVlYmEiXSwicmV2aXNpb24iOjIsInRpdGxlIjoiQ29sb21iaWEiLCJ2ZXJzaW9uIjoiMjAyNi4xMC4yMCJ9XSwicHVibGlzaGVkQXQiOiIyMDI2LTEwLTIwVDIzOjAwOjAwWiIsInJlbGVhc2UiOiJkYXRvcy0yMDI2LTEwLTIwIiwic2VxdWVuY2UiOjd9",
+   "signature": "cnjUMBUwn0+IPK8fQL1QNgfCZqvImWpzAZNRocv9XOOB6aVmjZnBG44w++o+D3/JimugzBdqAulL1WvqGgnDDg=="
+  },
+  "badPath": {
+   "format": "tresvizo-signed-index",
+   "formatVersion": 1,
+   "algorithm": "Ed25519",
+   "keyID": "f572e7179afb8175",
+   "payload": "eyJmb3JtYXQiOiJ0cmVzdml6by1kYXRhLWluZGV4IiwiZm9ybWF0VmVyc2lvbiI6MSwiaXRlbXMiOlt7ImF0dHJpYnV0aW9uIjoiSUJHRSIsImF1dGhvcml0eSI6IklCR0UiLCJib3VuZHMiOnsiZWFzdCI6LTMzLjAsIm5vcnRoIjo2LjAsInNvdXRoIjotMzUuMCwid2VzdCI6LTc1LjB9LCJjb3VudHJpZXMiOlsiQlIiXSwiZGF0dW1HcmlkIjp7ImZvcm1hdCI6Im50djIiLCJzb3VyY2VGcmFtZSI6IlNBRDY5IiwidGFyZ2V0RnJhbWUiOiJTSVJHQVMyMDAwIn0sImZpbGUiOnsiYnl0ZXMiOjY3NTEzNiwicGF0aCI6Ii4uL3guZ3NiIiwic2hhMjU2IjoiZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZiJ9LCJpZCI6ImJyLXNhZDY5Iiwia2luZCI6ImRhdHVtLWdyaWQiLCJsaWNlbnNlIjoiTGljZW5jaWEgZGUgcHJ1ZWJhIiwibGljZW5zZVVSTCI6bnVsbCwicmVnaW9uIjoiQnJhc2lsIiwicmVxdWlyZXMiOltdLCJyZXZpc2lvbiI6MSwidGl0bGUiOiJTQUQ2OSDihpIgU0lSR0FTMjAwMCIsInZlcnNpb24iOiIyMDA1In1dLCJwdWJsaXNoZWRBdCI6IjIwMjYtMTAtMjBUMjM6MDA6MDBaIiwicmVsZWFzZSI6ImRhdG9zLTIwMjYtMTAtMjAiLCJzZXF1ZW5jZSI6N30=",
+   "signature": "kiTe3lGUM1h6m5oPHI7wwKWY+7f5hzuZen/Tk6QrVHLt+opT4nAkz45n7XUO7p/h/ECHmLtfAcfd2CY4LQfNCg=="
+  },
+  "tampered": {
+   "format": "tresvizo-signed-index",
+   "formatVersion": 1,
+   "algorithm": "Ed25519",
+   "keyID": "f572e7179afb8175",
+   "payload": "eyJmb3JtYXQiOiJ0cmVzdml6by1kYXRhLWluZGV4IiwiZm9ybWF0VmVyc2lvbiI6MSwiaXRlbXMiOlt7ImF0dHJpYnV0aW9uIjoiUHJ1ZWJhIiwiYXV0aG9yaXR5IjoiVHJlc1Zpem8iLCJib3VuZHMiOnsiZWFzdCI6LTk2LjUsIm5vcnRoIjoyMC4wLCJzb3V0aCI6MTkuMCwid2VzdCI6LTk5LjV9LCJjb3VudHJpZXMiOlsiTVgiXSwiZmlsZSI6eyJieXRlcyI6MTIzNCwicGF0aCI6ImRvd25sb2FkL2RhdG9zLTIwMjYtMTAtMjAvcHJ1ZWJhLXIxLm12Z2VvaWQiLCJzaGEyNTYiOiJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiYWJhYmFiIn0sImdlb2lkIjp7ImF0dHJpYnV0aW9uIjoiUHJ1ZWJhIiwiYXV0aG9yaXR5IjoiVHJlc1Zpem8iLCJjb3VudHJpZXMiOlsiTVgiXSwiZGF0YUNoZWNrc3VtIjoiMjczZjM1YzI2MDZmOGI3YWM3MzFkMzQ5NjZhZTU4NjkyNGFiYTQzY2YwOGQ1M2I3MTk4YzBkM2I2OWY2ZDdjMyIsImRlY2xhcmVkQWNjdXJhY3lNZXRlcnMiOjAuMSwiZWxsaXBzb2lkTmFtZSI6IkdSUyAxOTgwIiwiZnJhbWUiOiJJVFJGMjAwOCIsImdyaWRTdGVwQXJjTWludXRlcyI6MTUsImhlaWdodEtpbmQiOiJvcnRob21ldHJpYyIsImlkIjoicHJ1ZWJhIiwiaXNIaXN0b3JpYyI6ZmFsc2UsIm5hbWUiOiJSZWppbGxhIGRlIHBydWViYSIsInJlc2FtcGxpbmdFcnJvck1ldGVycyI6MCwic2NvcGUiOiJyZWdpb25hbCIsInNvdXJjZVVSTCI6Imh0dHBzOi8vZXhhbXBsZS5pbnZhbGlkIiwidmVyaWZpY2F0aW9uIjoidmVyaWZpZWQiLCJ2ZXJzaW9uIjoiMSJ9LCJpZCI6InBydWViYSIsImtpbmQiOiJnZW9pZCIsImxpY2Vuc2UiOiJDQyBCWSA0LjAiLCJsaWNlbnNlVVJMIjoiaHR0cHM6Ly9jcmVhdGl2ZWNvbW1vbnMub3JnL2xpY2Vuc2VzL2J5LzQuMC8iLCJyZWdpb24iOiJNw6l4aWNvIiwicmVxdWlyZXMiOltdLCJyZXZpc2lvbiI6MSwidGl0bGUiOiJSZWppbGxhIGRlIHBydWViYSIsInRyYW5zZm9ybWF0aW9uTm90aWNlIjoiIiwidmVyc2lvbiI6IjEifSx7ImF0dHJpYnV0aW9uIjoiRVBTRyBHZW9kZXRpYyBQYXJhbWV0ZXIgRGF0YXNldCIsImF1dGhvcml0eSI6IklHQUMgwrcgRVBTRyIsImJvdW5kcyI6eyJlYXN0IjotNjYuOCwibm9ydGgiOjEzLjQsInNvdXRoIjotNC4zLCJ3ZXN0IjotNzkuMX0sImNvdW50cmllcyI6WyJDTyJdLCJjcnNQYWNrYWdlIjp7ImZvcm1hdCI6InRyZXN2aXpvLWNycy1wYWNrYWdlIiwiZm9ybWF0VmVyc2lvbiI6MSwic3lzdGVtcyI6MTJ9LCJmaWxlIjp7ImJ5dGVzIjo1Njc4LCJwYXRoIjoiZG93bmxvYWQvZGF0b3MtMjAyNi0xMC0yMC9jcnMtY28tcjIuanNvbiIsInNoYTI1NiI6ImNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2RjZGNkY2QifSwiaWQiOiJjcnMtY28iLCJraW5kIjoiY3JzLXBhY2thZ2UiLCJsaWNlbnNlIjoiVMOpcm1pbm9zIGRlIEVQU0ciLCJsaWNlbnNlVVJMIjoiaHR0cHM6Ly9lcHNnLm9yZy90ZXJtcy1vZi11c2UuaHRtbCIsInJlZ2lvbiI6IkNvbG9tYmlhIiwicmVxdWlyZXMiOlsicHJ1ZWJhIl0sInJldmlzaW9uIjoyLCJ0aXRsZSI6IkNvbG9tYmlhIiwidmVyc2lvbiI6IjIwMjYuMTAuMjAifSx7ImF0dHJpYnV0aW9uIjoiSUJHRSIsImF1dGhvcml0eSI6IklCR0UiLCJib3VuZHMiOnsiZWFzdCI6LTMzLjAsIm5vcnRoIjo2LjAsInNvdXRoIjotMzUuMCwid2VzdCI6LTc1LjB9LCJjb3VudHJpZXMiOlsiQlIiXSwiZGF0dW1HcmlkIjp7ImZvcm1hdCI6Im50djIiLCJzb3VyY2VGcmFtZSI6IlNBRDY5IiwidGFyZ2V0RnJhbWUiOiJTSVJHQVMyMDAwIn0sImZpbGUiOnsiYnl0ZXMiOjY3NTEzNiwicGF0aCI6ImRvd25sb2FkL2RhdG9zLTIwMjYtMTAtMjAvYnItc2FkNjktcjEuZ3NiIiwic2hhMjU2IjoiZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZmVmZWZlZiJ9LCJpZCI6ImJyLXNhZDY5Iiwia2luZCI6ImRhdHVtLWdyaWQiLCJsaWNlbnNlIjoiTGljZW5jaWEgZGUgcHJ1ZWJhIiwibGljZW5zZVVSTCI6bnVsbCwicmVnaW9uIjoiQnJhc2lsIiwicmVxdWlyZXMiOltdLCJyZXZpc2lvbiI6MSwidGl0bGUiOiJTQUQ2OSDihpIgU0lSR0FTMjAwMCIsInZlcnNpb24iOiIyMDA1In1dLCJwdWJsaXNoZWRBdCI6IjIwMjYtMTAtMjBUMjM6MDA6MDBaIiwicmVsZWFzZSI6ImRhdG9zLTIwMjYtMTAtMjAiLCJzZXF1ZW5jZSI6OX0=",
+   "signature": "E7UYGrkBOtbzqwodBjLQaezmjBEk7ahvCE10zHSIaSghBl7tjWwl3c2YKgPMatY4W7kfg4RRkH2letgvbua3BA=="
+  },
+  "expected": {
+   "sequence": 7,
+   "items": [
+    "prueba",
+    "crs-co",
+    "br-sad69"
+   ]
+  }
+ }
+}

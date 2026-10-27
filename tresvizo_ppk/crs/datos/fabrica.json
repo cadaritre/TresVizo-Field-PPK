@@ -1,0 +1,504 @@
+{
+ "format": "tresvizo-crs-package",
+ "formatVersion": 1,
+ "id": "fabrica",
+ "version": "2026.10.21",
+ "country": "",
+ "title": "De fábrica",
+ "epsgDatabase": "v12.029",
+ "summary": "WGS 84 y Mexico ITRF2008 con sus zonas UTM 11N a 16N: lo mismo que traen de fábrica las apps TresVizo Field (definiciones de crs_reference.json, generado por tools/crs/generar_paquetes.py del repositorio de iOS con PROJ 9.8.1 y el registro EPSG v12.029).",
+ "systems": [
+  {
+   "code": "EPSG:4326",
+   "name": "WGS 84",
+   "kind": "geographic2D",
+   "datum": "World Geodetic System 1984 ensemble",
+   "ellipsoid": {
+    "name": "WGS 84",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257223563
+   },
+   "frame": "WGS 84",
+   "unit": "grado",
+   "axisOrder": "N,E",
+   "areaOfUse": {
+    "south": -90.0,
+    "north": 90.0,
+    "west": -180.0,
+    "east": 180.0,
+    "description": "Mundo"
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "available",
+   "source": "Registro EPSG v12.029"
+  },
+  {
+   "code": "EPSG:6365",
+   "name": "Mexico ITRF2008",
+   "kind": "geographic2D",
+   "datum": "Mexico ITRF2008",
+   "ellipsoid": {
+    "name": "GRS 1980",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257222101
+   },
+   "frame": "ITRF2008",
+   "frameEpoch": 2010.0,
+   "itrfRealization": "ITRF2008",
+   "unit": "grado",
+   "axisOrder": "N,E",
+   "areaOfUse": {
+    "south": 12.1,
+    "north": 32.72,
+    "west": -122.19,
+    "east": -84.64,
+    "description": "México, en tierra y mar."
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "frameFromBase",
+   "source": "Registro EPSG v12.029"
+  },
+  {
+   "code": "EPSG:32611",
+   "name": "WGS 84 / UTM zona 11N",
+   "kind": "projected",
+   "datum": "World Geodetic System 1984",
+   "ellipsoid": {
+    "name": "WGS 84",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257223563
+   },
+   "frame": "WGS 84",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -117.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 0.0,
+    "north": 84.0,
+    "west": -120.0,
+    "east": -114.0,
+    "description": "Entre -120° y -114° de longitud, hemisferio norte"
+   },
+   "countries": [],
+   "aliases": [
+    "utm 11",
+    "utm 11n",
+    "utm zona 11"
+   ],
+   "deprecated": false,
+   "availability": "available"
+  },
+  {
+   "code": "EPSG:32612",
+   "name": "WGS 84 / UTM zona 12N",
+   "kind": "projected",
+   "datum": "World Geodetic System 1984",
+   "ellipsoid": {
+    "name": "WGS 84",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257223563
+   },
+   "frame": "WGS 84",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -111.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 0.0,
+    "north": 84.0,
+    "west": -114.0,
+    "east": -108.0,
+    "description": "Entre -114° y -108° de longitud, hemisferio norte"
+   },
+   "countries": [],
+   "aliases": [
+    "utm 12",
+    "utm 12n",
+    "utm zona 12"
+   ],
+   "deprecated": false,
+   "availability": "available"
+  },
+  {
+   "code": "EPSG:32613",
+   "name": "WGS 84 / UTM zona 13N",
+   "kind": "projected",
+   "datum": "World Geodetic System 1984",
+   "ellipsoid": {
+    "name": "WGS 84",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257223563
+   },
+   "frame": "WGS 84",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -105.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 0.0,
+    "north": 84.0,
+    "west": -108.0,
+    "east": -102.0,
+    "description": "Entre -108° y -102° de longitud, hemisferio norte"
+   },
+   "countries": [],
+   "aliases": [
+    "utm 13",
+    "utm 13n",
+    "utm zona 13"
+   ],
+   "deprecated": false,
+   "availability": "available"
+  },
+  {
+   "code": "EPSG:32614",
+   "name": "WGS 84 / UTM zona 14N",
+   "kind": "projected",
+   "datum": "World Geodetic System 1984",
+   "ellipsoid": {
+    "name": "WGS 84",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257223563
+   },
+   "frame": "WGS 84",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -99.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 0.0,
+    "north": 84.0,
+    "west": -102.0,
+    "east": -96.0,
+    "description": "Entre -102° y -96° de longitud, hemisferio norte"
+   },
+   "countries": [],
+   "aliases": [
+    "utm 14",
+    "utm 14n",
+    "utm zona 14"
+   ],
+   "deprecated": false,
+   "availability": "available"
+  },
+  {
+   "code": "EPSG:32615",
+   "name": "WGS 84 / UTM zona 15N",
+   "kind": "projected",
+   "datum": "World Geodetic System 1984",
+   "ellipsoid": {
+    "name": "WGS 84",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257223563
+   },
+   "frame": "WGS 84",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -93.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 0.0,
+    "north": 84.0,
+    "west": -96.0,
+    "east": -90.0,
+    "description": "Entre -96° y -90° de longitud, hemisferio norte"
+   },
+   "countries": [],
+   "aliases": [
+    "utm 15",
+    "utm 15n",
+    "utm zona 15"
+   ],
+   "deprecated": false,
+   "availability": "available"
+  },
+  {
+   "code": "EPSG:32616",
+   "name": "WGS 84 / UTM zona 16N",
+   "kind": "projected",
+   "datum": "World Geodetic System 1984",
+   "ellipsoid": {
+    "name": "WGS 84",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257223563
+   },
+   "frame": "WGS 84",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -87.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 0.0,
+    "north": 84.0,
+    "west": -90.0,
+    "east": -84.0,
+    "description": "Entre -90° y -84° de longitud, hemisferio norte"
+   },
+   "countries": [],
+   "aliases": [
+    "utm 16",
+    "utm 16n",
+    "utm zona 16"
+   ],
+   "deprecated": false,
+   "availability": "available"
+  },
+  {
+   "code": "EPSG:6366",
+   "name": "Mexico ITRF2008 / UTM zona 11N",
+   "kind": "projected",
+   "datum": "Mexico ITRF2008",
+   "ellipsoid": {
+    "name": "GRS 1980",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257222101
+   },
+   "frame": "ITRF2008",
+   "frameEpoch": 2010.0,
+   "itrfRealization": "ITRF2008",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -117.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 15.01,
+    "north": 32.72,
+    "west": -122.19,
+    "east": -114.0,
+    "description": "México, al oeste de 114° O, en tierra y mar."
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "frameFromBase",
+   "source": "Registro EPSG v12.029"
+  },
+  {
+   "code": "EPSG:6367",
+   "name": "Mexico ITRF2008 / UTM zona 12N",
+   "kind": "projected",
+   "datum": "Mexico ITRF2008",
+   "ellipsoid": {
+    "name": "GRS 1980",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257222101
+   },
+   "frame": "ITRF2008",
+   "frameEpoch": 2010.0,
+   "itrfRealization": "ITRF2008",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -111.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 15.09,
+    "north": 32.27,
+    "west": -114.0,
+    "east": -108.0,
+    "description": "México, entre 114° O y 108° O, en tierra y mar."
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "frameFromBase",
+   "source": "Registro EPSG v12.029"
+  },
+  {
+   "code": "EPSG:6368",
+   "name": "Mexico ITRF2008 / UTM zona 13N",
+   "kind": "projected",
+   "datum": "Mexico ITRF2008",
+   "ellipsoid": {
+    "name": "GRS 1980",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257222101
+   },
+   "frame": "ITRF2008",
+   "frameEpoch": 2010.0,
+   "itrfRealization": "ITRF2008",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -105.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 14.05,
+    "north": 31.79,
+    "west": -108.0,
+    "east": -102.0,
+    "description": "México, entre 108° O y 102° O, en tierra y mar."
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "frameFromBase",
+   "source": "Registro EPSG v12.029"
+  },
+  {
+   "code": "EPSG:6369",
+   "name": "Mexico ITRF2008 / UTM zona 14N",
+   "kind": "projected",
+   "datum": "Mexico ITRF2008",
+   "ellipsoid": {
+    "name": "GRS 1980",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257222101
+   },
+   "frame": "ITRF2008",
+   "frameEpoch": 2010.0,
+   "itrfRealization": "ITRF2008",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -99.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 12.3,
+    "north": 29.81,
+    "west": -102.0,
+    "east": -96.0,
+    "description": "México, entre 102° O y 96° O, en tierra y mar."
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "frameFromBase",
+   "source": "Registro EPSG v12.029"
+  },
+  {
+   "code": "EPSG:6370",
+   "name": "Mexico ITRF2008 / UTM zona 15N",
+   "kind": "projected",
+   "datum": "Mexico ITRF2008",
+   "ellipsoid": {
+    "name": "GRS 1980",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257222101
+   },
+   "frame": "ITRF2008",
+   "frameEpoch": 2010.0,
+   "itrfRealization": "ITRF2008",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -93.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 12.1,
+    "north": 26.0,
+    "west": -96.0,
+    "east": -90.0,
+    "description": "México, entre 96° O y 90° O, en tierra y mar."
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "frameFromBase",
+   "source": "Registro EPSG v12.029"
+  },
+  {
+   "code": "EPSG:6371",
+   "name": "Mexico ITRF2008 / UTM zona 16N",
+   "kind": "projected",
+   "datum": "Mexico ITRF2008",
+   "ellipsoid": {
+    "name": "GRS 1980",
+    "semiMajorAxisMeters": 6378137.0,
+    "inverseFlattening": 298.257222101
+   },
+   "frame": "ITRF2008",
+   "frameEpoch": 2010.0,
+   "itrfRealization": "ITRF2008",
+   "projection": {
+    "method": "transverseMercator",
+    "latitudeOfOriginDegrees": 0.0,
+    "centralMeridianDegrees": -87.0,
+    "scaleFactor": 0.9996,
+    "falseEastingMeters": 500000.0,
+    "falseNorthingMeters": 0.0
+   },
+   "unit": "metro",
+   "axisOrder": "E,N",
+   "areaOfUse": {
+    "south": 17.81,
+    "north": 25.77,
+    "west": -90.0,
+    "east": -84.64,
+    "description": "México, al este de 90° O, en tierra y mar."
+   },
+   "countries": [],
+   "aliases": [],
+   "deprecated": false,
+   "availability": "frameFromBase",
+   "source": "Registro EPSG v12.029"
+  }
+ ]
+}

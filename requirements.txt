@@ -1,0 +1,10 @@
+# Dependencias fijadas (licencias en third_party/LICENCIAS.md). Python 3.13.
+numpy==2.5.4
+# pyproj 3.8.0 trae PROJ 9.8.1 y el registro EPSG v12.029: los mismos con que se calcularon los vectores de las apps
+# (crs_reference.json). Cambiarla obliga a volver a pasar tests/test_crs.py.
+pyproj==3.8.0
+matplotlib==3.11.2
+reportlab==5.1.0
+# Solo pruebas
+pypdf==6.21.2
+pytest==9.1.1
