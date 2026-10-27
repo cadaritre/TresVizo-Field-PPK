@@ -21,7 +21,11 @@ VIEWS = ['home', 'static-rover', 'static-bases', 'static-options', 'static-proce
 
 
 def capture(app, path):
-    """Captura de la ventana real (sin marco) en macOS, Windows o Linux."""
+    """Captura de la ventana real (sin marco) en macOS, Windows o Linux; si hay un visor abierto, el visor."""
+    import tkinter as tk
+    viewers = [w for w in app.winfo_children() if isinstance(w, tk.Toplevel) and w.winfo_viewable()]
+    if viewers:
+        app = viewers[-1]
     app.attributes('-topmost', True)
     app.lift()
     app.update()
@@ -65,7 +69,7 @@ def main():
                  [make('uagu2970.26d.Z', 1_900_000), make('uagu2970.26n.Z', 88_000)]]
         csv = make('Levantamiento predio Las Flores.csv', 4_000)
         config = folder/'preferencias'
-        backend = dobles.backend(delay=args.delay)
+        backend = dobles.backend(delay=args.delay, real_report=True)
         app = Application(config, backend=backend)
 
         def report(exc, value, tb):

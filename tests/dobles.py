@@ -198,9 +198,16 @@ class FakeExport:
         return Path(out)
 
 
-def backend(delay=0.0, fail=None, crs=True):
+def backend(delay=0.0, fail=None, crs=True, real_report=False):
+    """Motor de prueba; sistemas reales; informe real si se pide y está disponible (vista previa)."""
     from app.backend import Backend
     parts = dict(core=FakeCore(delay, fail), report=FakeReport(), export=FakeExport())
+    if real_report:
+        try:
+            import tresvizo_ppk.report.api as report_api
+            parts['report'] = report_api
+        except ImportError:
+            pass
     if crs:
         import tresvizo_ppk.crs.api as crs_api
         parts['crs'] = crs_api
