@@ -156,8 +156,26 @@
   (`tests/test_report_normas.py`, valores a mano con σE ≠ σN y bordes de los 15 órdenes).
 - Exportar (`tresvizo_ppk/export/`): CSV de TresVizo Field (el escritor reproduce byte a byte `csv_referencia_todas.csv`
   de las apps), CSV simple, GeoJSON y KML. 41 pruebas en `test_crs.py`, `test_report.py` y `test_export.py`.
+- Exportación para CAD (27-10-2026, `docs/formatos-cad.md`, `tests/test_export_cad.py`): el **vértice del estático**
+  en los mismos formatos que el PPK (su CSV de Field para reimportarlo en las apps como base o control); **DXF R12**
+  con la especificación de las apps (capas por código y sus colores, Windows-1252, `999`, `SIN_COTA`) más el rótulo de
+  la cota en `COTA`, y su `.prj`, leído de vuelta con ezdxf (capas, puntos 3D, rótulos, acentos, auditoría sin
+  errores) y fijado a mano byte a byte desde el código de las apps; **LandXML 1.2** byte a byte con la referencia de
+  las apps en lo que es de puntos y **validado contra `LandXML-1.2.xsd`**; **CSV a medida** (Todas, PENZD, PNEZD,
+  NXYZD, Personalizada; separadores, idioma, sin encabezado, BOM, coma decimal); **trayectoria** del PPK (`.pos` y
+  CSV por época) y **RINEX de la sesión**.
 
 **Pendiente o sin verificar:**
+- Exportación para CAD: el DXF y el LandXML no se han abierto en AutoCAD ni en Civil 3D (no hay dónde); se leyeron con
+  ezdxf y se validaron con el esquema oficial. El esquema (`LandXML-1.2.xsd` de landxml.org, 225 951 bytes, SHA-256
+  `f4f732341970a923943f94592a3fde0838534515d564a699761e85420fad4d77`) no declara licencia y no va en el repo: se baja una
+  vez de `http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd` a
+  `~/Documents/TresVizo-Field-PPK-datos/landxml/` (o a la ruta de `TVPPK_LANDXML_XSD`); sin él, sus dos pruebas se
+  saltan (también en la CI).
+- **La referencia LandXML de las apps no pasa el esquema** (`Feature` dentro de `CgPoint`, `code` en `PlanFeature`):
+  lo tienen que corregir las apps (`docs/formatos-cad.md` §2). El rótulo `COTA` del DXF es de la oficina: las apps
+  todavía no lo escriben.
+- Líneas por código en el DXF y el LandXML: el CSV de Field no las trae; hace falta que las apps decidan cómo llegan.
 - Informes y exportación probados solo con resultados sintéticos: falta repetirlos con el motor real y datos de la
   RGNA (los `.pos`/`.stat` que escribe de verdad `rnx2rtkp`; el lector sigue el formato de `rtkpos.c`/`solution.c`).
 - La convención de `ProcessedPoint.delta_from_field_enu` no está escrita en el contrato: el informe y la exportación
