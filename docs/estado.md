@@ -28,8 +28,9 @@
   con Melbourne-Wübbena y libre de geometría; ancho de carril por arco y carril estrecho con LAMBDA, tasa de éxito,
   prueba de razón, prueba χ² de la distancia entera y resolución parcial; duración mínima para fijar (30 min hasta
   60 km, 1 h desde ahí); RTKLIB corre como comprobación independiente. **Validado con la RGNA**
-  (`docs/validacion.md`): fijó las 104 sesiones de 1 h a 24 h a 30–141 km sin ningún fijo erróneo, con 0.4–2 cm
-  de error con 1 h a 100–141 km (antes, flotante, 2–6 cm) y σ realista; modelos probados contra los casos del IERS,
+  (`docs/validacion.md`): fijó las 104 sesiones de 1 h a 24 h a 30–141 km sin ningún fijo erróneo, con 1 h a
+  100–141 km un RMS del error de 0.4–1.2 cm en horizontal y 0.6–2.2 cm en vertical (antes, flotante con RTKLIB, 2.1 y
+  3.2 cm) y σ realista; modelos probados contra los casos del IERS,
   de RTKLIB y de Teunissen. El informe dice la resolución de ambigüedades o por qué quedó flotante.
 - Estático: estrategia por longitud, modelo de error calibrado, ajuste por mínimos cuadrados con chi², prueba w y
   exclusión automática de la línea que no cuadra con tres bases (lectura de datos de Baarda; aviso si las que quedan
