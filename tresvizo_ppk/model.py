@@ -279,3 +279,5 @@ class Project:
     bases: list[Station] = field(default_factory=list)   # estaciones elegidas con su coordenada (editada o no)
     base_kind: str = "rgna"                    # PPK de puntos: «rgna» o «own» (base propia)
     source_project: str = ""                   # base propia encadenada: ruta relativa del proyecto estático
+    position: Ecef | None = None               # estático: coordenada final del último proceso (para encadenar la base)
+    sigma_enu: Enu | None = None               # y su σ
