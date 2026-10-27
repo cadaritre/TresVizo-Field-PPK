@@ -482,8 +482,12 @@ def test_indice_publicado_de_verdad(data_dir):
 def test_cualquier_clase_registrada_se_instala_con_la_misma_verificacion(data_dir, monkeypatch, fixtures):
     """Las redes CORS (§3.0) van por el mismo índice firmado y la misma instalación comprobada."""
     items, files = _items_for(fixtures)
-    red = json.dumps({"format": "tresvizo-cors-network", "formatVersion": 1, "id": "rgna",
-                      "frame": "ITRF2008", "epoch": 2010.0, "stations": []}).encode()
+    # paquete válido según docs/formato-red-cors.md (el motor registra la comprobación completa de la clase)
+    red = json.dumps({"format": "tresvizo-cors-network", "formatVersion": 1, "id": "rgna", "revision": 1,
+                      "title": "RGNA — INEGI, México", "countries": ["MX"], "authority": "INEGI",
+                      "frame": {"name": "ITRF2008", "epoch": 2010.0}, "license": "libre con atribución",
+                      "attribution": "Fuente: INEGI", "stations": [{"id": "UGTO", "x": -1164730.1759,
+                                                                    "y": -5843944.6861, "z": 2272414.2366}]}).encode()
     common = {k: v for k, v in items[0].items() if k in ("countries", "region", "authority", "license", "attribution",
                                                           "bounds", "requires")}
     items.append(dict(common, kind="cors-network", id="rgna", version="1", revision=1, title="RGNA — INEGI, México",
