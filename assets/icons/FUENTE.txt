@@ -1,0 +1,3 @@
+Lucide 1.61.0 (paquete npm lucide-static), licencia ISC (LICENSE.txt).
+https://lucide.dev · https://github.com/lucide-icons/lucide
+Regenerar con: python scripts/crear_iconos.py RUTA/lucide-static/package
