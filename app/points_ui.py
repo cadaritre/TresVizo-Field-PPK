@@ -59,7 +59,7 @@ class PointsPage(WizardPage):
         guide.pack(fill='x', pady=(16, 0))
         wrap_label(g, NETWORK_GUIDE, style='Card.Subtitle.TLabel', margin=40).pack(fill='x')
         self.rgna_panel = BasePanel(self.rgna_frame, self.app, self.job.base, 'Estación de referencia', self.changed,
-                                    guide=self.network_guide)
+                                    guide=self.network_guide, inspect=self.inspect)
         self.rgna_panel.pack(fill='x', pady=(16, 0))
         self.own_frame = ttk.Frame(body)
         self.build_own(self.own_frame)
@@ -71,6 +71,8 @@ class PointsPage(WizardPage):
         DropZone(inner, self.app, 'Arrastra aquí la grabación de la base', 'Una grabación .bin/.part o sus RINEX.',
                  self.add_own_files, RECORDING_TYPES).pack(fill='x')
         self.own_list = FileList(inner, self.app, self.set_own_files)
+        self.own_info = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')
+        inner.bind('<Configure>', lambda e: self.own_info.configure(wraplength=max(200, e.width-20)), add='+')
         if self.job.base_kind == 'own':
             self.set_own_files(self.job.base.files, notify=False)
         frame, inner = card(parent, 'Datos de la base')
@@ -78,22 +80,26 @@ class PointsPage(WizardPage):
         inner.columnconfigure((0, 1), weight=1, uniform='own')
         self.own_name = tk.StringVar(value=self.job.own_name)
         self.own_height = tk.StringVar(value=self.job.own_height)
-        LabeledEntry(inner, 'Nombre de la base', self.own_name).grid(row=0, column=0, sticky='nsew', padx=(0, 12))
-        LabeledEntry(inner, 'Altura del bastón o trípode (m)', self.own_height,
-                     'Vertical, del punto a la rosca del receptor.').grid(row=0, column=1, sticky='nsew', padx=(12, 0))
+        self.own_name_field = LabeledEntry(inner, 'Nombre de la base', self.own_name)
+        self.own_name_field.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
+        self.own_height_field = LabeledEntry(inner, 'Altura del bastón o trípode (m)', self.own_height,
+                                             'Vertical, del punto a la rosca del receptor.')
+        self.own_height_field.grid(row=0, column=1, sticky='nsew', padx=(12, 0))
         self.own_name.trace_add('write', lambda *a: self.edit(own_name=self.own_name.get()))
         self.own_height.trace_add('write', lambda *a: self.edit(own_height=self.own_height.get()))
         frame, inner = card(parent, 'Coordenada de la base',
-                            'Para ligar los puntos a una red, la base debe estar en el marco y la época oficiales de esa '
-                            'red: lo mejor es georreferenciarla antes con «Georreferenciar punto» y encadenar ese '
-                            'proyecto.')
+                            'Por omisión, la aproximada que trae la grabación. Para ligar los puntos a una red, '
+                            'georreferencia antes la base con «Georreferenciar punto» y elige ese proyecto.')
         frame.pack(fill='x', pady=(16, 0))
         self.source_var = tk.StringVar(value=self.job.own_source)
-        row = ttk.Frame(inner, style='Flat.Card.TFrame')
+        from app.components import FlowFrame
+        row = FlowFrame(inner, style='Flat.Card.TFrame', gap=18)
         row.pack(fill='x')
-        for value, text in (('project', 'De un proyecto «Georreferenciar punto»'), ('manual', 'Escrita a mano')):
-            ttk.Radiobutton(row, text=text, value=value, variable=self.source_var, style='Card.TRadiobutton',
-                            command=self.switch_source).pack(side='left', padx=(0, 18))
+        for value, text in (('rinex', 'Aproximada (encabezado RINEX)'), ('project', 'Georreferenciada (proyecto)'),
+                            ('manual', 'Punto conocido')):
+            row.add(ttk.Radiobutton(row, text=text, value=value, variable=self.source_var, style='Card.TRadiobutton',
+                                    command=self.switch_source))
+        self.from_rinex = ttk.Label(inner, text='', style='Card.TLabel', justify='left', padding=(0, 10, 0, 0))
         self.from_project = ttk.Frame(inner, style='Flat.Card.TFrame', padding=(0, 10, 0, 0))
         pick = ttk.Button(self.from_project, text='Elegir proyecto…', command=self.pick_static_project)
         self.app.icons.bind(pick, 'folder-open')
@@ -155,15 +161,48 @@ class PointsPage(WizardPage):
             self.own_list.pack(fill='x', pady=(10, 0))
         elif not paths:
             self.own_list.pack_forget()
+        self.job.rinex_position, self.job.rinex_missing = None, False
+        self.own_info.pack_forget()
+        if paths:
+            self.inspect('own', paths, self.own_inspected)
         if notify:
             self.changed()
 
+    def own_inspected(self, obs):
+        origin = self.origin_of(self.job.base.files)
+        self.autofill(self.own_name, self.own_name_field, obs.marker, origin)
+        pole = self.pole_from(obs)
+        self.autofill(self.own_height, self.own_height_field, f'{pole:.3f}' if pole is not None else None, origin)
+        self.job.rinex_position = obs.approx_position
+        self.job.rinex_missing = obs.approx_position is None
+        self.own_info.configure(text=f'{self.obs_summary(obs)} · {origin}')
+        self.own_info.pack(fill='x', pady=(8, 0))
+        self.show_rinex_position()
+        self.changed()
+
+    def show_rinex_position(self):
+        if not hasattr(self, 'from_rinex'):
+            return
+        p = self.job.rinex_position
+        if p is None:
+            text = ('La grabación no trae posición aproximada: elige otra fuente.' if self.job.rinex_missing else
+                    'Se toma del encabezado al leer la grabación de la base.')
+        else:
+            from app.charts import ecef_to_geodetic
+            from app.formatting import dms
+            lat, lon = ecef_to_geodetic(p)
+            text = (f'{dms(lat, "N", "S", 3)}  {dms(lon, "E", "O", 3)}\n{ecef_text(p)} · aproximada, del encabezado '
+                    'RINEX (unos metros): los puntos quedan bien entre sí, pero desplazados en bloque y sin ligar a '
+                    'ninguna red.')
+        self.from_rinex.configure(text=text)
+
     def switch_source(self, notify=True):
         self.job.own_source = self.source_var.get()
-        self.from_project.pack_forget()
-        self.manual.pack_forget()
-        (self.from_project if self.job.own_source == 'project' else self.manual).pack(fill='x')
+        for frame in (self.from_rinex, self.from_project, self.manual):
+            frame.pack_forget()
+        {'rinex': self.from_rinex, 'project': self.from_project}.get(self.job.own_source, self.manual).pack(fill='x')
         self.show_project_info()
+        self.show_rinex_position()
         if notify:
             self.changed()
 
@@ -224,6 +263,8 @@ class PointsPage(WizardPage):
         DropZone(inner, self.app, 'Arrastra aquí la grabación de la jornada', 'Una grabación .bin/.part o sus RINEX.',
                  self.add_rover, RECORDING_TYPES).pack(fill='x')
         self.rover_list = FileList(inner, self.app, self.set_rover)
+        self.rover_info = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')
+        inner.bind('<Configure>', lambda e: self.rover_info.configure(wraplength=max(200, e.width-20)), add='+')
         self.set_rover(self.job.rover_files, notify=False)
         frame, inner = card(body, 'Puntos de TresVizo Field',
                             'El CSV que exportó la app de esa jornada: nombre, código, inicio y fin de cada ocupación y '
@@ -257,6 +298,12 @@ class PointsPage(WizardPage):
             self.rover_list.pack(fill='x', pady=(10, 0))
         elif not paths:
             self.rover_list.pack_forget()
+        self.rover_info.pack_forget()
+        if paths:
+            def shown(obs, files=list(paths)):
+                self.rover_info.configure(text=f'{self.obs_summary(obs)} · {self.origin_of(files)}')
+                self.rover_info.pack(fill='x', pady=(8, 0))
+            self.inspect('rover', paths, shown)
         if notify:
             self.changed()
 

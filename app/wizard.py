@@ -12,6 +12,7 @@ import re
 from tresvizo_ppk.model import CoordinateChoice, Ecef, Ephemeris, ProcessingOptions, Project, Station
 
 MAX_BASES = 3
+RINEX_SOURCE = 'Aproximada (encabezado RINEX)'
 CONSTELLATIONS = ('GPS', 'GLONASS', 'Galileo', 'BeiDou', 'QZSS')
 
 # --- Clasificación de archivos ----------------------------------------------------------------------------------------
@@ -307,9 +308,13 @@ class PointsJob:
     base: BaseEntry = field(default_factory=BaseEntry)
     own_name: str = ''
     own_height: str = ''
-    own_source: str = 'project'              # «project» (encadenada desde un estático) o «manual»
+    # De dónde sale la coordenada de la base propia (nunca se pide escribirla si no hace falta):
+    # «rinex» (aproximada, del encabezado; por omisión), «project» (georreferenciada) o «manual» (punto conocido).
+    own_source: str = 'rinex'
     own_project: Path | None = None
     own_position: Ecef | None = None         # leída del proyecto estático
+    rinex_position: Ecef | None = None       # APPROX POSITION del encabezado RINEX de la base (al inspeccionarla)
+    rinex_missing: bool = False              # ya se inspeccionó y no trae posición
     coord_format: str = 'geodetic'           # «geodetic» (lat, lon, h) o «ecef»
     coord_text: tuple[str, str, str] = ('', '', '')
     rover_files: list[Path] = field(default_factory=list)
@@ -344,7 +349,16 @@ class PointsJob:
             found = _files_issues('base', self.base.files, 'la grabación de la base o su RINEX', ROVER_KINDS)
             found += _name_issues('own_name', self.own_name, 'de la base')
             found += _height_issues('own_height', self.own_height, 'de la base')
-            if self.own_source == 'project':
+            if self.own_source == 'rinex':
+                if self.base.files and self.rinex_position is None:
+                    found.append(Issue('own_coord', 'La grabación de la base no trae posición aproximada: elige un '
+                                                    'proyecto georreferenciado o un punto conocido.'
+                                       if self.rinex_missing else 'Leyendo la posición del encabezado de la base…'))
+                elif self.rinex_position is not None:
+                    found.append(Issue('own_coord', 'Coordenada aproximada del encabezado RINEX (unos metros): los '
+                                                    'puntos quedan bien entre sí, pero no ligados a ninguna red.',
+                                       'warning'))
+            elif self.own_source == 'project':
                 if self.own_project is None:
                     found.append(Issue('own_coord', 'Elige el proyecto «Georreferenciar punto» de esta base.'))
                 elif self.own_position is None:
@@ -382,9 +396,14 @@ class PointsJob:
     def station(self) -> Station:
         if self.base_kind == 'rgna':
             return replace(self.base.station, name=(self.base.name.strip() or self.base.station.name))
-        position = self.own_position if self.own_source == 'project' else self.manual_position()
-        source = (f'Proyecto {Path(self.own_project).name}' if self.own_source == 'project' and self.own_project
-                  else 'Escrita por el usuario')
+        if self.own_source == 'rinex':
+            if self.rinex_position is None:
+                raise ValueError('Sin posición en el encabezado RINEX de la base.')
+            position, source = self.rinex_position, RINEX_SOURCE
+        elif self.own_source == 'project':
+            position, source = self.own_position, f'Georreferenciada (proyecto {Path(self.own_project).name})'
+        else:
+            position, source = self.manual_position(), 'Punto conocido (escrito por el usuario)'
         name = self.own_name.strip()
         return Station(id=re.sub(r'[^A-Za-z0-9]', '', name)[:9].upper() or 'BASE', name=name, position=position,
                        antenna_height_m=parse_number(self.own_height), receiver='MeridianV', source=source,
@@ -434,6 +453,8 @@ class PointsJob:
                 job.own_source = 'project'
                 job.own_project = absolute(project.source_project, project.folder)
                 job.own_position = station.position if station else None
+            elif station and station.source == RINEX_SOURCE:
+                job.own_source, job.rinex_position = 'rinex', station.position
             elif station:
                 job.own_source, job.coord_format = 'manual', 'ecef'
                 job.coord_text = (f'{station.position.x:.4f}', f'{station.position.y:.4f}', f'{station.position.z:.4f}')

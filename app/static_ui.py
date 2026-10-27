@@ -47,25 +47,60 @@ class StaticPage(WizardPage):
                                    self.add_rover, RECORDING_TYPES)
         self.rover_drop.pack(fill='x')
         self.rover_list = FileList(inner, self.app, self.set_rover)
-        self.set_rover(self.job.rover_files, notify=False)
+        self.rover_info = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')
+        inner.bind('<Configure>', lambda e: self.rover_info.configure(wraplength=max(200, e.width-20)), add='+')
         frame, inner = card(body, 'Punto')
         frame.pack(fill='x', pady=(16, 0))
         inner.columnconfigure((0, 1), weight=1, uniform='point')
         self.name_var = tk.StringVar(value=self.job.point_name)
         self.height_var = tk.StringVar(value=self.job.pole_height)
-        name = LabeledEntry(inner, 'Nombre del punto', self.name_var, 'Sale en el informe y en el nombre del '
-                                                                      'proyecto.')
-        name.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
-        height = LabeledEntry(inner, 'Altura del bastón o trípode (m)', self.height_var,
-                              'Vertical, del punto en el suelo a la rosca del receptor. La distancia de la rosca a '
-                              'la referencia de la antena la suma el programa.')
-        height.grid(row=0, column=1, sticky='nsew', padx=(12, 0))
-        for widget in height.winfo_children():
-            if isinstance(widget, ttk.Label) and widget.cget('style') == 'Card.Subtitle.TLabel':
-                inner.bind('<Configure>', lambda e, w=widget: w.configure(wraplength=max(160, e.width//2-24)),
-                           add='+')
+        self.name_field = name = LabeledEntry(inner, 'Nombre del punto', self.name_var,
+                                              'Sale en el informe y en el nombre del proyecto.')
+        self.height_field = height = LabeledEntry(inner, 'Altura del bastón o trípode (m)', self.height_var,
+                                                  self.POLE_HINT)
+        self.point_fields = (name, height)
+        inner.bind('<Configure>', lambda e: self.arrange_point(e.width), add='+')
+        self.arrange_point(900)
+        self.set_rover(self.job.rover_files, notify=False)
         self.name_var.trace_add('write', lambda *a: self.edit(point_name=self.name_var.get()))
         self.height_var.trace_add('write', lambda *a: self.edit(pole_height=self.height_var.get()))
+
+    POLE_HINT = ('Vertical, del punto en el suelo a la rosca del receptor. La distancia de la rosca a la referencia de '
+                 'la antena la suma el programa.')
+    ARP_HINT = 'Vertical, del punto a la referencia de la antena (ARP), como en el encabezado RINEX.'
+
+    def arrange_point(self, width):
+        """Dos columnas si caben; una sola en ventanas angostas o con letra grande."""
+        columns = 2 if width >= 620 else 1
+        if getattr(self, '_point_columns', None) == columns:
+            return
+        self._point_columns = columns
+        name, height = self.point_fields
+        name.master.columnconfigure((0, 1), weight=1 if columns == 2 else 0, uniform='point' if columns == 2 else '')
+        name.master.columnconfigure(0, weight=1)
+        if columns == 2:
+            name.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
+            height.grid(row=0, column=1, sticky='nsew', padx=(12, 0), pady=0)
+        else:
+            name.grid(row=0, column=0, columnspan=2, sticky='nsew', padx=0)
+            height.grid(row=1, column=0, columnspan=2, sticky='nsew', padx=0, pady=(12, 0))
+
+    def rover_inspected(self, obs):
+        files = self.job.rover_files
+        origin = self.origin_of(files)
+        recording = origin.startswith('de la sesión')
+        self.rover_info.configure(text=f'{self.obs_summary(obs)} · {origin}')
+        self.rover_info.pack(fill='x', pady=(8, 0))
+        self.autofill(self.name_var, self.name_field, obs.marker, origin)
+        if recording:
+            self.height_field.title.configure(text='Altura del bastón o trípode (m)')
+            self.height_field.hint.configure(text=self.POLE_HINT)
+            pole = self.pole_from(obs)
+            self.autofill(self.height_var, self.height_field, f'{pole:.3f}' if pole is not None else None, origin)
+        else:
+            self.height_field.title.configure(text='Altura de la antena a la ARP (m)')
+            self.height_field.hint.configure(text=self.ARP_HINT)
+            self.autofill(self.height_var, self.height_field, f'{obs.antenna_height_m:.4f}', origin)
 
     def edit(self, **values):
         for key, value in values.items():
@@ -86,6 +121,9 @@ class StaticPage(WizardPage):
             self.rover_list.pack(fill='x', pady=(10, 0))
         elif not paths:
             self.rover_list.pack_forget()
+        self.rover_info.pack_forget()
+        if paths:
+            self.inspect('rover', paths, self.rover_inspected)
         if notify:
             self.changed()
 
@@ -114,7 +152,7 @@ class StaticPage(WizardPage):
         for index, entry in enumerate(self.job.bases):
             remove = (lambda i=index: self.remove_base(i)) if len(self.job.bases) > 1 else None
             BasePanel(self.base_panels, self.app, entry, f'Estación {index+1}', self.changed, remove,
-                      guide=self.network_guide).pack(fill='x', pady=(16, 0))
+                      guide=self.network_guide, inspect=self.inspect).pack(fill='x', pady=(16, 0))
         self.add_base_button.state(['disabled'] if len(self.job.bases) >= MAX_BASES else ['!disabled'])
         self.app.theme.walk(self.base_panels)
 

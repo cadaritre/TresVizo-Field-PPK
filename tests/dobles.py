@@ -87,10 +87,25 @@ class FakeCore:
         self.calls.append(('prepare', [Path(p).name for p in paths], pole_height_m, marker))
         _wait(progress, cancel, 4, f'Preparando {marker or "observaciones"}…', self.delay)
         Path(workdir).mkdir(parents=True, exist_ok=True)
-        return ObservationSet(obs=[Path(workdir)/'unido.obs'], marker=marker or '', receiver='MeridianV',
-                              antenna_type='HA-901A', antenna_height_m=(pole_height_m or 0)+0.085,
-                              start=START, end=START+timedelta(hours=1, minutes=43), interval_s=1.0,
-                              rinex_version='3.04', source_files=[Path(p) for p in paths])
+        names = [Path(p).name for p in paths]
+        recording = any(n.endswith(('.bin', '.part')) for n in names)
+        station = next((s for s in STATIONS if names and names[0].upper().startswith(s.id)), None)
+        if recording:     # grabación del MeridianV: la sesión trae su nombre y la altura del bastón de campo
+            return ObservationSet(obs=[Path(workdir)/'unido.obs'], marker=marker or 'LF-01', receiver='MeridianV',
+                                  antenna_type='HA-901A', antenna_height_m=(1.8 if pole_height_m is None else
+                                                                            pole_height_m)+0.116,
+                                  start=START, end=START+timedelta(hours=1, minutes=43), interval_s=1.0,
+                                  rinex_version='3.04', source_files=[Path(p) for p in paths], radome='NONE',
+                                  approx_position=offset(self.rover_point, 3.0, -2.0, 1.0), receiver_model='MeridianV',
+                                  case_offset_m=0.116, epochs=6180)
+        return ObservationSet(obs=[Path(workdir)/'unido.obs'], marker=marker or (station.id if station else 'ROVR'),
+                              receiver=station.receiver if station else 'TRIMBLE NETR9',
+                              antenna_type=station.antenna_type if station else 'TRM59800.00',
+                              radome=station.radome if station else 'NONE',
+                              antenna_height_m=pole_height_m if pole_height_m is not None else 0.0083,
+                              start=START-timedelta(hours=1), end=START+timedelta(hours=3), interval_s=15.0,
+                              rinex_version='3.04', source_files=[Path(p) for p in paths],
+                              approx_position=station.position if station else self.rover_point, epochs=960)
 
     def assess_quality(self, obs):
         return quality()

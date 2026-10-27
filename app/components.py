@@ -451,13 +451,24 @@ class LabeledEntry(ttk.Frame):
 
     def __init__(self, parent, label, variable, hint='', width=24, style_prefix='Card.'):
         super().__init__(parent, style='Flat.Card.TFrame' if style_prefix else 'TFrame')
-        ttk.Label(self, text=label, style=style_prefix+'Strong.TLabel' if style_prefix else 'TLabel').pack(
-            anchor='w', pady=(0, 4))
+        head = ttk.Frame(self, style='Flat.Card.TFrame' if style_prefix else 'TFrame')
+        head.pack(fill='x', pady=(0, 4))
+        self.title = ttk.Label(head, text=label, style=style_prefix+'Strong.TLabel' if style_prefix else 'TLabel')
+        self.title.pack(side='left')
+        # Origen del valor («del RINEX», «del catálogo…», «escrito por ti»): discreto, a la derecha del título.
+        self.origin = ttk.Label(head, text='', style=style_prefix+'Subtitle.TLabel' if style_prefix else
+                                'Subtitle.TLabel')
+        self.origin.pack(side='left', padx=(8, 0))
         self.entry = ttk.Entry(self, textvariable=variable, width=width)
         self.entry.pack(fill='x')
+        self.hint = ttk.Label(self, text=hint, style=style_prefix+'Subtitle.TLabel' if style_prefix else
+                              'Subtitle.TLabel', justify='left')
         if hint:
-            ttk.Label(self, text=hint, style=style_prefix+'Subtitle.TLabel' if style_prefix else 'Subtitle.TLabel',
-                      justify='left').pack(anchor='w', pady=(4, 0))
+            self.hint.pack(anchor='w', pady=(4, 0))
+        self.bind('<Configure>', lambda e: self.hint.configure(wraplength=max(140, e.width-8)), add='+')
+
+    def set_origin(self, text):
+        self.origin.configure(text=f'· {text}' if text else '')
 
 
 class Collapsible(ttk.Frame):

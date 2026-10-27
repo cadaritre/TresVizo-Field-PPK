@@ -17,7 +17,7 @@ from app import tasks
 from app.components import (Banner, Collapsible, DropZone, FileList, IssueList, ProgressPanel, ScrollFrame,
                             StepHeader, Tooltip, card, wrap_label)
 from app.crs_ui import CoordinateChooser
-from app.wizard import CONSTELLATIONS, BaseEntry, errors, guess_marker
+from app.wizard import CONSTELLATIONS, BaseEntry, classify as classify_file, errors, guess_marker
 
 RINEX_TYPES = [('Grabación o RINEX', '*.bin *.part *.obs *.nav *.rnx *.crx *.?? *.??o *.??d *.??n *.??g *.Z *.gz *.zip'),
                ('Todos los archivos', '*')]
@@ -131,11 +131,12 @@ class StationPicker(ttk.Frame):
         self.propose()
         self.show()
 
-    def propose(self):
-        """Si aún no hay estación, la propone por la clave del nombre del archivo («chih2990.24d» → CHIH)."""
+    def propose(self, marker=None):
+        """Si aún no hay estación, la propone por la clave del encabezado o del nombre del archivo
+        («chih2990.24d» → CHIH)."""
         if self.entry.station is not None or not self.entry.files:
             return
-        marker = self.entry.marker
+        marker = (marker or self.entry.marker).upper()
         found = next((s for s in self.stations if s.id.upper() == marker), None)
         core = self.app.backend.core
         if found is None and marker and core is not None and callable(getattr(core, 'find_station', None)):
@@ -190,9 +191,10 @@ class StationPicker(ttk.Frame):
                  if s.sigma_enu else '')
         antenna = ' '.join(x for x in (s.antenna_type, s.radome if s.radome != 'NONE' else '') if x) or 'sin dato'
         origin = 'oficial' if s.official else 'corregida a mano'
-        self.info.configure(text=(f'Red: {network.name}\n' if network else '') +
-                            f'{ecef_text(s.position)} ({s.position.frame} {s.position.epoch:g}, {origin}){sigma}\n'
-                                 f'Antena: {antenna} · altura {s.antenna_height_m:.4f} m · Fuente: {s.source or "—"}')
+        catalog = f'del catálogo {network.name}' if network else 'del catálogo'
+        self.info.configure(text=f'Coordenada {origin} {catalog} · {s.position.frame}, época {s.position.epoch:g}\n'
+                                 f'{ecef_text(s.position)}{sigma}\n'
+                                 f'Antena {antenna} · altura {s.antenna_height_m:.4f} m · Fuente: {s.source or "—"}')
         self.fix.state(['!disabled'])
 
     def correct(self):
@@ -271,9 +273,10 @@ class CoordinateDialog(tk.Toplevel):
 class BasePanel(ttk.Frame):
     """Una estación: sus archivos (arrastrar y soltar) y su estación del catálogo."""
 
-    def __init__(self, parent, app, entry: BaseEntry, title, changed, on_remove=None, kinds_hint='', guide=None):
+    def __init__(self, parent, app, entry: BaseEntry, title, changed, on_remove=None, kinds_hint='', guide=None,
+                 inspect=None):
         super().__init__(parent, style='Card.TFrame', padding=18)
-        self.app, self.entry, self.changed = app, entry, changed
+        self.app, self.entry, self.changed, self.inspect = app, entry, changed, inspect
         head = ttk.Frame(self, style='Flat.Card.TFrame')
         head.pack(fill='x')
         app.icons.label(head, 'radio-tower', 20, token='primary', background='surface', style='Card.TLabel').pack(
@@ -294,15 +297,39 @@ class BasePanel(ttk.Frame):
         self.drop.pack(fill='x', pady=(12, 8))
         self.files = FileList(self, app, self.set_files)
         self.files.pack(fill='x')
+        self.rinex = ttk.Label(self, text='', style='Card.Subtitle.TLabel', justify='left')
+        self.bind('<Configure>', lambda e: self.rinex.configure(wraplength=max(200, e.width-40)), add='+')
         self.picker = StationPicker(self, app, entry, changed)
         self.picker.pack(fill='x', pady=(12, 0))
         self.files.set(entry.files)
         if not entry.files:
             self.files.pack_forget()
+        else:
+            self.read_files()
+
+    def read_files(self):
+        """Lo que trae el RINEX de la estación (clave, receptor, antena, altura) se muestra con su origen y la
+        estación se propone por la clave del encabezado."""
+        if self.inspect is None or not self.entry.files:
+            return
+
+        def shown(obs):
+            if not self.winfo_exists():
+                return
+            parts = [x for x in (obs.marker and f'Clave {obs.marker}', obs.receiver and f'receptor {obs.receiver}',
+                                 obs.antenna_type and f'antena {obs.antenna_type} {obs.radome or ""}'.strip(),
+                                 f'altura {obs.antenna_height_m:.4f} m a la ARP',
+                                 obs.start and obs.end and f'{obs.start:%d/%m/%Y %H:%M}–{obs.end:%H:%M} UTC') if x]
+            self.rinex.configure(text='Del RINEX: '+' · '.join(parts))
+            self.rinex.pack(fill='x', pady=(8, 0), after=self.files)
+            if self.entry.station is None and obs.marker:
+                self.picker.propose(obs.marker)
+        self.inspect(f'base-{id(self.entry)}', self.entry.files, shown)
 
     def add(self, paths):
         self.set_files(list(dict.fromkeys([*self.entry.files, *paths])))
         self.picker.propose()
+        self.read_files()
 
     def set_files(self, paths):
         self.entry.files = list(paths)
@@ -643,6 +670,102 @@ class WizardPage(ttk.Frame):
         if self.worker is not None:
             self.worker.cancel.set()
             self.progress.cancelling()
+
+    # --- Lectura de los archivos al soltarlos: los campos se llenan solos ------------------------------------------
+
+    def inspect(self, slot, files, callback):
+        """Lee los archivos en segundo plano (encabezado y sesión) y llama `callback(ObservationSet)` en el hilo de la
+        interfaz. Si los archivos cambian antes de terminar, el resultado viejo se descarta. La copia temporal se
+        borra al terminar."""
+        import hashlib
+        import shutil
+        core = self.app.backend.core
+        files = [Path(p) for p in files]
+        if core is None or not files or not all(p.is_file() for p in files):
+            return
+        key = tuple((str(p), p.stat().st_mtime_ns) for p in files)
+        cache = self.__dict__.setdefault('_inspected', {})
+        if key in cache:
+            callback(cache[key])
+            return
+        workers = self.__dict__.setdefault('_inspecting', {})
+        old = workers.get(slot)
+        if old is not None:
+            old[1].cancel.set()
+        folder = self.app.settings.data_dir()/'Temporal'/hashlib.sha256(repr(key).encode()).hexdigest()[:16]
+
+        def work(progress, cancel):
+            try:
+                return core.prepare_observations(files, folder, progress=progress, cancel=cancel)
+            finally:
+                shutil.rmtree(folder, ignore_errors=True)
+
+        def done(obs):
+            current = workers.get(slot)
+            if current is None or current[0] != key:
+                return
+            workers.pop(slot, None)
+            cache[key] = obs
+            self.app.set_status('Archivos leídos: se llenaron los datos que traen.')
+            callback(obs)
+
+        def failed(kind, message, detail):
+            if workers.get(slot, (None,))[0] == key:
+                workers.pop(slot, None)
+            self.app.set_status(message)
+            if kind == 'program':
+                tasks.log_error(self.app.settings.folder, 'Lectura de archivos', detail)
+        self.app.set_status('Leyendo los archivos para llenar los datos que traen…')
+        workers[slot] = (key, tasks.run(self, work, on_done=done, on_error=failed,
+                                        on_cancel=lambda m: None))
+
+    @staticmethod
+    def origin_of(files) -> str:
+        return 'de la sesión del receptor' if any(classify_file(p) == 'recording' for p in files) else 'del RINEX'
+
+    @staticmethod
+    def obs_summary(obs) -> str:
+        parts = []
+        receiver = obs.receiver_model or obs.receiver
+        if receiver:
+            parts.append(f'Receptor {receiver}')
+        if obs.antenna_type:
+            parts.append(f'antena {obs.antenna_type}' + (f' {obs.radome}' if obs.radome and obs.radome != 'NONE'
+                                                         else ''))
+        if obs.start and obs.end:
+            parts.append(f'{obs.start:%d/%m/%Y %H:%M}–{obs.end:%H:%M} UTC')
+        if obs.interval_s:
+            parts.append(f'cada {obs.interval_s:g} s')
+        if obs.epochs:
+            parts.append(f'{obs.epochs:,} épocas'.replace(',', ' '))
+        return ' · '.join(parts)
+
+    @staticmethod
+    def pole_from(obs) -> float | None:
+        """Altura del bastón que trae la sesión del Meridian (ARP − desplazamiento del case), o None."""
+        if obs.case_offset_m is not None and obs.antenna_height_m and obs.antenna_height_m > obs.case_offset_m:
+            return obs.antenna_height_m-obs.case_offset_m
+        return None
+
+    def autofill(self, var, widget, value, origin):
+        """Llena un campo con lo que traen los archivos si está vacío o lo había llenado la app; si el usuario lo
+        escribió, se respeta."""
+        auto = self.__dict__.setdefault('_auto', {})
+        current = var.get().strip()
+        if value in (None, '') or (current and auto.get(str(var)) != current):
+            if current and auto.get(str(var)) != current:
+                widget.set_origin('escrito por ti')
+            return
+        auto[str(var)] = str(value)
+        var.set(str(value))
+        widget.set_origin(origin)
+
+        def edited(*args):
+            if var.get().strip() != auto.get(str(var)):
+                widget.set_origin('escrito por ti' if var.get().strip() else '')
+        if not getattr(widget, 'origin_traced', False):
+            var.trace_add('write', edited)
+            widget.origin_traced = True
 
     # --- Guía de descarga de la red ---------------------------------------------------------------------------
 

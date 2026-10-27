@@ -143,13 +143,12 @@ def main():
             elif v.startswith('static-'):
                 step = {'rover': 0, 'bases': 1, 'options': 2, 'process': 3}.get(v.split('-')[1], 3)
                 if v == 'static-rover':
-                    static_job.bases = []
+                    # Recién soltada la grabación: el nombre y la altura se llenan solos con su origen.
+                    static_job.bases, static_job.point_name, static_job.pole_height = [], '', ''
                 fill('Georreferenciar punto', static_job, step, process=v in ('static-result', 'static-report'),
                      report=v == 'static-report')
             elif v == 'points-own':
-                own = PointsJob(base_kind='own', base=BaseEntry([make('S-20261024-145011.bin', 22_000_000)]),
-                                own_name='Base Las Flores', own_height='1.500', own_source='manual',
-                                coord_format='geodetic', coord_text=('21 49 05.1234 N', '102 15 22.8765 W', '1893.412'))
+                own = PointsJob(base_kind='own', base=BaseEntry([make('S-20261024-145011.bin', 22_000_000)]))
                 fill('PPK de puntos', own, 0)
             else:
                 step = {'base': 0, 'rover': 1}.get(v.split('-')[1], 3)

@@ -281,3 +281,29 @@ def test_catalog_page_sections_search_and_detail(app):
     page.pick_state('available')
     app.update()
     assert all(not e.installed or e.update for e in page.visible)
+
+
+def test_dropping_files_fills_fields_with_their_origin(app, tmp_path):
+    f = files(tmp_path)
+    page = app.show('Georreferenciar punto')
+    page.add_rover([f['S-20261024-150214.bin']])
+    pump(app, lambda: page.name_var.get() == 'LF-01')
+    assert page.height_var.get() == '1.800'
+    assert 'de la sesión del receptor' in page.name_field.origin.cget('text')
+    page.name_var.set('Vértice norte')
+    assert 'escrito por ti' in page.name_field.origin.cget('text')
+    panel = page.base_panels.winfo_children()[0]
+    panel.add([f['uagu2970.26o']])
+    pump(app, lambda: page.job.bases[0].station is not None and panel.rinex.winfo_ismapped())
+    assert page.job.bases[0].station.id == 'UAGU' and 'Del RINEX' in panel.rinex.cget('text')
+    assert 'del catálogo' in panel.picker.info.cget('text')
+    # Base propia: nombre, altura y coordenada aproximada salen de la grabación; no se pide escribirla.
+    points = app.show('PPK de puntos')
+    points.kind_var.set('own')
+    points.switch_base()
+    points.add_own_files([f['S-20261024-150214.bin']])
+    pump(app, lambda: points.job.rinex_position is not None)
+    assert points.own_height.get() == '1.800' and points.job.own_source == 'rinex'
+    assert 'aproximada' in points.from_rinex.cget('text')
+    from app.wizard import errors
+    assert errors(points.job.step_issues(0)) == []

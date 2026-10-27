@@ -136,16 +136,25 @@ def test_static_project_roundtrip(tmp_path):
 
 def test_points_own_base_from_project_and_manual(tmp_path):
     job = wz.PointsJob(base_kind='own')
+    assert job.own_source == 'rinex'          # por omisión no se pide escribir la coordenada
     found = wz.errors(job.step_issues(0))
-    assert {i.field for i in found} >= {'base', 'own_name', 'own_height', 'own_coord'}
+    assert {i.field for i in found} >= {'base', 'own_name', 'own_height'}
     job.base.files = [touch(tmp_path, 'base.bin')]
     job.own_name, job.own_height = 'Base Norte', '1.500'
+    assert any('Leyendo' in i.message for i in wz.errors(job.step_issues(0)))
+    job.rinex_missing = True
+    assert any('no trae posición' in i.message for i in wz.errors(job.step_issues(0)))
+    job.rinex_position, job.rinex_missing = Ecef(-1.0e6, -5.5e6, 3.0e6), False
+    assert [i.level for i in job.step_issues(0)] == ['warning']
+    assert job.station().source == wz.RINEX_SOURCE and not job.station().official
+    job.own_source = 'project'
     job.own_project = tmp_path/'pv.tvppk'
     assert any('todavía no tiene coordenada' in i.message for i in job.step_issues(0))
     job.own_position = Ecef(-1.0e6, -5.5e6, 3.0e6)
     assert wz.errors(job.step_issues(0)) == []
     st = job.station()
     assert st.id == 'BASENORTE' and not st.official and st.antenna_height_m == 1.5 and 'pv.tvppk' in st.source
+    assert st.source.startswith('Georreferenciada')
     job.own_source, job.coord_text = 'manual', ('19 25 12 N', '99 07 48 W', '2240')
     assert [i.level for i in job.step_issues(0)] == ['warning']
     job.coord_format, job.coord_text = 'ecef', ('1', '2', '3')
@@ -171,7 +180,7 @@ def test_points_steps_and_roundtrip(tmp_path):
     assert again.first_invalid_step() is None
     # Base propia encadenada: la ruta del proyecto estático va relativa.
     own = wz.PointsJob(base_kind='own', base=wz.BaseEntry([touch(tmp_path, 'base.bin')]), own_name='B1',
-                       own_height='1.2', own_project=tmp_path/'sub'/'pv.tvppk', own_position=Ecef(-1e6, -5.5e6, 3e6),
+                       own_height='1.2', own_source='project', own_project=tmp_path/'sub'/'pv.tvppk', own_position=Ecef(-1e6, -5.5e6, 3e6),
                        rover_files=job.rover_files, csv_file=job.csv_file)
     project = own.to_project(folder=tmp_path)
     assert project.source_project == 'sub/pv.tvppk' and project.pole_height_m == 1.2
