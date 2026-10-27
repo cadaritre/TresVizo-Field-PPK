@@ -195,6 +195,24 @@ def station_rows(stations: list[Station]) -> list[list[str]]:
     return rows
 
 
+def antenna_section(r: Report, antennas) -> None:
+    """Qué modelo de antena se usó en cada extremo (antena, radomo, fuente de la calibración y altura con su método)
+    y el aviso rojo de las que quedaron sin modelo en una línea de más de 5 km (`core/antenas.py`)."""
+    if not antennas:
+        return
+    rows = []
+    for a in antennas:
+        applied = f"{a.model_type} {a.model_radome}".strip() if a.calibrated else "sin modelo (PCO/PCV 0)"
+        rows.append([a.role, f"{a.antenna_type or '—'} {a.radome or ''}".strip(), applied, a.source or "—",
+                     a.height_text or "—"])
+    r.table(["Extremo", "Antena y radomo", "Modelo aplicado", "Fuente", "Altura"], rows,
+            widths=[60, 95, 95, 90, 175])
+    errors = [a.note for a in antennas if a.level == "error"]
+    if errors:
+        r.callout("error", "Antena sin modelo de centro de fase en una línea de más de 5 km", errors)
+    r.space(4)
+
+
 def rover_antenna_note(rover: ObservationSet) -> str:
     if rover.antenna_pco_measured is False:
         return "PCO de la antena del rover sin medir."

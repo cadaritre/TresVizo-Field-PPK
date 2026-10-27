@@ -193,6 +193,8 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
     note = secciones.rover_antenna_note(rover)
     if note:
         r.para(note, "small")
+    r.space(4)
+    secciones.antenna_section(r, getattr(result, "antennas", []))
 
     # 4. Líneas base --------------------------------------------------------------------------------------------------
     for b in result.baselines:

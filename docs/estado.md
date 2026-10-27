@@ -33,7 +33,13 @@
   la posición, y MELI existe en la NOAA y en el IGN (Melilla).
 - Coordenada de la base sin pedirla a mano: la oficial de su red; base propia: encabezado RINEX o media autónoma
   de la sesión, marcadas aproximadas con su origen (`base_coordinate_candidates`).
-- ANTEX igs20 (satélites y antenas de la RGNA) y órbitas SP3 a petición (ESA o IGS en el BKG, sin cuenta).
+- ANTEX incluido completo (27-10-2026, `scripts/update_antex.py`): las 414 antenas de satélite y las 512 de receptor del
+  igs20_2437 de la IGS y 655 de receptor del ngs20.atx del NGS que la IGS no trae (1167 en total, 9.4 MB comprimido),
+  sin tocar un bloque; URL, fecha y SHA-256 en `core/data/antex/ORIGEN.md`. Se pueden importar ANTEX (calibración
+  individual, NGS), que ganan sobre el incluido; el informe dice por extremo antena, radomo, modelo aplicado y fuente
+  (IGS, NGS, importado, red o sin modelo), y sin modelo a más de 5 km da aviso rojo. Altura vertical a la ARP, a la
+  rosca o al gancho, o inclinada al borde (√(s² − r²) − d) con r y d de 54 antenas leídos de los dibujos acotados del
+  antenna.gra de la IGS (`core/data/antex/medidas_inclinada.json`). Órbitas SP3 a petición (ESA o IGS en el BKG).
 - **Procesador propio de líneas largas** (`tresvizo_ppk/core/larga`, desde 20 km en «auto»): libre de ionosfera de
   GPS, Galileo y BeiDou con la misma clase de señal en los dos receptores, órbitas difundidas o SP3, PCO/PCV de
   receptor y satélite, mareas sólidas y GMF del IERS 2010, troposfera estimada con gradientes, wind-up; saltos de ciclo
@@ -79,7 +85,12 @@
   entran flotantes. Probar de nuevo con datos Meridian–Meridian (mismo receptor).
 - No hay transformación de época ni de marco (§3.4): el resultado queda en el marco de la base. Con estaciones que
   se mueven (INEG, COL2) la coordenada oficial ya no es su posición: el paquete de red lleva avisos por estación.
-- El ANTEX incluido solo trae las antenas de la RGNA; otra red puede traer las suyas en su paquete.
+- Antenas: el procesador propio de líneas largas (`larga/antena.py`) todavía lee las calibraciones solo del ANTEX
+  incluido y de los paquetes de red, no de los `.atx` importados; un ANTEX importado llega a RTKLIB pero no a él, y
+  el resultado lo avisa (`antenas.own_processor_gaps`). Falta que `receiver_antenna` use `antex.receiver_block`.
+  La tabla de altura inclinada no trae las Zephyr Geodetic de Trimble (TRM55971.00, TRM115000.00): su dibujo de la
+  IGS no da la altura de las muescas y la hoja del fabricante no se pudo leer; r y d se escriben a mano. El ANTEX
+  incluido pesa 9.4 MB en gzip (4.6 MB en xz), porque el procesador propio lo abre con gzip.
 - La comprobación completa de los paquetes `cors-network` se registra al importar `tresvizo_ppk.core.networks`
   (lo hace `core.api`): si la biblioteca instala una red antes de cargarse el motor, solo se comprueba el JSON.
 - Compilación de RTKLIB en Windows (MinGW/MSVC) y Linux sin probar aquí.

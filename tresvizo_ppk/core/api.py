@@ -18,7 +18,7 @@ from pathlib import Path
 from ..errors import UserError
 from ..model import (DataQuality, Ecef, FieldPoint, ObservationSet, PointsResult, ProcessingOptions, StaticResult,
                      Station)
-from . import basecoord, field_csv, networks, observations, points, precise, quality, static, tools
+from . import antenas, antex, basecoord, field_csv, networks, observations, points, precise, quality, static, tools
 
 Progress = tools.Progress
 
@@ -135,13 +135,50 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
                    point_name: str = "") -> StaticResult:
     for station, obs in bases:
         _check_not_rover(rover, station, obs, use_position=True)
-    result = static.process_static(rover, bases, options, Path(workdir), progress=progress, cancel=cancel,
-                                   point_name=point_name)
-    for baseline in result.baselines:
-        if baseline.length_m < MIN_BASELINE_M:
-            raise UserError(f"La línea base con {baseline.base.id} mide {baseline.length_m:.2f} m: la estación es el "
-                            "propio rover, no una base. Quítala y vuelve a procesar.")
+    rover, rover_height = _apply_rover(rover, options)
+    chosen, extra_warnings = _apply_bases(bases, options)
+    bases = [(station, obs) for station, obs, _ in chosen]
+    from .baseline import base_antenna
+    needed = antenas.needed_keys([(rover.antenna_type, rover.radome)] +
+                                 [base_antenna(station, obs, [])[:2] for station, obs in bases])
+    with antex.session(options.antex_files, needed):
+        result = static.process_static(rover, bases, options, Path(workdir), progress=progress, cancel=cancel,
+                                       point_name=point_name)
+        for baseline in result.baselines:
+            if baseline.length_m < MIN_BASELINE_M:
+                raise UserError(f"La línea base con {baseline.base.id} mide {baseline.length_m:.2f} m: la estación es "
+                                "el propio rover, no una base. Quítala y vuelve a procesar.")
+        result.antennas = antenas.static_infos(rover, rover_height, chosen, result.baselines)
+        extra_warnings += antenas.own_processor_gaps(result.antennas, result.baselines)
+    result.warnings = _antenna_warnings(result.antennas, extra_warnings) + list(getattr(result, "warnings", []))
     return result
+
+
+def _apply_rover(rover: ObservationSet, options: ProcessingOptions, use_height: bool = True):
+    try:
+        return antenas.apply_rover(rover, options, use_height=use_height)
+    except ValueError as error:
+        raise UserError(f"Altura de la antena del rover: {error}") from error
+
+
+def _apply_bases(bases, options: ProcessingOptions):
+    chosen, warnings = [], []
+    for station, obs in bases:
+        try:
+            station, obs, text, notes = antenas.apply_base(station, obs, options)
+        except ValueError as error:
+            raise UserError(f"Altura de la antena de {station.id}: {error}") from error
+        chosen.append((station, obs, text))
+        warnings += notes
+    return chosen, warnings
+
+
+def _antenna_warnings(infos, extra: list[str]) -> list[str]:
+    """Avisos de antena para el resultado: los rojos (sin modelo y más de 5 km), los amarillos (el del Meridian ya lo
+    da el motor como «PCO … sin medir») y los cambios hechos a mano sobre el catálogo de una red."""
+    out = [i.note for i in infos if i.level == "error"]
+    out += [i.note for i in infos if i.level == "warning" and not (i.role == "Rover" and "Meridian" in i.note)]
+    return out + extra
 
 
 def read_field_csv(path: Path) -> list[FieldPoint]:
@@ -153,7 +190,25 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
                    cancel: threading.Event | None = None) -> PointsResult:
     # En cinemático el rover puede pasar junto a la base: solo se rechaza la misma grabación.
     _check_not_rover(rover, base[0], base[1], use_position=False)
-    return points.process_points(rover, base, points_, options, Path(workdir), progress=progress, cancel=cancel)
+    # en PPK de puntos la altura del rover es la de cada punto (CSV); del rover solo cuenta la antena
+    rover, _ = _apply_rover(rover, options, use_height=False)
+    chosen, extra_warnings = _apply_bases([base], options)
+    station, obs, base_height = chosen[0]
+    from .baseline import base_antenna
+    base_type, base_dome, base_h = base_antenna(station, obs, [])
+    needed = antenas.needed_keys([(rover.antenna_type, rover.radome), (base_type, base_dome)])
+    with antex.session(options.antex_files, needed):
+        result = points.process_points(rover, (station, obs), points_, options, Path(workdir), progress=progress,
+                                       cancel=cancel)
+        distances = [p.distance_to_base_m for p in result.points if p.distance_to_base_m is not None]
+        longest = max(distances) if distances else None
+        result.antennas = [
+            antenas.info("Rover", rover.antenna_type, rover.radome, height_m=None,
+                         height_text_="la de cada punto (CSV)", length_m=longest, meridian=bool(rover.receiver_model)),
+            antenas.info(f"Base {station.id}", base_type, base_dome, height_m=base_h, height_text_=base_height,
+                         length_m=longest, meridian=bool(obs.receiver_model))]
+    result.warnings = _antenna_warnings(result.antennas, extra_warnings) + list(getattr(result, "warnings", []))
+    return result
 
 
 def engine_version() -> str:

@@ -1,0 +1,331 @@
+{
+ "formato": "tvppk-medidas-inclinada",
+ "version": 1,
+ "nota": "Radio r (del eje de la antena al punto del borde donde se apoya la cinta) y desfase d (lo que ese punto está arriba de la ARP), en metros, para la altura inclinada: h_ARP = √(s² − r²) − d. Leídos a mano de los dibujos acotados de la IGS: r es la mitad del ancho del dibujo en esa marca (salvo donde el dibujo da el radio). Un error de 5 mm en r cambia la altura menos de 0.3 mm con s de 1.5 m; d entra completo. Las antenas que no están aquí (p. ej. las Zephyr Geodetic de Trimble, cuyo dibujo no da la altura de las muescas) se escriben a mano con la hoja del fabricante.",
+ "antenas": {
+  "ASH700699.L1": {
+   "radius_m": 0.1215,
+   "offset_m": 0.035,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de ASH700699.L1: muesca a 0.0350 m sobre la ARP, ancho 0.2430 m"
+  },
+  "ASH802147_A": {
+   "radius_m": 0.098,
+   "offset_m": 0.04,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de ASH802147_A: marca de altura inclinada a 0.0400 m sobre la ARP, ancho 0.1960 m"
+  },
+  "CHAPRO": {
+   "radius_m": 0.06355,
+   "offset_m": 0.0245,
+   "mark": "costura de la muesca (TMT)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CHAPRO: costura de la muesca (TMT) a 0.0245 m sobre la ARP, ancho 0.1271 m"
+  },
+  "CHAWR1": {
+   "radius_m": 0.07815,
+   "offset_m": 0.0609,
+   "mark": "costura de la muesca (TMT)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CHAWR1: costura de la muesca (TMT) a 0.0609 m sobre la ARP, ancho 0.1563 m"
+  },
+  "CNTAT330": {
+   "radius_m": 0.076,
+   "offset_m": 0.03,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CNTAT330: muesca a 0.0300 m sobre la ARP, ancho 0.1520 m"
+  },
+  "CNTAT340": {
+   "radius_m": 0.076,
+   "offset_m": 0.03,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CNTAT330: muesca a 0.0300 m sobre la ARP, ancho 0.1520 m"
+  },
+  "CNTJUPITER": {
+   "radius_m": 0.067,
+   "offset_m": 0.038,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CNTJUPITER: marca de altura inclinada a 0.0380 m sobre la ARP, ancho 0.1340 m"
+  },
+  "CNTMARSPRO": {
+   "radius_m": 0.0775,
+   "offset_m": 0.038,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CNTMARSPRO: marca de altura inclinada a 0.0380 m sobre la ARP, ancho 0.1550 m"
+  },
+  "CNTT30": {
+   "radius_m": 0.0775,
+   "offset_m": 0.038,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CNTT30: marca de altura inclinada a 0.0380 m sobre la ARP, ancho 0.1550 m"
+  },
+  "CNTT300": {
+   "radius_m": 0.079,
+   "offset_m": 0.038,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CNTT300: marca de altura inclinada a 0.0380 m sobre la ARP, ancho 0.1580 m"
+  },
+  "CNTT300PLUS": {
+   "radius_m": 0.079,
+   "offset_m": 0.038,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de CNTT300: marca de altura inclinada a 0.0380 m sobre la ARP, ancho 0.1580 m"
+  },
+  "DREPOZP5": {
+   "radius_m": 0.0648,
+   "offset_m": 0.0584,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de DREPOZP5: marca de altura inclinada a 0.0584 m sobre la ARP, ancho 0.1296 m"
+  },
+  "FOIA90": {
+   "radius_m": 0.078,
+   "offset_m": 0.0437,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de FOIA90: línea blanca de referencia a 0.0437 m sobre la ARP, ancho 0.1560 m"
+  },
+  "GINCYF90": {
+   "radius_m": 0.0785,
+   "offset_m": 0.0437,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de GINCYF90: línea blanca de referencia a 0.0437 m sobre la ARP, ancho 0.1570 m"
+  },
+  "HEMS631": {
+   "radius_m": 0.0785,
+   "offset_m": 0.0547,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de HEMS631: línea blanca de referencia a 0.0547 m sobre la ARP, ancho 0.1570 m"
+  },
+  "JAVTRIANT_A": {
+   "radius_m": 0.064,
+   "offset_m": 0.0372,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de JAVTRIANT_A: marca de altura inclinada a 0.0372 m sobre la ARP, ancho 0.1280 m"
+  },
+  "JAVTRIANT_B": {
+   "radius_m": 0.064,
+   "offset_m": 0.022,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de JAVTRIANT_B: marca de altura inclinada a 0.0220 m sobre la ARP, ancho 0.1280 m"
+  },
+  "LEIAR10": {
+   "radius_m": 0.12,
+   "offset_m": 0.0362,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de LEIAR10: muesca a 0.0362 m sobre la ARP, ancho 0.2400 m"
+  },
+  "PDAPD9": {
+   "radius_m": 0.0785,
+   "offset_m": 0.0547,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de PDAPD9: línea blanca de referencia a 0.0547 m sobre la ARP, ancho 0.1570 m"
+  },
+  "RNGA3R": {
+   "radius_m": 0.0937,
+   "offset_m": 0.0387,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRM55970.00: muesca a 0.0387 m sobre la ARP, a 0.0937 m del eje"
+  },
+  "RNGSMAXGEO-A": {
+   "radius_m": 0.1017,
+   "offset_m": 0.0408,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de RNGSMAXGEO-A: marca de altura inclinada a 0.0408 m sobre la ARP, ancho 0.2034 m"
+  },
+  "SPP101861": {
+   "radius_m": 0.1017,
+   "offset_m": 0.0408,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de RNGSMAXGEO-A: marca de altura inclinada a 0.0408 m sobre la ARP, ancho 0.2034 m"
+  },
+  "SPP135000.00": {
+   "radius_m": 0.0937,
+   "offset_m": 0.0387,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRM55970.00: muesca a 0.0387 m sobre la ARP, a 0.0937 m del eje"
+  },
+  "SPP91564_1": {
+   "radius_m": 0.09855,
+   "offset_m": 0.03,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de SPP91564_1: marca de altura inclinada a 0.0300 m sobre la ARP, ancho 0.1971 m"
+  },
+  "SPPSP85": {
+   "radius_m": 0.09855,
+   "offset_m": 0.03,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de SPP91564_1: marca de altura inclinada a 0.0300 m sobre la ARP, ancho 0.1971 m"
+  },
+  "SPPSP85UHF": {
+   "radius_m": 0.09855,
+   "offset_m": 0.028,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de SPPSP85UHF: marca de altura inclinada a 0.0280 m sobre la ARP, ancho 0.1971 m"
+  },
+  "STXS700A": {
+   "radius_m": 0.07,
+   "offset_m": 0.0501,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de STXS700A: línea blanca de referencia a 0.0501 m sobre la ARP, ancho 0.1400 m"
+  },
+  "STXS800": {
+   "radius_m": 0.0735,
+   "offset_m": 0.046,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de STXS800: línea blanca de referencia a 0.0460 m sobre la ARP, ancho 0.1470 m"
+  },
+  "STXS800A": {
+   "radius_m": 0.0735,
+   "offset_m": 0.046,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de STXS800: línea blanca de referencia a 0.0460 m sobre la ARP, ancho 0.1470 m"
+  },
+  "STXS900": {
+   "radius_m": 0.0785,
+   "offset_m": 0.0547,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de STXS900: línea blanca de referencia a 0.0547 m sobre la ARP, ancho 0.1570 m"
+  },
+  "STXS900A": {
+   "radius_m": 0.0785,
+   "offset_m": 0.0547,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de STXS900: línea blanca de referencia a 0.0547 m sobre la ARP, ancho 0.1570 m"
+  },
+  "STXS990A": {
+   "radius_m": 0.0756,
+   "offset_m": 0.0572,
+   "mark": "línea blanca de referencia",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de STXS990A: línea blanca de referencia a 0.0572 m sobre la ARP, ancho 0.1512 m"
+  },
+  "TIAPENG6J2": {
+   "radius_m": 0.065,
+   "offset_m": 0.068,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TIAPENG6J2: muesca a 0.0680 m sobre la ARP, ancho 0.1300 m"
+  },
+  "TIAPENG7H+": {
+   "radius_m": 0.065,
+   "offset_m": 0.068,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TIAPENG6J2: muesca a 0.0680 m sobre la ARP, ancho 0.1300 m"
+  },
+  "TIAPENG7N": {
+   "radius_m": 0.065,
+   "offset_m": 0.068,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TIAPENG6J2: muesca a 0.0680 m sobre la ARP, ancho 0.1300 m"
+  },
+  "TIAPENGX2A": {
+   "radius_m": 0.078,
+   "offset_m": 0.048,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TIAPENGX2A: muesca a 0.0480 m sobre la ARP, ancho 0.1560 m"
+  },
+  "TPSGR3": {
+   "radius_m": 0.0967,
+   "offset_m": 0.17,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TPSGR3: marca de altura inclinada a 0.1700 m sobre la ARP, ancho 0.1934 m"
+  },
+  "TPSGR5": {
+   "radius_m": 0.0975,
+   "offset_m": 0.168,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TPSGR5: marca de altura inclinada a 0.1680 m sobre la ARP, ancho 0.1950 m"
+  },
+  "TPSPG_A1": {
+   "radius_m": 0.069,
+   "offset_m": 0.0275,
+   "mark": "marca de altura inclinada",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TPSPG_A1: marca de altura inclinada a 0.0275 m sobre la ARP, ancho 0.1380 m"
+  },
+  "TRM105000.10": {
+   "radius_m": 0.0937,
+   "offset_m": 0.0387,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRM55970.00: muesca a 0.0387 m sobre la ARP, a 0.0937 m del eje"
+  },
+  "TRM55970.00": {
+   "radius_m": 0.0937,
+   "offset_m": 0.0387,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRM55970.00: muesca a 0.0387 m sobre la ARP, a 0.0937 m del eje"
+  },
+  "TRM57970.00": {
+   "radius_m": 0.0937,
+   "offset_m": 0.0387,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRM55970.00: muesca a 0.0387 m sobre la ARP, a 0.0937 m del eje"
+  },
+  "TRM77970.00": {
+   "radius_m": 0.0937,
+   "offset_m": 0.0387,
+   "mark": "muesca",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRM55970.00: muesca a 0.0387 m sobre la ARP, a 0.0937 m del eje"
+  },
+  "TRMR4": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR4-2": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR4-3": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR6": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR6-2": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR6-3": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR6-4": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR8-4": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR8S": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR8_GNSS": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  },
+  "TRMR8_GNSS3": {
+   "radius_m": 0.091,
+   "offset_m": 0.0552,
+   "mark": "centro de la defensa (bumper)",
+   "source": "IGS, antenna.gra del 30-09-2026 (https://files.igs.org/pub/station/general/antenna.gra), dibujo de TRMR4: centro de la defensa (bumper) a 0.0552 m sobre la ARP, ancho 0.1820 m"
+  }
+ }
+}

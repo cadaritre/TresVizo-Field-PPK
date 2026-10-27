@@ -128,6 +128,8 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     note = secciones.rover_antenna_note(result.rover)
     if note:
         r.para(note, "small")
+    r.space(4)
+    secciones.antenna_section(r, getattr(result, "antennas", []))
     first = next((c for _, c, _ in coords if c is not None), base_c)
     secciones.system_section(r, first, point_choice, base_problem, secciones.frame_text(result.base.position))
     secciones.options_section(r, options, {options.ephemeris}, result.log, kinematic=True)
