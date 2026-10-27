@@ -179,8 +179,6 @@ class FieldPoint:
     antenna_height_m: float
     field_position: Ecef | None = None         # lo que se midió en campo
     field_solution: str = ""                   # «FIJO», «FLOTANTE», «AUTÓNOMO»…
-    tilt_vector_enu: Enu | None = None         # antena → punta, si el CSV lo trae
-    tilt_used: bool = False
     row: dict[str, str] = field(default_factory=dict)   # la fila original, para reexportarla
 
 
@@ -188,7 +186,7 @@ class FieldPoint:
 class ProcessedPoint:
     point: FieldPoint
     solution: Solution
-    position: Ecef | None                      # punta (o antena si no hay inclinación), en el marco de la base
+    position: Ecef | None                      # el punto en el suelo (antena − altura vertical: todo plomeado)
     sigma_enu: Enu | None
     epochs_fixed: int
     epochs_total: int

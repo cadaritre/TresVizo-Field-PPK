@@ -34,8 +34,8 @@ INEGI**. Informe con calidad de Trimble Business Center (TBC). Público en GitHu
 2. **Rover:** la grabación cinemática del MeridianV (o su RINEX) de toda la jornada.
 3. **Puntos:** el **CSV de TresVizo Field** de esa jornada (formato de las apps, `docs/csv-tresvizo-field.md`): por cada
    punto, nombre, código, inicio y fin de la ocupación en UTC del receptor, altura de antena y lo que se midió en
-   campo. Puntos medidos con la **compensación de inclinación**: si el CSV trae el vector antena→punta se aplica a la
-   posición posprocesada; si no, el punto se marca «no posprocesable con inclinación» (nunca se inventa).
+   campo. **En posproceso todo se asume plomeado** (decisión del propietario): el punto es la antena menos la altura
+   vertical del bastón; la compensación de inclinación de campo no interviene.
 4. **Proceso:** trayectoria cinemática combinada (adelante/atrás) y, por punto, las épocas de su ocupación: promedio de
    las fijas (o de las flotantes si no hay fijas, marcadas), σ H/V, número de épocas, solución (FIJA / FLOTANTE /
    SIN SOLUCIÓN), distancia a la base, y la diferencia con lo medido en campo.
