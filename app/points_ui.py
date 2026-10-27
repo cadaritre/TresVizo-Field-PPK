@@ -1,4 +1,4 @@
-"""PPK de puntos (§1.2): base de la RGNA o propia, jornada cinemática + CSV de TresVizo Field, proceso y resultado."""
+"""PPK de puntos (§1.2): base de una red CORS o propia, jornada cinemática + CSV de TresVizo Field, proceso y resultado."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -15,7 +15,7 @@ from app.components import DropZone, FileList, LabeledEntry, ThinScrollbar, card
 from app.formatting import dms, horizontal, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import PointsJob, classify
-from app.wizard_ui import INEGI_GUIDE, RINEX_TYPES, BasePanel, OptionsPanel, WizardPage, ecef_text
+from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, BasePanel, OptionsPanel, WizardPage, ecef_text
 from app.static_ui import RECORDING_TYPES
 
 EXPORTS = [('field_csv', 'CSV de TresVizo Field…', '.csv', 'CSV de TresVizo Field'),
@@ -47,22 +47,19 @@ class PointsPage(WizardPage):
             OptionsPanel(body, self.app, self.job, self.changed).pack(fill='x')
 
     def build_base(self, body):
-        frame, inner = card(body, 'Base', 'Una estación de la RGNA o tu propio MeridianV grabando como base.')
+        frame, inner = card(body, 'Base', 'Una estación de referencia de una red o tu propio MeridianV grabando como '
+                                          'base.')
         frame.pack(fill='x')
         self.kind_var = tk.StringVar(value=self.job.base_kind)
-        for value, text in (('rgna', 'Estación de la RGNA'), ('own', 'Base propia (MeridianV)')):
+        for value, text in (('rgna', 'Estación de una red'), ('own', 'Base propia (MeridianV)')):
             ttk.Radiobutton(inner, text=text, value=value, variable=self.kind_var, style='Card.TRadiobutton',
                             command=self.switch_base).pack(side='left', padx=(0, 18))
         self.rgna_frame = ttk.Frame(body)
         guide, g = card(self.rgna_frame, None)
         guide.pack(fill='x', pady=(16, 0))
-        wrap_label(g, INEGI_GUIDE, style='Card.Subtitle.TLabel', margin=40).pack(fill='x')
-        if self.app.backend.available('core', 'download_rgna'):
-            download = ttk.Button(g, text='Descargar de la RGNA…', command=self.download_rgna)
-            self.app.icons.bind(download, 'download')
-            download.pack(anchor='w', pady=(10, 0))
-        self.rgna_panel = BasePanel(self.rgna_frame, self.app, self.job.base, 'Estación de la RGNA', self.changed,
-                                    guide=self.rgna_guide)
+        wrap_label(g, NETWORK_GUIDE, style='Card.Subtitle.TLabel', margin=40).pack(fill='x')
+        self.rgna_panel = BasePanel(self.rgna_frame, self.app, self.job.base, 'Estación de referencia', self.changed,
+                                    guide=self.network_guide)
         self.rgna_panel.pack(fill='x', pady=(16, 0))
         self.own_frame = ttk.Frame(body)
         self.build_own(self.own_frame)
@@ -87,8 +84,9 @@ class PointsPage(WizardPage):
         self.own_name.trace_add('write', lambda *a: self.edit(own_name=self.own_name.get()))
         self.own_height.trace_add('write', lambda *a: self.edit(own_height=self.own_height.get()))
         frame, inner = card(parent, 'Coordenada de la base',
-                            'Para ligar los puntos a la RGNA, la base debe estar en ITRF2008 época 2010.0: lo mejor es '
-                            'georreferenciarla antes con «Georreferenciar punto» y encadenar ese proyecto.')
+                            'Para ligar los puntos a una red, la base debe estar en el marco y la época oficiales de esa '
+                            'red: lo mejor es georreferenciarla antes con «Georreferenciar punto» y encadenar ese '
+                            'proyecto.')
         frame.pack(fill='x', pady=(16, 0))
         self.source_var = tk.StringVar(value=self.job.own_source)
         row = ttk.Frame(inner, style='Flat.Card.TFrame')
@@ -173,10 +171,11 @@ class PointsPage(WizardPage):
         self.job.coord_format = self.format_var.get()
         if self.job.coord_format == 'geodetic':
             names = ('Latitud', 'Longitud', 'Altura elipsoidal (m)')
-            hint = 'Grados decimales o «19 25 12.3456 N»; longitud oeste con O (o W) o con signo menos. ITRF2008 2010.0.'
+            hint = ('Grados decimales o «19 25 12.3456 N»; longitud oeste con O (o W) o con signo menos. En el marco y '
+                    'la época de la red con la que vas a ligar los puntos.')
         else:
             names = ('X (m)', 'Y (m)', 'Z (m)')
-            hint = 'Geocéntricas en ITRF2008, época 2010.0.'
+            hint = 'Geocéntricas, en el marco y la época de la red con la que vas a ligar los puntos.'
         for label, name in zip(self.coord_labels, names):
             label.configure(text=name)
         self.coord_hint.configure(text=hint)
@@ -216,16 +215,6 @@ class PointsPage(WizardPage):
         else:
             self.project_info.configure(text=f'{Path(self.job.own_project).name}\n{ecef_text(self.job.own_position)} '
                                              f'({self.job.own_position.frame} {self.job.own_position.epoch:g})')
-
-    def download_rgna(self):
-        from app.rgna_download import RgnaDownloadDialog
-
-        def downloaded(station, paths):
-            self.job.base.station, self.job.base.name = station, station.name
-            self.rgna_panel.set_files(list(paths))
-            self.rgna_panel.picker.name_var.set(station.name)
-            self.rgna_panel.picker.show()
-        RgnaDownloadDialog(self.app, downloaded)
 
     # --- Paso 2: rover y puntos ---------------------------------------------------------------------------------
 
@@ -310,8 +299,8 @@ class PointsPage(WizardPage):
     def summary_lines(self):
         job = self.job
         if job.base_kind == 'rgna':
-            base = (f'Base RGNA {job.base.station.id} ({job.base.name or job.base.station.name})'
-                    if job.base.station else 'Base RGNA: —')
+            base = (f'Estación de referencia {job.base.station.id} ({job.base.name or job.base.station.name})'
+                    if job.base.station else 'Estación de referencia: —')
         else:
             origin = (f'del proyecto {Path(job.own_project).name}' if job.own_source == 'project' and job.own_project
                       else 'escrita a mano')
@@ -410,7 +399,8 @@ class PointsPage(WizardPage):
         counts = {s: sum(1 for p in result.points if Solution(p.solution) is s) for s in Solution}
         fixed, floating = counts[Solution.FIXED], counts[Solution.FLOAT]
         none = counts[Solution.NONE]+counts[Solution.SINGLE]
-        kind = 'success' if none == 0 and floating == 0 else 'warning' if none == 0 else 'error'
+        # Éxito con todos fijos; advertencia si hay flotantes o sin solución; error solo si no hay ningún fijo.
+        kind = 'success' if none == 0 and floating == 0 else 'error' if fixed == 0 else 'warning'
         top = ttk.Frame(body)
         top.pack(fill='x')
         top.columnconfigure(0, weight=2, uniform='top')
@@ -450,15 +440,15 @@ class PointsPage(WizardPage):
         first, second = ('Este', 'Norte') if projected else ('Latitud', 'Longitud')
         height_title = 'Cota' if any(c is not None and c.orthometric_height_m is not None for c in coordinates) else \
             'Altura elip.'
-        columns = [('name', 'Punto', 110), ('code', 'Código', 80), ('a', first, 150), ('b', second, 160),
-                   ('h', height_title, 120), ('sh', 'σ H', 80), ('sv', 'σ V', 80), ('epochs', 'Épocas', 90),
-                   ('solution', 'Solución', 110), ('delta', 'Δ campo H/V', 130), ('dist', 'A la base', 100),
-                   ('message', 'Aviso', 220)]
+        # Lo esencial cabe a 1280 px; la distancia a la base y el aviso de cada punto salen al seleccionarlo.
+        columns = [('name', 'Punto', 80), ('code', 'Código', 70), ('a', first, 125), ('b', second, 135),
+                   ('h', height_title, 100), ('sh', 'σ H', 70), ('sv', 'σ V', 70), ('epochs', 'Épocas', 65),
+                   ('solution', 'Solución', 110), ('delta', 'Δ campo H/V', 135)]
         tree = ttk.Treeview(inner, columns=[c[0] for c in columns], show='headings',
                             height=min(14, max(3, len(result.points))), selectmode='browse')
         for key, title, width in columns:
             tree.heading(key, text=title, anchor='w')
-            tree.column(key, width=width, minwidth=50, anchor='w', stretch=key == 'message')
+            tree.column(key, width=width, minwidth=width*3//4, anchor='w', stretch=True)
         # Solo se resaltan las filas que piden revisión; la solución siempre va escrita.
         tokens = self.app.theme.tokens
         tree.tag_configure('float', foreground=tokens['warning_fg'], background=tokens['warning_bg'])
@@ -479,13 +469,27 @@ class PointsPage(WizardPage):
             tree.insert('', 'end', iid=str(index), tags=(solution_key(p.solution),), values=(
                 p.point.name, p.point.code, a, b, h, format_length(horizontal(p.sigma_enu), prefs),
                 format_length(None if p.sigma_enu is None else p.sigma_enu.u, prefs),
-                f'{p.epochs_fixed}/{p.epochs_total}', solution_text(p.solution), delta,
-                format_length(p.distance_to_base_m, prefs, 0) if p.distance_to_base_m is not None else '—',
-                p.message))
+                f'{p.epochs_fixed}/{p.epochs_total}', solution_text(p.solution), delta))
         tree.pack(fill='x')
         scroll = ThinScrollbar(inner, tree.xview, orient='horizontal')
         tree.configure(xscrollcommand=scroll.set)
         scroll.pack(fill='x', pady=(3, 0))
+        point_detail = ttk.Label(inner, text='Selecciona un punto para ver su distancia a la base y sus avisos.',
+                                 style='Card.Subtitle.TLabel', justify='left')
+        point_detail.pack(fill='x', pady=(6, 0))
+
+        def selected(event=None):
+            chosen = tree.selection()
+            if not chosen:
+                return
+            p = result.points[int(chosen[0])]
+            parts = [f'{p.point.name}: a {format_length(p.distance_to_base_m, prefs, 0)} de la base'
+                     if p.distance_to_base_m is not None else f'{p.point.name}: sin distancia a la base',
+                     f'{p.epochs_fixed} épocas fijas de {p.epochs_total}']
+            if p.message:
+                parts.append(p.message)
+            point_detail.configure(text=' · '.join(parts))
+        tree.bind('<<TreeviewSelect>>', selected)
         frame, inner = card(body, 'Precisión por punto')
         frame.pack(fill='x', pady=(16, 0))
         bars = BarChart(inner, self.app)

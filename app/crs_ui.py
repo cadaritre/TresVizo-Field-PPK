@@ -10,7 +10,7 @@ from app import tasks
 from app.components import Banner, ProgressPanel, ScrollFrame, card, scrolled, wrap_label
 
 KIND_TEXT = {'factory': 'Sistemas de fábrica', 'crs-package': 'Paquete de sistemas', 'geoid': 'Geoide',
-             'datum-grid': 'Rejilla de datum'}
+             'datum-grid': 'Rejilla de datum', 'cors-network': 'Red de estaciones (CORS)'}
 NO_GEOID = 'Sin geoide (solo altura elipsoidal)'
 AUTO_ZONE = 'Automática (por la longitud del punto)'
 MEXICO_ZONES = [f'{n}N' for n in range(11, 17)]

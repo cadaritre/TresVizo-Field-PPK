@@ -88,7 +88,7 @@ def test_static_steps_validation(tmp_path):
     assert [i.level for i in job.step_issues(0)] == ['warning']   # sin navegación
     assert job.first_invalid_step() == 1
     job.bases = [wz.BaseEntry(files=[touch(tmp_path, 'chih2990.24d.Z')])]
-    assert any('catálogo' in i.message for i in wz.errors(job.step_issues(1)))
+    assert any('redes instaladas' in i.message for i in wz.errors(job.step_issues(1)))
     job.bases[0].station = station()
     assert wz.errors(job.step_issues(1)) == []
     assert any('una sola estación' in i.message for i in job.step_issues(1))

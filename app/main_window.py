@@ -25,7 +25,7 @@ from app.ui_theme import ThemeManager
 
 APP_USER_MODEL_ID = 'TresVizo.FieldPPK.Desktop'
 NAV = [('Inicio', 'house'), ('Georreferenciar punto', 'map-pin'), ('PPK de puntos', 'route'),
-       ('Sistemas y geoides', 'globe'), ('Estaciones RGNA', 'radio-tower')]
+       ('Sistemas y geoides', 'globe'), ('Redes y estaciones', 'radio-tower')]
 NAV_BOTTOM = [('Ajustes', 'settings'), ('Acerca de', 'info')]
 
 
@@ -84,7 +84,7 @@ class Application(TkinterDnD.Tk):
         self.pages: dict[str, ttk.Frame] = {}
         self.nav_buttons: dict[str, ttk.Button] = {}
         self.current_page = ''
-        self.catalog_cache = None
+        self.networks_cache = None
         self.shell()
         self.bind_shortcuts()
         if sys.platform == 'darwin':
@@ -98,6 +98,8 @@ class Application(TkinterDnD.Tk):
                 f'anterior se conservó en:\n{self.settings.recovered_from}', parent=self))
         if open_path:
             self.after(200, lambda: self.open_project(Path(open_path)))
+        if self.settings.values.check_updates:
+            self.after(4000, self.check_updates_on_start)
 
     # --- Marca y ventana ------------------------------------------------------------------------------------------
 
@@ -194,10 +196,10 @@ class Application(TkinterDnD.Tk):
         from app.static_ui import StaticPage
         from app.points_ui import PointsPage
         from app.crs_ui import CrsPage
-        from app.stations_ui import StationsPage
+        from app.networks_ui import NetworksPage
         from app.settings_ui import SettingsPage, AboutPage
         return {'Inicio': HomePage, 'Georreferenciar punto': StaticPage, 'PPK de puntos': PointsPage,
-                'Sistemas y geoides': CrsPage, 'Estaciones RGNA': StationsPage, 'Ajustes': SettingsPage,
+                'Sistemas y geoides': CrsPage, 'Redes y estaciones': NetworksPage, 'Ajustes': SettingsPage,
                 'Acerca de': AboutPage}
 
     def page(self, name):
@@ -279,6 +281,20 @@ class Application(TkinterDnD.Tk):
         if projects:
             self.open_project(projects[0])
         return event.action
+
+    def check_updates_on_start(self):
+        """Solo si el usuario lo activó en Ajustes. Un fallo de red no molesta: queda en la barra de estado."""
+        from app import updates
+
+        def done(release):
+            if updates.is_newer(release.version):
+                self.set_status(f'Hay una versión nueva de TresVizo Field PPK: {release.version}.')
+                if messagebox.askyesno('Versión nueva', f'Está disponible la versión {release.version}. ¿Ver sus '
+                                       'novedades en Ajustes?', parent=self):
+                    self.show('Ajustes').show_release(release)
+
+        tasks.run(self, lambda p, c: updates.latest_release(), on_done=done,
+                  on_error=lambda kind, message, detail: self.set_status(message))
 
     # --- Mensajes, errores y cierre ----------------------------------------------------------------------------------
 

@@ -3,7 +3,7 @@
 Uso: python scripts/preview.py --view static-result [--theme Oscuro] [--capture captura.png] [--seconds 0]
 Usa una carpeta temporal para preferencias y proyectos: nunca toca los datos ni las preferencias reales.
 Vistas: home, static-rover, static-bases, static-options, static-process, static-result, static-report,
-points-base, points-own, points-rover, points-result, crs, stations, settings, about.
+points-base, points-own, points-rover, points-result, crs, networks, settings, about.
 """
 import argparse
 from pathlib import Path
@@ -16,7 +16,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'tests'))
 
 VIEWS = ['home', 'static-rover', 'static-bases', 'static-options', 'static-process', 'static-result',
-         'static-report', 'points-base', 'points-own', 'points-rover', 'points-result', 'crs', 'stations', 'settings',
+         'static-report', 'points-base', 'points-own', 'points-rover', 'points-result', 'crs', 'networks', 'settings',
          'about']
 
 
@@ -134,11 +134,11 @@ def main():
 
         def start():
             v = args.view
-            if v in ('home', 'crs', 'stations', 'settings', 'about'):
-                app.show({'home': 'Inicio', 'crs': 'Sistemas y geoides', 'stations': 'Estaciones RGNA',
+            if v in ('home', 'crs', 'networks', 'settings', 'about'):
+                app.show({'home': 'Inicio', 'crs': 'Sistemas y geoides', 'networks': 'Redes y estaciones',
                           'settings': 'Ajustes', 'about': 'Acerca de'}[v])
-                if v == 'stations':
-                    app.after(600, lambda: app.pages['Estaciones RGNA'].tree.selection_set('INEG'))
+                if v == 'networks':
+                    app.after(600, lambda: app.pages['Redes y estaciones'].tree.selection_set('INEG'))
                 done()
             elif v.startswith('static-'):
                 step = {'rover': 0, 'bases': 1, 'options': 2, 'process': 3}.get(v.split('-')[1], 3)

@@ -113,14 +113,14 @@ def test_rgna_guide_from_rover_session(app, tmp_path):
     page = app.show('Georreferenciar punto')
     page.add_rover([f['S-20261024-150214.bin']])
     entry = page.job.bases[0]
-    page.rgna_guide(entry)                          # sin estación: lo dice
+    page.network_guide(entry)                          # sin estación: lo dice
     assert app.shown[-1][1][1].startswith('Elige primero')
     entry.station = dobles.STATIONS[0]
-    page.rgna_guide(entry)
-    from app.rgna_download import RgnaGuideDialog
+    page.network_guide(entry)
+    from app.network_guide import GuideDialog as RgnaGuideDialog
     pump(app, lambda: any(isinstance(w, RgnaGuideDialog) for w in app.winfo_children()))
     dialog = next(w for w in app.winfo_children() if isinstance(w, RgnaGuideDialog))
-    assert 'INEG' in dialog.text and '15:02' in dialog.text
+    assert 'INEG' in dialog.text and '15:02' in dialog.text and dialog.url
     assert not (app.settings.data_dir()/'Temporal').exists() or not any((app.settings.data_dir()/'Temporal').iterdir())
 
 
@@ -217,3 +217,36 @@ def test_points_own_base_and_switch_keeps_kinds_apart(app, tmp_path):
     from app.wizard import errors
     assert errors(page.job.step_issues(0)) == []
     assert page.job.station().official is False
+
+
+def test_updates_in_settings(app, tmp_path, monkeypatch):
+    from app import updates
+    import app.main_window as main_window
+    page = app.show('Ajustes')
+    release = updates.parse_release({'tag_name': 'v99.0.0', 'body': '- Algo nuevo', 'assets': []})
+    page.show_release(release)
+    assert '99.0.0' in page.update_status.cget('text')
+    opened = []
+    monkeypatch.setattr(updates, 'fetch_verified_installer', lambda r, folder, p, c: tmp_path/'instalador.dmg')
+    monkeypatch.setattr(main_window, 'open_in_system', lambda path: opened.append(path))
+    if updates.installer_name(release.version):
+        page.install_release(release)
+        pump(app, lambda: opened)
+        assert opened == [tmp_path/'instalador.dmg'] and 'verificados' in page.update_progress.message.cget('text')
+    page.show_release(updates.parse_release({'tag_name': 'v0.0.1', 'assets': []}))
+    assert 'más reciente' in page.update_status.cget('text')
+    page.check_updates.set(True)
+    page.save()
+    assert app.settings.values.check_updates is True
+
+
+def test_networks_page_lists_network_and_stations(app):
+    page = app.show('Redes y estaciones')
+    pump(app, lambda: page.networks)
+    assert page.networks[0].id == 'rgna' and page.networks[0].frame_text == 'ITRF2008, época 2010'
+    assert len(page.tree.get_children()) == len(dobles.STATIONS)
+    page.query.set('zaca')
+    assert page.tree.get_children() == ('ZAC1',)
+    page.tree.selection_set('ZAC1')
+    app.update()
+    assert 'LEIAR25.R4' in page.detail_text.cget('text')

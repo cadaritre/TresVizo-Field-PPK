@@ -75,6 +75,10 @@ class FakeCore:
     def rgna_catalog(self):
         return list(STATIONS)
 
+    def rgna_catalog_info(self):
+        return {'frame': 'ITRF2008', 'epoch': 2010.0, 'source': SOURCE, 'attribution': 'Doble de prueba.',
+                'license': 'Solo pruebas.'}
+
     def find_station(self, marker):
         return next((s for s in STATIONS if s.id == marker.upper()), None)
 

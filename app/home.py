@@ -34,8 +34,8 @@ class HomePage(ttk.Frame):
         scroll.pack(fill='both', expand=True)
         body = scroll.body
         ttk.Label(body, text='Inicio', style='Title.TLabel').pack(anchor='w')
-        wrap_label(body, 'Posproceso de los receptores MeridianV y MeridianVI ligado a la Red Geodésica Nacional '
-                         'Activa del INEGI. Elige qué quieres hacer o retoma un proyecto.').pack(anchor='w', fill='x',
+        wrap_label(body, 'Posproceso de los receptores MeridianV y MeridianVI ligado a las redes de estaciones de '
+                         'referencia (RGNA del INEGI y otras). Elige qué quieres hacer o retoma un proyecto.').pack(anchor='w', fill='x',
                                                                                                  pady=(4, 18))
         self.notices = ttk.Frame(body)
         self.notices.pack(fill='x')
@@ -44,10 +44,10 @@ class HomePage(ttk.Frame):
         tiles.columnconfigure((0, 1), weight=1, uniform='tiles')
         for column, (name, icon, text) in enumerate([
                 ('Georreferenciar punto', 'map-pin',
-                 'Un punto estático contra una a tres estaciones de la RGNA, con ajuste por mínimos cuadrados e informe '
+                 'Un punto estático contra una a tres estaciones de referencia, con ajuste por mínimos cuadrados e informe '
                  'de línea base.'),
                 ('PPK de puntos', 'route',
-                 'La jornada cinemática del receptor y el CSV de TresVizo Field, con base de la RGNA o propia.')]):
+                 'La jornada cinemática del receptor y el CSV de TresVizo Field, con base de una red o propia.')]):
             frame = ttk.Frame(tiles, style='Card.TFrame', padding=18)
             frame.grid(row=0, column=column, sticky='nsew', padx=(0, 12) if column == 0 else (12, 0))
             app.icons.label(frame, icon, 30, token='primary', background='surface', style='Card.TLabel').pack(

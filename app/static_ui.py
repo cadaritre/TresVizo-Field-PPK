@@ -1,4 +1,4 @@
-"""Georreferenciar punto (§1.1): rover, 1 a 3 estaciones de la RGNA, ajustes, proceso y resultado."""
+"""Georreferenciar punto (§1.1): rover, 1 a 3 estaciones de referencia (de una red CORS), ajustes, proceso y resultado."""
 from __future__ import annotations
 
 from copy import deepcopy
@@ -14,7 +14,7 @@ from app.components import DropZone, FileList, LabeledEntry, card, wrap_label
 from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import MAX_BASES, BaseEntry, StaticJob, classify
-from app.wizard_ui import INEGI_GUIDE, RINEX_TYPES, BasePanel, OptionsPanel, WizardPage, ecef_text
+from app.wizard_ui import NETWORK_GUIDE, RINEX_TYPES, BasePanel, OptionsPanel, WizardPage, ecef_text
 
 RECORDING_TYPES = [('Grabación del receptor o RINEX', '*.bin *.part *.obs *.nav *.rnx *.crx *.??o *.??d *.??n *.Z '
                     '*.gz *.zip'), ('Todos los archivos', '*')]
@@ -91,20 +91,17 @@ class StaticPage(WizardPage):
 
     def build_bases(self, body):
         self.bases_body = body
-        intro, inner = card(body, 'Estaciones de la RGNA', 'Una a tres. Con dos o más, la coordenada sale de un ajuste '
+        intro, inner = card(body, 'Estaciones de referencia', 'Una a tres, de las redes instaladas (Redes y estaciones). '
+                                                               'Con dos o más, la coordenada sale de un ajuste '
                                                            'por mínimos cuadrados y se comprueba cada línea base.')
         intro.pack(fill='x')
-        guide = wrap_label(inner, INEGI_GUIDE, style='Card.Subtitle.TLabel', margin=40)
+        guide = wrap_label(inner, NETWORK_GUIDE, style='Card.Subtitle.TLabel', margin=40)
         guide.pack(fill='x')
         row = ttk.Frame(inner, style='Flat.Card.TFrame')
         row.pack(fill='x', pady=(10, 0))
         self.add_base_button = ttk.Button(row, text='Agregar estación', command=self.add_base)
         self.app.icons.bind(self.add_base_button, 'plus')
         self.add_base_button.pack(side='left')
-        if self.app.backend.available('core', 'download_rgna'):
-            download = ttk.Button(row, text='Descargar de la RGNA…', command=self.download_rgna)
-            self.app.icons.bind(download, 'download')
-            download.pack(side='left', padx=8)
         self.base_panels = ttk.Frame(body)
         self.base_panels.pack(fill='x')
         if not self.job.bases:
@@ -117,7 +114,7 @@ class StaticPage(WizardPage):
         for index, entry in enumerate(self.job.bases):
             remove = (lambda i=index: self.remove_base(i)) if len(self.job.bases) > 1 else None
             BasePanel(self.base_panels, self.app, entry, f'Estación {index+1}', self.changed, remove,
-                      guide=self.rgna_guide).pack(fill='x', pady=(16, 0))
+                      guide=self.network_guide).pack(fill='x', pady=(16, 0))
         self.add_base_button.state(['disabled'] if len(self.job.bases) >= MAX_BASES else ['!disabled'])
         self.app.theme.walk(self.base_panels)
 
@@ -129,21 +126,6 @@ class StaticPage(WizardPage):
 
     def remove_base(self, index):
         del self.job.bases[index]
-        self.render_bases()
-        self.changed()
-
-    def download_rgna(self):
-        from app.rgna_download import RgnaDownloadDialog
-        RgnaDownloadDialog(self.app, self.on_downloaded)
-
-    def on_downloaded(self, station, paths):
-        empty = next((b for b in self.job.bases if not b.files and b.station is None), None)
-        if empty is None:
-            if len(self.job.bases) >= MAX_BASES:
-                return
-            empty = BaseEntry()
-            self.job.bases.append(empty)
-        empty.files, empty.station, empty.name = list(paths), station, station.name
         self.render_bases()
         self.changed()
 

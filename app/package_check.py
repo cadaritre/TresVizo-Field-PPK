@@ -94,7 +94,15 @@ def run_check(report) -> int:
             for name in ('marca.png', 'marca_icono.png', 'icons/LICENSE.txt', 'icons/house.png'):
                 assert (ASSETS/name).is_file(), name
             assert (ROOT/'third_party'/'LICENCIAS.md').is_file(), 'faltan los avisos de terceros'
-            return 'marca, iconos y licencias'
+            # Datos incluidos del motor, los sistemas y el índice firmado.
+            package = ROOT/'tresvizo_ppk'
+            data = {'crs/datos': ('fabrica.json', 'ggm10.mvgeoid', 'ggm25.mvgeoid'),
+                    'datos/incluido': ('datos-index.json',)}
+            for folder, names in data.items():
+                for name in names:
+                    assert (package/folder/name).is_file(), f'falta tresvizo_ppk/{folder}/{name}'
+            counts = {folder: sum(1 for p in (package/folder).rglob('*') if p.is_file()) for folder in data}
+            return f'marca, iconos, licencias y datos incluidos {counts}'
 
         for name, fn in [('interfaz', interface), ('modulos', modules), ('rtklib', tools), ('sistemas', coordinates),
                          ('pdf', pdf), ('graficas', charts), ('recursos', assets)]:

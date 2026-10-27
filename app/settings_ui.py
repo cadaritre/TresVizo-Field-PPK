@@ -79,7 +79,7 @@ class SettingsPage(ttk.Frame):
         ttk.Spinbox(row, from_=0, to=4, textvariable=self.decimals, width=4, state='readonly',
                     command=self.touch).pack(side='left')
         frame, inner = card(body, 'Carpeta de datos', 'Donde se proponen los proyectos nuevos y se guardan las '
-                                                      'descargas (RGNA, efemérides, sistemas y geoides).')
+                                                      'descargas (RINEX de las redes, efemérides, sistemas y geoides).')
         frame.pack(fill='x', pady=(16, 0))
         self.folder = ttk.Label(inner, text=str(app.settings.data_dir()), style='Card.TLabel')
         self.folder.pack(anchor='w')
@@ -103,6 +103,7 @@ class SettingsPage(ttk.Frame):
         self.reduce = tk.BooleanVar(value=v.reduce_motion)
         ttk.Checkbutton(inner, text='Reducir movimiento (sin transiciones)', variable=self.reduce,
                         style='Card.TCheckbutton', command=self.touch).pack(anchor='w', pady=(10, 0))
+        self.build_updates(body)
         frame, inner = card(body, 'Registro de errores', 'Si algo falla, el detalle técnico queda en este equipo '
                                                          'para revisarlo; no se envía.')
         frame.pack(fill='x', pady=(16, 0))
@@ -110,6 +111,109 @@ class SettingsPage(ttk.Frame):
                          command=lambda: self.app.guard(self.open_log))
         app.icons.bind(log, 'folder-open', 16)
         log.pack(anchor='w')
+
+    def build_updates(self, body):
+        from tresvizo_ppk.version import __version__ as installed
+        frame, inner = card(body, 'Actualizaciones', f'Versión instalada: {installed}. Las versiones nuevas se publican '
+                                                     'en github.com/cadaritre/TresVizo-Field-PPK y se instalan solo si '
+                                                     'su firma es válida.')
+        frame.pack(fill='x', pady=(16, 0))
+        self.check_updates = tk.BooleanVar(value=self.app.settings.values.check_updates)
+        ttk.Checkbutton(inner, text='Buscar al abrir el programa (solo consulta GitHub; ninguna otra conexión)',
+                        variable=self.check_updates, style='Card.TCheckbutton', command=self.touch).pack(anchor='w')
+        row = ttk.Frame(inner, style='Flat.Card.TFrame')
+        row.pack(fill='x', pady=(10, 0))
+        self.update_button = ttk.Button(row, text='Buscar actualizaciones', command=self.look_for_updates)
+        self.app.icons.bind(self.update_button, 'refresh-cw')
+        self.update_button.pack(side='left')
+        self.update_status = ttk.Label(row, text='', style='Card.Subtitle.TLabel')
+        self.update_status.pack(side='left', padx=12)
+        self.update_body = ttk.Frame(inner, style='Flat.Card.TFrame')
+        self.update_body.pack(fill='x')
+        self.update_worker = None
+
+    def look_for_updates(self, quiet=False):
+        from app import tasks, updates
+        self.update_button.state(['disabled'])
+        self.update_status.configure(text='Consultando GitHub…')
+
+        def done(release):
+            self.update_button.state(['!disabled'])
+            self.show_release(release)
+
+        def failed(kind, message, detail):
+            self.update_button.state(['!disabled'])
+            self.update_status.configure(text=message)
+            if kind == 'program':
+                self.app.show_error(kind, message, detail)
+        tasks.run(self, lambda p, c: updates.latest_release(), on_done=done, on_error=failed)
+
+    def show_release(self, release):
+        from app import updates
+        for child in self.update_body.winfo_children():
+            child.destroy()
+        if not updates.is_newer(release.version):
+            self.update_status.configure(text=f'Tienes la versión más reciente ({release.version}).')
+            return
+        self.update_status.configure(text=f'Hay una versión nueva: {release.version}.')
+        ttk.Label(self.update_body, text=f'Novedades de {release.name}', style='Card.Strong.TLabel').pack(
+            anchor='w', pady=(12, 4))
+        notes = tk.Text(self.update_body, height=8, wrap='word', padx=10, pady=8, relief='flat', highlightthickness=1)
+        notes.insert('1.0', release.notes or 'La versión no trae notas.')
+        notes.configure(state='disabled')
+        notes.pack(fill='x')
+        row = ttk.Frame(self.update_body, style='Flat.Card.TFrame')
+        row.pack(fill='x', pady=(10, 0))
+        if updates.installer_name(release.version) is None:
+            link = ttk.Button(row, text='Abrir la página de versiones', command=lambda: self.open_page(release.page))
+            self.app.icons.bind(link, 'external-link')
+            link.pack(side='left')
+        else:
+            install = ttk.Button(row, text='Bajar e instalar', style='Primary.TButton',
+                                 command=lambda: self.install_release(release))
+            self.app.icons.bind(install, 'download')
+            install.pack(side='left')
+            page = ttk.Button(row, text='Ver en GitHub', style='Card.Link.TButton',
+                              command=lambda: self.open_page(release.page))
+            self.app.icons.bind(page, 'external-link', 16)
+            page.pack(side='left', padx=8)
+        from app.components import ProgressPanel
+        self.update_progress = ProgressPanel(self.update_body, self.app, self.cancel_update)
+        self.app.theme.walk(self.update_body)
+
+    def open_page(self, url):
+        import webbrowser
+        webbrowser.open(url, new=2)
+
+    def cancel_update(self):
+        if self.update_worker:
+            self.update_worker.cancel.set()
+            self.update_progress.cancelling()
+
+    def install_release(self, release):
+        from app import tasks, updates
+        from app.main_window import open_in_system
+        folder = self.app.settings.downloads_dir()/'Actualizaciones'
+        self.update_progress.pack(fill='x', pady=(12, 0))
+        self.update_progress.start('Comprobando la firma de la versión…')
+
+        def done(path):
+            self.update_worker = None
+            self.update_progress.stop('Firma y SHA-256 verificados. Se abre el instalador; cierra el programa para '
+                                      'que termine.')
+            open_in_system(path)
+
+        def failed(kind, message, detail):
+            self.update_worker = None
+            self.update_progress.stop(message)
+            self.app.show_error(kind, message, detail, 'No se instaló la actualización')
+
+        def cancelled(message):
+            self.update_worker = None
+            self.update_progress.stop('Cancelado. No se instaló nada.')
+        self.update_worker = tasks.run(self, lambda p, c: updates.fetch_verified_installer(release, folder, p, c),
+                                       on_progress=self.update_progress.update_progress, on_done=done,
+                                       on_error=failed, on_cancel=cancelled)
 
     def touch(self):
         self.saved.configure(text='Cambios sin guardar.')
@@ -170,7 +274,7 @@ class SettingsPage(ttk.Frame):
         units = next(k for k, u in UNITS.items() if u[0] == self.units.get())
         changes = {key: var.get().strip() for key, var in self.vars.items()}
         changes.update(units=units, decimals=int(self.decimals.get()), theme=self.theme.get(),
-                       reduce_motion=self.reduce.get())
+                       reduce_motion=self.reduce.get(), check_updates=self.check_updates.get())
         if self.new_folder is not None:
             try:
                 self.new_folder.mkdir(parents=True, exist_ok=True)
@@ -223,19 +327,19 @@ class AboutPage(ttk.Frame):
         frame, inner = card(body, 'Qué es')
         frame.pack(fill='x', pady=(20, 0))
         wrap_label(inner, 'Posproceso de oficina para los receptores MeridianV y MeridianVI y la app TresVizo Field, '
-                          'ligado a la Red Geodésica Nacional Activa (RGNA) del INEGI: georreferenciar un punto '
+                          'ligado a las redes de estaciones de referencia (RGNA del INEGI y otras): georreferenciar un punto '
                           'estático contra una a tres estaciones con ajuste por mínimos cuadrados, y PPK de los puntos '
                           'de una jornada. Proceso con RTKLIB-EX (sucesor de demo5). Licencia MIT, código abierto en '
                           'github.com/cadaritre/TresVizo-Field-PPK.', style='Card.TLabel', margin=40).pack(fill='x')
         frame, inner = card(body, 'Privacidad')
         frame.pack(fill='x', pady=(16, 0))
         wrap_label(inner, 'Sin telemetría ni conexiones automáticas. La red solo se usa cuando pides una descarga '
-                          '(RGNA, efemérides precisas, sistemas y geoides) y siempre se dice qué se baja y de dónde.',
+                          '(redes, efemérides precisas, sistemas y geoides, actualizaciones) y siempre se dice qué se baja y de dónde.',
                    style='Card.TLabel', margin=40).pack(fill='x')
         frame, inner = card(body, 'Componentes de terceros', 'RTKLIB-EX (BSD 2), RNXCMP (GSI), PROJ/pyproj (MIT), '
                                                              'numpy, matplotlib, ReportLab, Pillow, pypdfium2/PDFium, '
                                                              'tkinterdnd2/tkdnd, iconos Lucide (ISC), geoides y datos '
-                                                             'de la RGNA del INEGI, registro EPSG.')
+                                                             'y las redes de estaciones (RGNA del INEGI…), registro EPSG.')
         frame.pack(fill='x', pady=(16, 0))
         button = ttk.Button(inner, text='Ver licencias y avisos', command=self.show_licenses)
         app.icons.bind(button, 'file-text')

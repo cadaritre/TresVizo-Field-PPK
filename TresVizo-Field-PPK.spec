@@ -25,6 +25,9 @@ for folder in ('rtklib', 'rnxcmp'):
         if path.is_file():
             datas.append((str(path), f'third_party/{folder}'))
 datas += collect_data_files('tresvizo_ppk', excludes=['**/__pycache__/**'])
+# Explícitos además (la autoprueba comprueba que estén): sistemas y geoides de fábrica e índice firmado incluido.
+for folder in ('crs/datos', 'datos/incluido'):
+    datas.append((str(ROOT/'tresvizo_ppk'/folder), f'tresvizo_ppk/{folder}'))
 binaries = [(str(p), 'bin') for p in TOOLS]
 hiddenimports = ['tresvizo_ppk.core.api', 'tresvizo_ppk.crs.api', 'tresvizo_ppk.report.api', 'tresvizo_ppk.export.api',
                  'app.home', 'app.static_ui', 'app.points_ui', 'app.crs_ui', 'app.stations_ui', 'app.settings_ui']

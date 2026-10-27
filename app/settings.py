@@ -45,6 +45,7 @@ class Preferences:
     geoid_id: str | None = CoordinateChoice.geoid_id
     recents: list[str] = field(default_factory=list)
     last_folder: str = ''
+    check_updates: bool = False             # buscar actualizaciones al abrir (solo si el usuario lo activa)
 
 
 def validate(p: Preferences) -> Preferences:

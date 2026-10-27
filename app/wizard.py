@@ -100,7 +100,7 @@ GRS80_F = 1/298.257222101
 
 
 def geodetic_to_ecef(lat_deg: float, lon_deg: float, h: float) -> tuple[float, float, float]:
-    """Elipsoide GRS80 (el de ITRF2008 y de la RGNA)."""
+    """Elipsoide GRS80 (el de los marcos ITRF y SIRGAS de las redes CORS)."""
     e2 = GRS80_F*(2-GRS80_F)
     lat, lon = math.radians(lat_deg), math.radians(lon_deg)
     n = GRS80_A/math.sqrt(1-e2*math.sin(lat)**2)
@@ -162,7 +162,7 @@ def options_issues(options: ProcessingOptions, precise_download: bool) -> list[I
     if not options.constellations:
         found.append(Issue('constellations', 'Elige al menos una constelación.'))
     elif 'GPS' not in options.constellations:
-        found.append(Issue('constellations', 'Sin GPS quedan menos satélites comunes con las estaciones de la RGNA.',
+        found.append(Issue('constellations', 'Sin GPS quedan menos satélites comunes con las estaciones de referencia.',
                            'warning'))
     if options.ephemeris is Ephemeris.PRECISE and not options.precise_files and not precise_download:
         found.append(Issue('ephemeris', 'Agrega los archivos SP3/CLK o marca «Descargar efemérides precisas».'))
@@ -211,7 +211,7 @@ class StaticJob:
     precise_download: bool = False
     number: str = ''                         # número o clave del proyecto (sale en el informe)
 
-    STEPS = ('Rover', 'Estaciones RGNA', 'Ajustes', 'Proceso', 'Resultado')
+    STEPS = ('Rover', 'Estaciones de referencia', 'Ajustes', 'Proceso', 'Resultado')
 
     def step_issues(self, step: int) -> list[Issue]:
         if step == 0:
@@ -229,7 +229,7 @@ class StaticJob:
         if step == 1:
             found = []
             if not self.bases:
-                return [Issue('bases', 'Agrega al menos una estación de la RGNA (hasta tres).')]
+                return [Issue('bases', 'Agrega al menos una estación de referencia (hasta tres).')]
             if len(self.bases) > MAX_BASES:
                 found.append(Issue('bases', f'Usa como máximo {MAX_BASES} estaciones.'))
             seen = set()
@@ -237,7 +237,7 @@ class StaticJob:
                 key = f'base{index}'
                 found += _files_issues(key, base.files, 'los RINEX de la estación', BASE_KINDS)
                 if base.station is None:
-                    found.append(Issue(key, 'Elige la estación del catálogo de la RGNA (no se reconoció por el nombre '
+                    found.append(Issue(key, 'Elige la estación de las redes instaladas (no se reconoció por el nombre '
                                             'del archivo).'))
                 else:
                     if base.station.id in seen:
@@ -339,7 +339,7 @@ class PointsJob:
             if self.base_kind == 'rgna':
                 found = _files_issues('base', self.base.files, 'los RINEX de la estación', BASE_KINDS)
                 if self.base.station is None:
-                    found.append(Issue('base', 'Elige la estación del catálogo de la RGNA.'))
+                    found.append(Issue('base', 'Elige la estación de referencia de las redes instaladas.'))
                 return found
             found = _files_issues('base', self.base.files, 'la grabación de la base o su RINEX', ROVER_KINDS)
             found += _name_issues('own_name', self.own_name, 'de la base')
@@ -357,8 +357,8 @@ class PointsJob:
                         'Escribe la coordenada completa de la base (los tres valores).'
                     found.append(Issue('own_coord', message))
                 else:
-                    found.append(Issue('own_coord', 'Coordenada escrita a mano: debe estar en ITRF2008 época 2010.0 '
-                                                    'para ligar el resultado a la RGNA.', 'warning'))
+                    found.append(Issue('own_coord', 'Coordenada escrita a mano: debe estar en el marco y la época '
+                                                    'oficiales de la red para ligar el resultado a ella.', 'warning'))
             return found
         if step == 1:
             found = _files_issues('rover', self.rover_files, 'la grabación cinemática o su RINEX', ROVER_KINDS)

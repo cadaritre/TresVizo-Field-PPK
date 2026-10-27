@@ -28,10 +28,9 @@ IONO = [('auto', 'Automática según la longitud de la línea base (recomendada)
         ('estimated', 'Estimada por satélite')]
 AMBIGUITY = [('fix-and-hold', 'Fijar y mantener (recomendado)'), ('continuous', 'Continua'),
              ('instantaneous', 'Instantánea (época a época)')]
-INEGI_GUIDE = ('Los RINEX de la RGNA se bajan del sitio del INEGI (Red Geodésica Nacional Activa: '
-               'https://www.inegi.org.mx/app/geo2/rgna/). Elige la estación y el día de tu sesión, baja los archivos '
-               'horarios o diarios que la cubran (con una hora de margen) y arrástralos aquí tal como vienen: '
-               'comprimidos, Hatanaka o RINEX 2/3/4. La app los une y los recorta.')
+NETWORK_GUIDE = ('Baja los RINEX de la estación desde la página de su red para el día de tu sesión (con una hora de '
+                 'margen) y arrástralos aquí tal como vienen: horarios o diarios, comprimidos, Hatanaka o RINEX 2/3/4. '
+                 'La app los une y los recorta. «¿Qué archivos bajo?» te dice cuáles pedir.')
 
 
 def station_label(station: Station) -> str:
@@ -46,42 +45,45 @@ def ecef_text(p: Ecef) -> str:
     return f'X {p.x:,.4f}   Y {p.y:,.4f}   Z {p.z:,.4f} m'.replace(',', ' ')
 
 
-# --- Catálogo de la RGNA (compartido) ---------------------------------------------------------------------------------
+# --- Redes de estaciones de referencia (compartido) ----------------------------------------------------------------
 
-def rgna_catalog(app, callback):
-    """Catálogo de estaciones del motor, leído una vez en segundo plano."""
-    if app.catalog_cache is not None:
-        callback(app.catalog_cache)
+def network_catalog(app, callback):
+    """Redes instaladas con sus estaciones (app/networks.py), leídas una vez en segundo plano."""
+    from app import networks
+    if app.networks_cache is not None:
+        callback(app.networks_cache)
         return
-    core = app.backend.core
-    if core is None or not callable(getattr(core, 'rgna_catalog', None)):
+    if app.backend.core is None:
         callback([])
         return
-    waiting = getattr(app, 'catalog_waiting', None)
+    waiting = getattr(app, 'networks_waiting', None)
     if waiting is not None:
         waiting.append(callback)
         return
-    app.catalog_waiting = [callback]
+    app.networks_waiting = [callback]
 
-    def done(stations):
-        app.catalog_cache = list(stations)
-        for cb in app.catalog_waiting:
-            cb(app.catalog_cache)
-        app.catalog_waiting = None
+    def done(found):
+        app.networks_cache = list(found)
+        for cb in app.networks_waiting:
+            cb(app.networks_cache)
+        app.networks_waiting = None
 
     def failed(kind, message, detail):
-        app.catalog_waiting = None
-        app.show_error(kind, message, detail, 'Catálogo de la RGNA')
-    tasks.run(app, lambda p, c: core.rgna_catalog(), on_done=done, on_error=failed)
+        app.networks_waiting = None
+        app.show_error(kind, message, detail, 'Redes de estaciones')
+    tasks.run(app, lambda p, c: networks.load(app.backend.core), on_done=done, on_error=failed)
 
 
 class StationPicker(ttk.Frame):
-    """Estación de la RGNA: se propone por el nombre de los archivos y se puede elegir o corregir."""
+    """Estación de referencia de una red instalada: se propone por el nombre de los archivos y se puede elegir o
+    corregir. Con varias redes, la lista dice la red de cada estación."""
 
     def __init__(self, parent, app, entry: BaseEntry, changed):
         super().__init__(parent, style='Flat.Card.TFrame')
         self.app, self.entry, self.changed = app, entry, changed
         self.stations: list[Station] = []
+        self.networks = []
+        self.labels: dict[str, Station] = {}
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         ttk.Label(self, text='Estación', style='Card.Strong.TLabel').grid(row=0, column=0, sticky='w', pady=(0, 4))
@@ -105,17 +107,29 @@ class StationPicker(ttk.Frame):
         app.icons.bind(self.fix, 'pencil', 16)
         self.fix.grid(row=3, column=0, sticky='w', pady=(4, 0))
         self.show()
-        rgna_catalog(app, self.loaded)
+        network_catalog(app, self.loaded)
 
-    def loaded(self, stations):
+    def label(self, station: Station) -> str:
+        text = station_label(station)
+        if len(self.networks) > 1:
+            from app.networks import network_of
+            network = network_of(self.networks, station)
+            text += f'  ({network.id.upper()})' if network else ''
+        return text
+
+    def loaded(self, networks):
         if not self.winfo_exists():
             return
-        self.stations = sorted(stations, key=lambda s: s.id)
-        self.box.configure(values=[station_label(s) for s in self.stations])
+        self.networks = list(networks)
+        self.stations = sorted((s for n in self.networks for s in n.stations), key=lambda s: s.id)
+        self.labels = {self.label(s): s for s in self.stations}
+        self.box.configure(values=list(self.labels))
         if not self.stations:
-            self.info.configure(text='No se pudo leer el catálogo de la RGNA. ' + (
-                self.app.backend.missing_message('core') if self.app.backend.core is None else ''))
+            self.info.configure(text='No hay redes de estaciones instaladas. ' + (
+                self.app.backend.missing_message('core') if self.app.backend.core is None else
+                'Bájalas en «Redes y estaciones».'))
         self.propose()
+        self.show()
 
     def propose(self):
         """Si aún no hay estación, la propone por la clave del nombre del archivo («chih2990.24d» → CHIH)."""
@@ -140,18 +154,17 @@ class StationPicker(ttk.Frame):
         if event.keysym in ('Up', 'Down', 'Return', 'Escape', 'Tab'):
             return
         query = self.var.get().casefold()
-        self.box.configure(values=[station_label(s) for s in self.stations
-                                   if query in station_label(s).casefold()])
+        self.box.configure(values=[label for label in self.labels if query in label.casefold()])
 
     def pick(self, quiet=False):
         text = self.var.get().strip()
-        if not text or (self.entry.station is not None and text == station_label(self.entry.station)):
+        if not text or (self.entry.station is not None and text == self.label(self.entry.station)):
             return
         key = text.split('·')[0].strip().upper()
-        found = next((s for s in self.stations if s.id.upper() == key or station_label(s) == text), None)
+        found = self.labels.get(text) or next((s for s in self.stations if s.id.upper() == key), None)
         if found is None:
             if not quiet:
-                self.info.configure(text=f'«{text}» no está en el catálogo de la RGNA.')
+                self.info.configure(text=f'«{text}» no está en las redes instaladas.')
             return
         self.entry.station = found
         self.entry.name = found.name
@@ -170,12 +183,15 @@ class StationPicker(ttk.Frame):
             self.info.configure(text='Escribe la clave o el nombre, o elige de la lista.')
             self.fix.state(['disabled'])
             return
-        self.var.set(station_label(s))
+        self.var.set(self.label(s))
+        from app.networks import network_of
+        network = network_of(self.networks, s)
         sigma = (f' · σ E {s.sigma_enu.e*1000:.0f} N {s.sigma_enu.n*1000:.0f} U {s.sigma_enu.u*1000:.0f} mm'
                  if s.sigma_enu else '')
         antenna = ' '.join(x for x in (s.antenna_type, s.radome if s.radome != 'NONE' else '') if x) or 'sin dato'
         origin = 'oficial' if s.official else 'corregida a mano'
-        self.info.configure(text=f'{ecef_text(s.position)} ({s.position.frame} {s.position.epoch:g}, {origin}){sigma}\n'
+        self.info.configure(text=(f'Red: {network.name}\n' if network else '') +
+                            f'{ecef_text(s.position)} ({s.position.frame} {s.position.epoch:g}, {origin}){sigma}\n'
                                  f'Antena: {antenna} · altura {s.antenna_height_m:.4f} m · Fuente: {s.source or "—"}')
         self.fix.state(['!disabled'])
 
@@ -205,7 +221,7 @@ class CoordinateDialog(tk.Toplevel):
         body = ttk.Frame(self, padding=20)
         body.pack(fill='both', expand=True)
         wrap_label(body, f'Coordenada de la estación en {station.position.frame}, época {station.position.epoch:g}. '
-                         'Cámbiala solo si tienes una más reciente del INEGI; el informe dirá que se corrigió y por '
+                         'Cámbiala solo si tienes una más reciente de la red; el informe dirá que se corrigió y por '
                          'qué.').pack(fill='x', pady=(0, 12))
         self.vars = []
         for axis, value in zip('XYZ', (station.position.x, station.position.y, station.position.z)):
@@ -267,13 +283,13 @@ class BasePanel(ttk.Frame):
             remove = ttk.Button(head, text='Quitar estación', style='Card.Link.TButton', command=on_remove)
             app.icons.bind(remove, 'x', 16)
             remove.pack(side='right')
-        if guide is not None and app.backend.available('core', 'rgna_download_guide'):
+        if guide is not None and app.backend.core is not None:
             which = ttk.Button(head, text='¿Qué archivos bajo?', style='Card.Link.TButton',
                                command=lambda: guide(entry))
             app.icons.bind(which, 'download', 16)
             which.pack(side='right', padx=(0, 12))
         self.drop = DropZone(self, app, 'Arrastra aquí los RINEX de la estación',
-                             kinds_hint or 'Como los bajaste del INEGI: horarios o diarios, .Z, .gz, .zip, Hatanaka; '
+                             kinds_hint or 'Como los bajaste de la red: horarios o diarios, .Z, .gz, .zip, Hatanaka; '
                                            'RINEX 2.11, 3 o 4.', self.add, RINEX_TYPES)
         self.drop.pack(fill='x', pady=(12, 8))
         self.files = FileList(self, app, self.set_files)
@@ -355,7 +371,7 @@ class OptionsPanel(ttk.Frame):
         self.precise_files.pack(fill='x')
         self.precise_files.set(o.precise_files)
         frame, body = card(self, 'Sistema de coordenadas del resultado',
-                           'El cálculo siempre se hace en el marco de la RGNA (ITRF2008, época 2010.0); aquí eliges '
+                           'El cálculo se hace en el marco y la época oficiales de la red de las bases; aquí eliges '
                            'cómo se muestra y se exporta.')
         frame.pack(fill='x', pady=(16, 0))
         self.chooser = CoordinateChooser(body, app, job.coordinates, changed=self.apply)
@@ -628,7 +644,7 @@ class WizardPage(ttk.Frame):
             self.worker.cancel.set()
             self.progress.cancelling()
 
-    # --- Guía de descarga de la RGNA ---------------------------------------------------------------------------
+    # --- Guía de descarga de la red ---------------------------------------------------------------------------
 
     def session_window(self, callback):
         """Día y horas UTC de la sesión del rover (se leen de la grabación; la copia temporal se borra)."""
@@ -670,22 +686,31 @@ class WizardPage(ttk.Frame):
                   on_error=lambda kind, message, detail: self.app.show_error(kind, message, detail),
                   on_cancel=lambda m: self.app.set_status(m))
 
-    def rgna_guide(self, entry: BaseEntry):
+    def network_guide(self, entry: BaseEntry):
+        """Qué archivos pedir en la página de la red de la estación para cubrir la sesión."""
+        from app import networks
         if entry.station is None:
-            self.app.show_error('user', 'Elige primero la estación de la RGNA.')
+            self.app.show_error('user', 'Elige primero la estación de referencia.')
             return
         core = self.app.backend.core
 
-        def show(start, end):
-            from app.rgna_download import RgnaGuideDialog
-            try:
-                text = core.rgna_download_guide(entry.station.id, start, end)
-            except Exception as exc:  # noqa: BLE001
-                kind, message = tasks.classify(exc)
-                self.app.show_error(kind, message, repr(exc))
+        def show(found):
+            network = networks.network_of(found, entry.station)
+            if network is None:
+                self.app.show_error('user', f'La estación {entry.station.id} no está en las redes instaladas.')
                 return
-            RgnaGuideDialog(self.app, entry.station, text)
-        self.session_window(show)
+
+            def with_window(start, end):
+                from app.network_guide import GuideDialog
+                try:
+                    text = networks.guide_text(core, network, entry.station.id, start, end)
+                except Exception as exc:  # noqa: BLE001
+                    kind, message = tasks.classify(exc)
+                    self.app.show_error(kind, message, repr(exc))
+                    return
+                GuideDialog(self.app, network, entry.station, text or NETWORK_GUIDE)
+            self.session_window(with_window)
+        network_catalog(self.app, show)
 
     # --- Proyecto -----------------------------------------------------------------------------------------------
 

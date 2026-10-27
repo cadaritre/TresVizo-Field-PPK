@@ -35,5 +35,5 @@ def documents_dir() -> Path:
 
 
 def default_data_dir() -> Path:
-    """Proyectos, descargas de la RGNA y efemérides: a la vista del usuario, no escondidos."""
+    """Proyectos, RINEX de las redes y efemérides: a la vista del usuario, no escondidos."""
     return documents_dir()/APP_NAME

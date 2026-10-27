@@ -46,6 +46,29 @@ toca.
 TresVizo Field PPK, distinta de la de TresVizo Med: **no se cambia nunca**. El ProductCode sale de la versión y la
 arquitectura; los componentes tienen identificadores estables por ruta.
 
+## Actualizaciones de la app (GitHub Releases, firma Ed25519)
+
+En Ajustes → Actualizaciones, «Buscar actualizaciones» consulta la API pública de releases de
+`cadaritre/TresVizo-Field-PPK` (la casilla «Buscar al abrir el programa» viene apagada; ninguna otra conexión). Si hay
+una versión más nueva muestra sus novedades y, con «Bajar e instalar», baja el **manifiesto firmado** de la versión,
+comprueba su firma Ed25519 con la llave pública incluida en la app (`app/updates.py`, `PUBLIC_KEY_HEX`), baja el
+instalador de su sistema (MSI o DMG), comprueba tamaño y SHA-256 contra el manifiesto y solo entonces lo abre. Sin
+firma válida no instala nada y lo dice. En Linux enlaza la página de versiones.
+
+**Llave de publicación (la crea y la guarda el propietario; nunca va al repositorio ni a la CI):**
+
+1. Una sola vez, en el equipo del propietario:
+   `python scripts/firmar_version.py --nueva-llave ~/Llaves/tresvizo-field-ppk-publicacion.key`
+   Crea la llave privada (32 bytes, permisos 600; se niega a escribirla dentro del repo o a sobrescribir una) e
+   imprime la llave pública. Respaldar la privada fuera del equipo: si se pierde, las versiones nuevas no se pueden
+   firmar para las apps instaladas.
+2. Pegar la llave pública en `app/updates.py` (`PUBLIC_KEY_HEX`, hoy vacío: **marcador**) y sacar una versión con
+   ella. Mientras esté vacía, la app avisa de versiones nuevas pero no instala nada.
+3. En cada versión, con los instaladores que armó la CI (y que se probaron):
+   `python scripts/firmar_version.py --llave ~/Llaves/…key dist/release/TresVizo-Field-PPK-<v>-*`
+   Deja `TresVizo-Field-PPK-<v>-manifiesto.json` y `…json.sig` junto a ellos; se suben **todos** al release
+   `v<versión>` de GitHub (etiqueta con «v»).
+
 ## GitHub Actions
 
 `.github/workflows/ci.yml` corre en cada push a `main` y en cada pull request (gratis en el repositorio público):
