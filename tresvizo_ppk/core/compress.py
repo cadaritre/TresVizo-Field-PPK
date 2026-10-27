@@ -143,6 +143,28 @@ def unpack(paths: list[Path], outdir: Path, cancel: threading.Event | None = Non
     return result
 
 
+def unpack_each(paths: list[Path], outdir: Path, cancel: threading.Event | None = None
+                ) -> tuple[list[Path], list[tuple[Path, str]]]:
+    """Como `unpack`, pero un archivo dañado no tumba a los demás: devuelve los archivos finales y los que no se
+    pudieron descomprimir, con el motivo. Lo que dejó a medias un archivo dañado se borra. Sirve para los ZIP
+    horarios de una estación (el INEGI entrega a veces una hora dañada en su servidor): las demás horas se usan y el
+    hueco se avisa."""
+    outdir.mkdir(parents=True, exist_ok=True)
+    result: list[Path] = []
+    failed: list[tuple[Path, str]] = []
+    for path in paths:
+        tools.check(cancel)
+        before = set(outdir.iterdir())
+        try:
+            result.extend(_unpack_one(Path(path), outdir, cancel, depth=0))
+        except UserError as error:
+            for leftover in set(outdir.iterdir()) - before:
+                if leftover.is_file():
+                    leftover.unlink(missing_ok=True)
+            failed.append((Path(path), str(error)))
+    return result, failed
+
+
 def _unpack_one(path: Path, outdir: Path, cancel, depth: int) -> list[Path]:
     if depth > 4:
         raise UserError(f"«{path.name}» tiene demasiados niveles de compresión.")
@@ -196,4 +218,4 @@ def read_text_head(path: Path, size: int = 4096) -> str:
         return handle.read(size).decode("latin-1")
 
 
-__all__ = ["unpack", "lzw_decompress", "is_hatanaka", "crx2rnx", "read_text_head", "io"]
+__all__ = ["unpack", "unpack_each", "lzw_decompress", "is_hatanaka", "crx2rnx", "read_text_head", "io"]

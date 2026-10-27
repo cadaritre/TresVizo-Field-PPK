@@ -22,6 +22,13 @@ from .rinex import (classify, merge_observations, read_header, rinex_time_to_utc
 MAX_POLE_HEIGHT_M = 100.0
 
 
+def _names(names: list[str], limit: int = 4) -> str:
+    """Lista corta de nombres de archivo para un aviso («A, B, C, D y 20 más»)."""
+    if len(names) <= limit:
+        return ", ".join(names)
+    return ", ".join(names[:limit]) + f" y {len(names) - limit} más"
+
+
 def _safe(text: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "_" for c in text)[:40] or "OBS"
 
@@ -53,16 +60,26 @@ def prepare_observations(paths: list[Path], workdir: Path, *, pole_height_m: flo
     warnings: list[str] = []
     step(0.0, "Revisando los archivos…")
     raw_dir = workdir / "entrada"
-    files = compress.unpack(paths, raw_dir, cancel=cancel)
+    files, damaged = compress.unpack_each(paths, raw_dir, cancel=cancel)
+    if damaged and not files:
+        raise UserError(damaged[0][1])
+    for path, why in damaged:
+        # p. ej. un ZIP horario dañado en el servidor del INEGI: se usan las demás horas y se avisa del hueco
+        warnings.append(f"{why} Se dejó fuera: faltan las observaciones de ese archivo (hueco en los datos).")
     kinds = {f: classify(f) for f in files}
     recordings = [f for f, k in kinds.items() if k == "meridian"]
     obs_files = [f for f, k in kinds.items() if k == "obs"]
     nav_files = [f for f, k in kinds.items() if k == "nav"]
     unknown = [f.name for f, k in kinds.items() if k in ("unknown", "met")]
     ignored = [f.name for f, k in kinds.items() if k in ("sp3", "clk")]
-    if unknown:
-        raise UserError("No se reconocen estos archivos (ni RINEX ni grabación del Meridian): " + ", ".join(unknown)
+    if unknown and not (obs_files or recordings):
+        raise UserError("No se reconocen estos archivos (ni RINEX ni grabación del Meridian): " + _names(unknown)
                         + ".")
+    if unknown:
+        # lo que acompaña a las observaciones y no se usa (almanaques como el .26a de los ZIP del INEGI, datos
+        # meteorológicos, notas): se ignora con una nota en vez de rechazar todo el conjunto
+        warnings.append("Se ignoran archivos que no son observación ni navegación (almanaques, datos "
+                        "meteorológicos u otros): " + _names(unknown) + ".")
     if ignored:
         warnings.append("Órbitas o relojes precisos entregados como observación se ignoran aquí ("
                         + ", ".join(ignored) + "); se bajan aparte en «Efemérides precisas».")
