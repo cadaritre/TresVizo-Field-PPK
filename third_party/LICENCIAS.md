@@ -23,3 +23,18 @@ Los avisos completos van en cada carpeta y en el instalador.
 | reportlab | BSD 3 cláusulas | informes PDF |
 | pypdf (solo pruebas) | BSD 3 cláusulas | leer el texto de los informes en las pruebas |
 | pytest (solo pruebas) | MIT | pruebas |
+
+## Interfaz y distribución
+
+| Componente | Versión | Licencia | Dónde | Para qué |
+| --- | --- | --- | --- | --- |
+| Iconos Lucide (Lucide Icons y colaboradores) | 1.61.0 | ISC | `assets/icons/` (con `LICENSE.txt` y `FUENTE.txt`) | iconos de la navegación y las acciones |
+| Sistema visual de TresVizo Med (tokens, contraste, estilos, instalador MSI) | — | MIT, del mismo propietario | `app/themes.py`, `app/ui_theme.py`, `scripts/generate_msi.py`, `scripts/installer/Product.wxs` | misma familia visual y mismo instalador |
+| Pillow | 13.0.0 | MIT-CMU (HPND) | dependencia | iconos, logo y vista previa |
+| tkinterdnd2 (con tkdnd 2.10) | 0.7.0 | MIT (tkdnd: BSD) | dependencia | arrastrar y soltar archivos |
+| pypdfium2 (con PDFium) | 5.14.0 | Apache 2.0 o BSD 3 cláusulas (PDFium: BSD 3 cláusulas y Apache 2.0) | dependencia | vista previa del informe |
+| PyInstaller (solo para armar) | 6.22.3 | GPL 2.0 con excepción del cargador: permite distribuir programas armados con él bajo cualquier licencia | `requirements-build.txt` | el ejecutable de Windows y la app de macOS |
+| WiX Toolset (solo para armar, Windows) | 4.0.6 | MS-RL; se incluye su licencia y el enlace a la fuente en el MSI | `scripts/installer/WiX-LICENSE.txt` | instalador MSI |
+
+Los avisos completos de cada dependencia incluida se copian en la carpeta `licencias/` del programa instalado
+(`scripts/distribuir.py`).

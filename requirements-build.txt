@@ -1,0 +1,3 @@
+# Solo para armar los instaladores (scripts/distribuir.py). Licencias en third_party/LICENCIAS.md.
+pyinstaller==6.22.3
+pyinstaller-hooks-contrib==2026.9

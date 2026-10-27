@@ -1,0 +1,90 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+  <!-- Adaptado del instalador de TresVizo Med (MIT). UpgradeCode propio de TresVizo Field PPK. -->
+  <Package Name="$(var.ProductName)" Manufacturer="TresVizo" Version="$(var.Version)"
+           UpgradeCode="$(var.UpgradeCode)" ProductCode="$(var.ProductCode)"
+           Language="3082" Codepage="1252" Scope="perUser" InstallerVersion="500">
+    <SummaryInformation Description="Instalador de $(var.ProductName)" />
+    <MajorUpgrade DowngradeErrorMessage="Ya hay una versión más reciente de TresVizo Field PPK. Usa un instalador de una versión superior."
+                  Schedule="afterInstallExecute" />
+    <Upgrade Id="$(var.UpgradeCode)">
+      <UpgradeVersion Minimum="$(var.Version)" Maximum="$(var.Version)" IncludeMinimum="yes" IncludeMaximum="yes"
+                      OnlyDetect="yes" Property="SAMEVERSIONFOUND" />
+    </Upgrade>
+    <Launch Condition="Installed OR NOT SAMEVERSIONFOUND" Message="Esta versión ya está instalada. Usa el MSI de la misma arquitectura para reparar o una versión superior para actualizar." />
+    <Property Id="WINDOWSBUILD">
+      <RegistrySearch Id="WindowsBuild" Root="HKLM" Key="SOFTWARE\Microsoft\Windows NT\CurrentVersion" Name="CurrentBuildNumber" Type="raw" Bitness="always32" />
+    </Property>
+    <Launch Condition="Installed OR (VersionNT &gt;= 603 AND WINDOWSBUILD &gt;= 10240)" Message="Este paquete requiere Windows 10 o posterior." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/cadaritre/TresVizo-Field-PPK" />
+    <Property Id="MSIRESTARTMANAGERCONTROL" Value="DisableShutdown" />
+    <Property Id="REBOOT" Value="ReallySuppress" />
+    <Property Id="INSTALLFOLDER" Secure="yes">
+      <RegistrySearch Id="SavedInstallFolder" Root="HKCU" Key="$(var.RegistryKey)" Name="InstallFolder" Type="raw" Bitness="always32" />
+    </Property>
+    <Property Id="INSTALLEDARCH">
+      <RegistrySearch Id="InstalledArchitecture" Root="HKCU" Key="$(var.RegistryKey)" Name="Architecture" Type="raw" Bitness="always32" />
+    </Property>
+    <Launch Condition="Installed OR NOT INSTALLEDARCH OR INSTALLEDARCH = &quot;$(var.Architecture)&quot;" Message="Usa el instalador de la misma arquitectura que la versión instalada. Para cambiar de arquitectura, desinstala primero la aplicación; tus proyectos se conservan." />
+    <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="$(var.InstallName)" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuFolder" Name="$(var.ProductName)">
+        <Component Id="Shortcuts" Guid="$(var.ShortcutsGuid)" Bitness="always32">
+          <Shortcut Id="MenuShortcut" Name="$(var.ProductName)" Target="[INSTALLFOLDER]$(var.ExeName)" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon">
+            <ShortcutProperty Key="System.AppUserModel.ID" Value="TresVizo.FieldPPK.Desktop" />
+          </Shortcut>
+          <Shortcut Id="DesktopShortcut" Directory="DesktopFolder" Name="$(var.ProductName)" Target="[INSTALLFOLDER]$(var.ExeName)" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon">
+            <ShortcutProperty Key="System.AppUserModel.ID" Value="TresVizo.FieldPPK.Desktop" />
+          </Shortcut>
+          <Shortcut Id="UninstallShortcut" Name="Desinstalar $(var.ProductName)"
+                    Target="[SystemFolder]msiexec.exe" Arguments="/x [ProductCode]"
+                    Description="Desinstalar la aplicación conservando los proyectos" Icon="AppIcon" />
+          <RemoveFolder Id="RemoveMenu" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="$(var.RegistryKey)" Name="Shortcuts" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="InstallationSettings" Guid="$(var.SettingsGuid)" Bitness="always32">
+        <RegistryValue Root="HKCU" Key="$(var.RegistryKey)" Name="InstallFolder" Type="string" Value="[INSTALLFOLDER]" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="$(var.RegistryKey)" Name="Version" Type="string" Value="[ProductVersion]" />
+        <RegistryValue Root="HKCU" Key="$(var.RegistryKey)" Name="Architecture" Type="string" Value="$(var.Architecture)" />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+      </Component>
+      <!-- Doble clic en un proyecto .tvppk lo abre en TresVizo Field PPK (solo para esta cuenta). -->
+      <Component Id="ProjectAssociation" Guid="$(var.AssociationGuid)" Bitness="always32">
+        <RegistryValue Root="HKCU" Key="Software\Classes\.tvppk" Type="string" Value="TresVizo.FieldPPK.Proyecto" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\TresVizo.FieldPPK.Proyecto" Type="string" Value="Proyecto de TresVizo Field PPK" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\TresVizo.FieldPPK.Proyecto\DefaultIcon" Type="string" Value="&quot;[INSTALLFOLDER]$(var.ExeName)&quot;,0" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\TresVizo.FieldPPK.Proyecto\shell\open\command" Type="string" Value="&quot;[INSTALLFOLDER]$(var.ExeName)&quot; &quot;%1&quot;" />
+      </Component>
+    </DirectoryRef>
+    <util:CloseApplication Id="DetectRunningApp" Target="$(var.ExeName)" Property="APP_RUNNING"
+                           CloseMessage="no" EndSessionMessage="no" ElevatedCloseMessage="no"
+                           ElevatedEndSessionMessage="no" RebootPrompt="no" Timeout="1" />
+    <CustomAction Id="RequireClosedApp" Error="Guarda tu trabajo y cierra TresVizo Field PPK antes de instalar, actualizar o desinstalar. La aplicación sigue abierta y no se ha modificado." />
+    <InstallExecuteSequence>
+      <Custom Action="Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Before="InstallValidate" Condition="VersionNT &gt; 400" />
+      <Custom Action="RequireClosedApp" After="Wix4CloseApplications_$(sys.BUILDARCHSHORT)" Condition="APP_RUNNING" />
+    </InstallExecuteSequence>
+    <Feature Id="MainFeature" Title="TresVizo Field PPK" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="Shortcuts" />
+      <ComponentRef Id="InstallationSettings" />
+      <ComponentRef Id="ProjectAssociation" />
+    </Feature>
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.DialogBmp)" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.BannerBmp)" />
+    <ui:WixUI Id="WixUI_Minimal" />
+  </Package>
+</Wix>

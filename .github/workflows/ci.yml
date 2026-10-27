@@ -1,0 +1,85 @@
+# Pruebas en Windows, macOS y Linux, e instaladores (MSI de Windows y DMG de macOS) como artefactos.
+# Gratis en un repositorio público. Sin secretos: los instaladores salen sin firma (ver docs/distribucion.md).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pruebas:
+    name: Pruebas (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-14]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Dependencias
+        run: python -m pip install -r requirements.txt
+      - name: Paquetes del sistema para Tk sin pantalla (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb libxcb-cursor0
+      - name: RTKLIB (rnx2rtkp, convbin) y crx2rnx
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then python scripts/build_rtklib.py --cc gcc; else python scripts/build_rtklib.py; fi
+      - name: Pruebas
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a python -m pytest -q; else python -m pytest -q; fi
+
+  instaladores:
+    name: Instalador (${{ matrix.name }})
+    needs: pruebas
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {name: Windows x64, os: windows-2022}
+          - {name: macOS arm64, os: macos-14}
+          - {name: macOS x86_64, os: macos-13}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Dependencias
+        run: python -m pip install -r requirements.txt -r requirements-build.txt
+      - name: WiX 4.0.6 (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          dotnet tool install --global wix --version 4.0.6
+          wix extension add WixToolset.UI.wixext/4.0.6
+          wix extension add WixToolset.Util.wixext/4.0.6
+      - name: RTKLIB
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then python scripts/build_rtklib.py --cc gcc; else python scripts/build_rtklib.py; fi
+      - name: Programa, autoprueba e instalador
+        run: python scripts/distribuir.py --skip-tests --skip-rtklib
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TresVizo-Field-PPK-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/installer/*
+          if-no-files-found: error
+          retention-days: 30
