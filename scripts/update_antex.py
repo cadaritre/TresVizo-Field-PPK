@@ -2,7 +2,8 @@
 
 Del ANTEX oficial de la IGS (igs20_WWWW.atx, https://files.igs.org/pub/station/general/) se conservan, sin tocar
 una sola línea: la cabecera, **todas las antenas de satélite** (necesarias con órbitas precisas) y las antenas de
-receptor de las estaciones de la RGNA (todas las variantes de radomo de cada tipo del catálogo `rgna.json`). El
+receptor de las estaciones de las redes incluidas (todas las variantes de radomo de cada tipo de antena de los
+paquetes de `data/redes/`; hoy, la RGNA). El
 archivo completo pesa 60 MB; este, menos de 1 MB comprimido.
 
 Uso:  python scripts/update_antex.py RUTA/igs20_WWWW.atx [--extra "TIPO" ...]
@@ -43,8 +44,10 @@ def main() -> int:
     raw = args.antex.read_bytes()
     text = raw.decode("latin-1")
     header, blocks = split(text)
-    catalog = json.loads((DATA / "rgna.json").read_text(encoding="utf-8"))
-    keep_types = {s["antenna_type"].upper() for s in catalog["stations"]} | {e.upper() for e in args.extra}
+    keep_types = {e.upper() for e in args.extra}
+    for package in sorted((DATA / "redes").glob("*.json")):
+        data = json.loads(package.read_text(encoding="utf-8"))
+        keep_types |= {s.get("antennaType", "").upper() for s in data["stations"] if s.get("antennaType")}
     kept = []
     for block in blocks:
         ant, serial = antenna_type(block)
@@ -57,7 +60,7 @@ def main() -> int:
     m = re.search(r"igs20_(\d{4})", args.antex.name)
     week = m.group(1) if m else "XXXX"
     note = (f"Subconjunto de {args.antex.name} (SHA-256 {hashlib.sha256(raw).hexdigest()}) hecho por "
-            f"scripts/update_antex.py: satélites y antenas de la RGNA.")
+            f"scripts/update_antex.py: satélites y antenas de las redes incluidas.")
     comments = "".join(f"{note[k:k + 60]:<60}COMMENT\n" for k in range(0, len(note), 60))
     out_dir = DATA / "antex"
     out_dir.mkdir(parents=True, exist_ok=True)

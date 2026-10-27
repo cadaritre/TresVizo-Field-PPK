@@ -1,16 +1,18 @@
 # Datos que viajan con el motor
 
-## `rgna.json` — catálogo de estaciones de la RGNA
+## `redes/rgna-inegi.json` — paquete de red CORS de la RGNA (formato: docs/formato-red-cors.md)
 
 - **Fuente:** INEGI, «Coordenadas Geodésicas de las Estaciones de la RGNA»
   (https://www.inegi.org.mx/app/geo2/coordenadasGeoRGNA/): latitud, longitud y altura geodésica de la placa en
   ITRF2008, época 2010.0 (elipsoide GRS80), altura vertical de la antena (placa → base de la antena), receptor,
-  antena del fabricante y su nombre del NGS. Corte del INEGI: el que dice el campo `source_cutoff`.
+  antena del fabricante y su nombre del NGS. Corte del INEGI: el de `source.cutoff`.
 - **Licencia:** Términos de Libre Uso de la Información del INEGI (https://www.inegi.org.mx/inegi/terminos.html):
   uso y redistribución, también comercial, con la atribución «Fuente: INEGI, Coordenadas Geodésicas de las
   Estaciones de la RGNA», que el programa pone en el informe. Transformación propia (se dice como piden los
-  términos): cartesianas calculadas de las geodésicas, nombre de antena sin espacios, radomo «NONE» supuesto.
-- **Regenerar:** `python scripts/update_rgna.py` (lo corre quien mantiene el programa; la app no se conecta).
+  términos): cartesianas calculadas de las geodésicas, nombre de antena sin espacios, radomo «NONE» supuesto, y
+  avisos por estación (COL2, del INEGI; INEG, de la validación del motor).
+- **Regenerar:** `python scripts/red_rgna_inegi.py` (lo corre quien mantiene los datos; la app no se conecta). Es
+  el mismo archivo que se publica como paquete `cors-network` en el índice firmado.
 
 ## `antex/igs20_WWWW_tvppk.atx.gz` — modelos de antena
 
