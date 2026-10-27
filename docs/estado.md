@@ -148,6 +148,12 @@
   Med, todas las secciones de §5 y las gráficas de RTKLIB (`.pos` y `.stat`); el marco y la época del resultado son
   los de la coordenada de la base (su red), no fijos. Pruebas con resultados sintéticos (estaciones PRB1–PRB3, que no
   son de la RGNA) que leen el texto con pypdf; revisión visual de las páginas.
+- Normas técnicas del INEGI (`report/normas.py`, 27-10-2026), leídas en su texto del DOF del 23-12-2010: CEP95 (NT EEP
+  art. 6), EPV elipsoidal (art. 7) y de la cota (art. 12), orden de exactitud por punto (art. 8, tabla 1) y la última
+  página con la declaración y el bloque de firma. La declaración solo sale con todas las bases de la RGNA en su
+  coordenada oficial, resultado en ITRF2008 época 2010.0 (NT SGN arts. 10 y 12) y, si hay cota, el geoide vigente del
+  INEGI (NT SGN art. 15, fr. III); si no, una línea dice por qué, y con otra red va una declaración neutra
+  (`tests/test_report_normas.py`, valores a mano con σE ≠ σN y bordes de los 15 órdenes).
 - Exportar (`tresvizo_ppk/export/`): CSV de TresVizo Field (el escritor reproduce byte a byte `csv_referencia_todas.csv`
   de las apps), CSV simple, GeoJSON y KML. 41 pruebas en `test_crs.py`, `test_report.py` y `test_export.py`.
 
@@ -164,3 +170,12 @@
 - El paquete de PyInstaller tiene que llevar `tresvizo_ppk/crs/datos/`, `tresvizo_ppk/datos/incluido/` y
   `assets/marca.png` (el informe la busca también en `sys._MEIPASS`).
 - El formato del paquete `cors-network` lo define el motor: aquí solo se comprueba que sea JSON con el mismo id.
+- Normas del INEGI, sin confirmar: (1) la vigencia: la ficha del SNIEG de la NT EEP dice «Modificaciones: ninguna» y el
+  comité de información geográfica básica la dio por vigente en 2024; no se revisó el DOF de 2025–2026. (2) «El modelo
+  geoidal vigente» (NT SGN art. 15, fr. III) se toma como GGM25 porque la ficha de GGM10 lo marca histórico; GGM25 es
+  compatible con NAPGD2022 (W₀) y el mismo art. 15 fija NAVD88 como nivel de referencia: confirmarlo con el INEGI.
+  (3) La σN es la «precisión declarada» de la ficha del geoide (0.10 m GGM25, 0.20 m GGM10); no está confirmado que
+  el INEGI la publique como 1σ. (4) El art. 12 de la NT EEP pide circuitos cerrados con ajuste para la nivelación
+  GNSS: el informe da la EPV de cada punto y no los comprueba (lo dice).
+- El lugar de la firma (`Project.place`) se guarda en el proyecto pero el asistente todavía no lo pide: el informe
+  deja la raya para escribirlo a mano.
