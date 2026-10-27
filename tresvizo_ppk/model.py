@@ -356,6 +356,7 @@ class Project:
     kind: str = "static"                       # «static» o «points»
     name: str = ""
     number: str = ""                           # número o clave del proyecto que da el usuario (sale en el informe)
+    place: str = ""                            # lugar de la firma del informe («Aguascalientes, Ags.»); vacío: a mano
     folder: Path | None = None
     inputs: dict[str, list[str]] = field(default_factory=dict)   # rutas relativas por papel («rover», «base:CHIH»…)
     hashes: dict[str, str] = field(default_factory=dict)         # ruta relativa → SHA-256
