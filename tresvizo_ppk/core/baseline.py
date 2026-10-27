@@ -187,19 +187,9 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
     notes.append(rover_choice.note)
     if rover_choice.model is None and rover.receiver_model:
         warnings.append("PCO de la antena del rover sin medir: se procesa sin modelo de centro de fase.")
-    base_type = base.antenna_type or station.antenna_type
-    base_radome = (base.radome or station.radome or "NONE") if base.antenna_type else (station.radome or "NONE")
-    if base.antenna_type and station.antenna_type and \
-            base.antenna_type.replace(" ", "").upper() != station.antenna_type.replace(" ", "").upper():
-        warnings.append(f"La antena del RINEX de {station.id} ({base.antenna_type}) no es la del catálogo "
-                        f"({station.antenna_type}): se usa la del RINEX.")
+    base_type, base_radome, base_h = base_antenna(station, base, warnings)
     base_choice = antex.choose(base_type, base_radome, f"Base {station.id}")
     notes.append(base_choice.note)
-    base_h = base.antenna_height_m if base.antenna_height_m else station.antenna_height_m
-    if base.antenna_height_m and station.antenna_height_m and abs(base.antenna_height_m -
-                                                                  station.antenna_height_m) > 0.002:
-        warnings.append(f"Altura de antena de {station.id}: el RINEX dice {base.antenna_height_m:.4f} m y el "
-                        f"catálogo {station.antenna_height_m:.4f} m; se usa la del RINEX (la de esos datos).")
     rover_h = rover.antenna_height_m if rover_antenna_delta_u is None else rover_antenna_delta_u
     rover_setup = rtklib.AntennaSetup(rover_choice.rtklib_name, (0.0, 0.0, rover_h))
     base_setup = rtklib.AntennaSetup(base_choice.rtklib_name, (0.0, 0.0, base_h))
@@ -280,6 +270,25 @@ def _agreement(fixed_run: "RunResult", float_run: "RunResult", base_xyz: np.ndar
     ok = dh <= tol_h and abs(d[2]) <= tol_v
     return ok, (f"diferencia {dh * 100:.1f} cm en horizontal y {d[2] * 100:+.1f} cm en vertical "
                 f"(tolerancia {tol_h * 100:.1f} / {tol_v * 100:.1f} cm)")
+
+
+def base_antenna(station: Station, base: ObservationSet, warnings: list[str]) -> tuple[str, str, float]:
+    """Antena, radomo y altura (marca → ARP) de la base. Estación de una red: los del catálogo (gana el catálogo y
+    se avisa si el RINEX dice otra cosa). Base propia: los de sus observaciones (o los de la Station si faltan)."""
+    if station.network and station.official:
+        if base.antenna_type and station.antenna_type and \
+                base.antenna_type.replace(" ", "").upper() != station.antenna_type.replace(" ", "").upper():
+            warnings.append(f"La antena del RINEX de {station.id} ({base.antenna_type}) no es la del catálogo "
+                            f"({station.antenna_type}): se usa la del catálogo.")
+        if base.antenna_height_m and abs(base.antenna_height_m - station.antenna_height_m) > 0.0005:
+            warnings.append(f"Altura de antena de {station.id}: los datos dicen {base.antenna_height_m:.4f} m y el "
+                            f"catálogo {station.antenna_height_m:.4f} m; se usa la del catálogo.")
+        return (station.antenna_type or base.antenna_type, station.radome or "NONE" if station.antenna_type
+                else base.radome or "NONE", station.antenna_height_m)
+    kind = base.antenna_type or station.antenna_type
+    dome = (base.radome or "NONE") if base.antenna_type else (station.radome or "NONE")
+    height = base.antenna_height_m if base.antenna_height_m else station.antenna_height_m
+    return kind, dome, height
 
 
 def _kinematic_ar(options: ProcessingOptions) -> str:

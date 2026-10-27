@@ -19,7 +19,7 @@ from ..errors import UserError
 from ..model import (Ecef, Enu, Ephemeris, FieldPoint, ObservationSet, PointsResult, ProcessedPoint,
                      ProcessingOptions, Solution, Station)
 from . import antex, networks, quality, rtklib, tools
-from .baseline import Q_TO_SOLUTION, approx_position, strategies
+from .baseline import Q_TO_SOLUTION, approx_position, base_antenna, strategies
 from .geodesy import (covariance_ecef_to_enu, ecef_delta_to_enu, ecef_to_geodetic, enu_rotation, gps_to_utc,
                       utc_to_gps)
 from .observations import trim
@@ -54,6 +54,8 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
     rover_quality = quality.assess(rover, cancel=cancel)
     warnings.extend(f"Rover: {w}" for w in rover_quality.warnings)
     warnings.extend(f"Base {station.id}: {note}" for note in networks.station_notes(station))
+    if station.approximate:
+        warnings.append(f"Base {station.id}: {station.source}.")
     warnings.extend(quality.overlap_warnings(rover, base_obs, station.id))
     base_trim = trim(base_obs, rover.start, rover.end, workdir / "base", cancel=cancel)
     base_quality = quality.assess(base_trim, cancel=cancel)
@@ -68,12 +70,11 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
 
     # Antenas: el rover se procesa en su ARP (altura 0) y cada punto se baja con su propia altura.
     rover_choice = antex.choose(rover.antenna_type, rover.radome or "NONE", "Rover")
-    base_choice = antex.choose(base_trim.antenna_type or station.antenna_type,
-                               base_trim.radome or station.radome or "NONE", f"Base {station.id}")
+    base_type, base_radome, base_h = base_antenna(station, base_trim, warnings)
+    base_choice = antex.choose(base_type, base_radome, f"Base {station.id}")
     log += [rover_choice.note, base_choice.note]
     if rover_choice.model is None and rover.receiver_model:
         warnings.append("PCO de la antena del rover sin medir: se procesa sin modelo de centro de fase.")
-    base_h = base_trim.antenna_height_m or station.antenna_height_m
     base_xyz = np.array([station.position.x, station.position.y, station.position.z])
     antex_path = antex.ensure_antex(workdir)
     approx = approx_position(rover, nav, workdir, cancel=cancel, log=log)

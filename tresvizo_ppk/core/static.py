@@ -60,6 +60,8 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
         span = 0.9 / n
         step(frac0, f"Base {sid}: preparando…")
         warnings.extend(f"Base {sid}: {note}" for note in networks.station_notes(station))
+        if station.approximate:
+            warnings.append(f"Base {sid}: {station.source}.")
         warnings.extend(quality.overlap_warnings(rover, base_obs, sid))
         base_trim = trim(base_obs, rover.start, rover.end, workdir / sid, cancel=cancel)
         q = quality.assess(base_trim, cancel=cancel)

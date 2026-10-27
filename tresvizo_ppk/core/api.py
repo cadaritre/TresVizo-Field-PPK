@@ -16,7 +16,7 @@ from pathlib import Path
 
 from ..model import (DataQuality, FieldPoint, ObservationSet, PointsResult, ProcessingOptions, StaticResult,
                      Station)
-from . import field_csv, networks, observations, points, precise, quality, static, tools
+from . import basecoord, field_csv, networks, observations, points, precise, quality, static, tools
 
 Progress = tools.Progress
 
@@ -56,6 +56,22 @@ def find_station(marker: str, network_id: str | None = None) -> Station | None:
 
 def nearest_stations(position, count: int = 3, network_id: str | None = None):
     return networks.nearest_stations(position, count, network_id)
+
+
+def base_coordinate_candidates(obs: ObservationSet, workdir: Path | None = None, *, autonomous: bool | None = None,
+                               cancel: threading.Event | None = None) -> list[Station]:
+    """Coordenadas posibles de una base, listas para procesar (la primera, por omisión): la oficial si la estación
+    está en una red CORS; si no, la del encabezado RINEX y la media autónoma de la sesión, marcadas aproximadas con su
+    origen (`Station.coordinate_origin`, `approximate`, `source`, `sigma_enu`, marco y época en `position`)."""
+    return basecoord.base_coordinate_candidates(obs, Path(workdir) if workdir else None, autonomous=autonomous,
+                                                cancel=cancel)
+
+
+def manual_base_station(obs: ObservationSet, position, *, name: str = "", origin: str = "manual", source: str = "",
+                        sigma=None) -> Station:
+    """Base propia con coordenada escrita a mano (con su marco y época en `position`) o encadenada de un proyecto
+    (`origin="project"`)."""
+    return basecoord.manual_station(obs, position, name=name, origin=origin, source=source, sigma=sigma)
 
 
 def can_download_station(station: Station) -> bool:

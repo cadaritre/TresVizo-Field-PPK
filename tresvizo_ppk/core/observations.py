@@ -68,16 +68,40 @@ def prepare_observations(paths: list[Path], workdir: Path, *, pole_height_m: flo
                         + ", ".join(ignored) + "); se bajan aparte en «Efemérides precisas».")
     receiver_model = None
     case_offset = None
+    sources: dict[str, str] = {}
+    session_pole: float | None = None
+    session_name = ""
+    approx_source = ""
+    frame_declared, frame_epoch_declared = "", None
     if recordings:
         if obs_files:
             raise UserError("Entrega o la grabación del receptor o sus RINEX, no las dos cosas.")
         step(0.05, "Convirtiendo la grabación del receptor a RINEX…")
         meta = meridian.inspect(recordings[0])
         height = pole_height_m
-        if height is None and not isinstance(meta.get("pole_height_m"), (int, float)):
-            height = 0.0
-            warnings.append("Sin altura del bastón: la posición se calcula en la base del receptor (asiento de "
-                            "5/8\").")
+        meta_pole = meta.get("pole_height_m")
+        if isinstance(meta_pole, (int, float)) and not isinstance(meta_pole, bool) and meta_pole > 0:
+            session_pole = float(meta_pole)
+        if height is None:
+            if session_pole is not None:
+                height = session_pole
+                sources["pole_height_m"] = "sesión del receptor"
+            else:
+                height = 0.0
+                sources["pole_height_m"] = "sin altura (0)"
+                warnings.append("Sin altura del bastón: la posición se calcula en la base del receptor (asiento de "
+                                "5/8\").")
+        else:
+            sources["pole_height_m"] = "indicada"
+        name = meta.get("session_name") if isinstance(meta.get("session_name"), str) else ""
+        if not marker and name:
+            marker = meridian.safe_name(name)
+            sources["point_name"] = "sesión del receptor"
+        session_name = name or ""
+        if isinstance(meta.get("frame"), str) and meta.get("frame"):
+            frame_declared = meta["frame"]
+            if isinstance(meta.get("frame_epoch"), (int, float)) and meta["frame_epoch"] > 0:
+                frame_epoch_declared = float(meta["frame_epoch"])
         options = meridian.Options(antenna_height_m=height, marker=marker or None, out_dir=workdir / "rinex",
                                    join_segments=True, segments=recordings if len(recordings) > 1 else None)
         (workdir / "rinex").mkdir(parents=True, exist_ok=True)
@@ -94,6 +118,12 @@ def prepare_observations(paths: list[Path], workdir: Path, *, pole_height_m: flo
             nav_files.append(report.nav_path)
         receiver_model = report.model
         case_offset = report.case_offset_m
+        approx_source = {"": ""}.get(report.approx_source, f"grabación del receptor ({report.approx_source})")
+        session_pole = height if sources.get("pole_height_m") != "sin altura (0)" else session_pole
+        for key in ("marker", "receiver", "antenna_type", "radome", "antenna_height_m", "interval_s", "start", "end"):
+            sources[key] = "sesión del receptor"
+        if "point_name" not in sources:
+            sources["point_name"] = "indicado" if options.marker else "sesión del receptor (nombre de la unidad)"
         pole_height_m = None          # ya va en el RINEX (altura + case)
     if not obs_files:
         raise UserError("No hay observaciones: falta el RINEX de observación (o la grabación del receptor).")
@@ -135,13 +165,47 @@ def prepare_observations(paths: list[Path], workdir: Path, *, pole_height_m: flo
     if not nav_unique:
         warnings.append("No hay archivo de navegación de esta estación: se usarán los de la otra estación "
                         "o las órbitas precisas.")
+    for key in ("marker", "receiver", "antenna_type", "radome", "antenna_height_m", "interval_s", "start", "end",
+                "point_name"):
+        sources.setdefault(key, "encabezado RINEX")
+    if delta_h is not None:
+        sources["antenna_height_m"] = "indicada"
+    antenna_type, radome, antenna_height = header.antenna_type, header.radome or "NONE", header.delta_hen[0]
+    catalog = None
+    if not recordings:
+        from .networks import find_station          # estación de una red CORS: su antena y altura oficiales
+        catalog = find_station(header.marker or station_marker)
+    if catalog is not None:
+        label = f"catálogo {catalog.network_name or catalog.network}"
+        diffs = []
+        if catalog.antenna_type and catalog.antenna_type.replace(" ", "").upper() != \
+                (antenna_type or "").replace(" ", "").upper():
+            diffs.append(f"antena {antenna_type or '—'} → {catalog.antenna_type}")
+        if abs(catalog.antenna_height_m - antenna_height) > 0.0005 and delta_h is None:
+            diffs.append(f"altura {antenna_height:.4f} → {catalog.antenna_height_m:.4f} m")
+        if diffs:
+            warnings.append(f"{catalog.id}: el encabezado RINEX no coincide con el {label} ("
+                            + "; ".join(diffs) + "): se usa el catálogo.")
+        if catalog.antenna_type:
+            antenna_type, radome = catalog.antenna_type, catalog.radome or "NONE"
+            sources["antenna_type"] = sources["radome"] = label
+        if delta_h is None:
+            antenna_height = catalog.antenna_height_m
+            sources["antenna_height_m"] = label
+    approx = Ecef(*header.approx_xyz) if header.approx_xyz and any(header.approx_xyz) else None
     obs_set = ObservationSet(
         obs=[out], nav=nav_unique, marker=header.marker or station_marker, receiver=header.receiver_type,
-        antenna_type=header.antenna_type, radome=header.radome or "NONE", antenna_height_m=header.delta_hen[0],
+        antenna_type=antenna_type, radome=radome, antenna_height_m=antenna_height,
         start=rinex_time_to_utc(first_t, header.time_system), end=rinex_time_to_utc(last_t, header.time_system),
         interval_s=interval, rinex_version=f"{header.version:.2f}", source_files=paths,
         approx_position=Ecef(*header.approx_xyz) if header.approx_xyz and any(header.approx_xyz) else None,
-        receiver_model=model or "", case_offset_m=case_offset, epochs=count, warnings=warnings)
+        receiver_model=model or "", case_offset_m=case_offset, epochs=count, warnings=warnings,
+        point_name=session_name or header.marker or station_marker,
+        pole_height_m=session_pole if recordings else (pole_height_m if pole_height_m is not None else
+                                                       (antenna_height - case_offset if model and case_offset
+                                                        is not None else None)),
+        field_sources=sources, approx_position_source=(approx_source or "encabezado RINEX") if approx else "",
+        frame_declared=frame_declared, frame_epoch_declared=frame_epoch_declared)
     if model:
         obs_set.antenna_pco_measured = _pco_measured(header)
     step(1.0, f"{obs_set.marker}: {count} épocas listas.")
@@ -174,7 +238,9 @@ def trim(obs: ObservationSet, start: datetime, end: datetime, workdir: Path, *, 
         rinex_version=obs.rinex_version, source_files=list(obs.source_files),
         antenna_pco_measured=obs.antenna_pco_measured, approx_position=obs.approx_position,
         receiver_model=obs.receiver_model, case_offset_m=obs.case_offset_m, epochs=count,
-        warnings=list(obs.warnings))
+        warnings=list(obs.warnings), point_name=obs.point_name, pole_height_m=obs.pole_height_m,
+        field_sources=dict(obs.field_sources), approx_position_source=obs.approx_position_source,
+        frame_declared=obs.frame_declared, frame_epoch_declared=obs.frame_epoch_declared)
 
 
 def utc(moment: datetime) -> datetime:
