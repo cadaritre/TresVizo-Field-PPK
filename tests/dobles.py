@@ -97,7 +97,7 @@ class FakeCore:
                         source='Aproximada: APPROX POSITION XYZ del encabezado RINEX (unos metros).', official=False,
                         coordinate_origin='rinex-header', approximate=True)]
 
-    def find_station(self, marker):
+    def find_station(self, marker, network_id=None, near=None):
         return next((s for s in STATIONS if s.id == marker.upper()), None)
 
     def prepare_observations(self, paths, workdir, *, pole_height_m=None, marker=None, window=None, progress=None,

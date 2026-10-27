@@ -95,7 +95,7 @@ def base_coordinate_candidates(obs: ObservationSet, workdir: Path | None = None,
 
     `autonomous`: calcular también la media autónoma (None: solo si el encabezado no trae posición). Necesita
     `workdir` y el archivo de navegación."""
-    official = networks.find_station(obs.marker)
+    official = networks.find_station(obs.marker, near=obs.approx_position)
     if official is not None:
         return [official]
     candidates: list[Station] = []

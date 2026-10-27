@@ -91,7 +91,7 @@ def _station_for(obs, args_coord: str | None, args_id: str | None, height: float
                        if frame else Ecef(x, y, z), antenna_type=obs.antenna_type, radome=obs.radome or "NONE",
                        antenna_height_m=height if height is not None else obs.antenna_height_m,
                        receiver=obs.receiver, source="manual", official=False)
-    station = api.find_station(args_id or obs.marker)
+    station = api.find_station(args_id or obs.marker, near=obs.approx_position)
     if station is not None:
         return station
     # base propia sin coordenada escrita: la del encabezado RINEX o la media autónoma (aproximadas, se avisa)

@@ -198,16 +198,31 @@ def station_catalog(network_id: str | None = None) -> list[Station]:
     return out
 
 
-def find_station(marker: str, network_id: str | None = None) -> Station | None:
-    """Estación por el nombre del marcador del RINEX («UGTO00MEX» → UGTO; la clave larga de 9 caracteres
-    también). Si la clave está en varias redes, la primera en orden de nombre de red."""
+# La posición del encabezado RINEX es aproximada (a veces la autónoma del receptor, metros), pero una estación de otra
+# red con la misma clave queda a cientos o miles de km: MELI es Lincoln (Maine) en la NOAA y Melilla en la del IGN.
+SAME_STATION_M = 5_000.0
+
+
+def find_station(marker: str, network_id: str | None = None, near: Ecef | None = None) -> Station | None:
+    """Estación por el nombre del marcador del RINEX («UGTO00MEX» → UGTO; la clave larga de 9 caracteres también).
+
+    Con `near` (la posición aproximada del RINEX) solo vale la de esa clave que quede a menos de `SAME_STATION_M`: una
+    base propia que se llame como una estación lejana no toma la coordenada de esa estación. Sin posición, una clave
+    que está en varias redes no se adivina (None: el usuario elige la estación)."""
     key = (marker or "").strip().upper()
     if not key:
         return None
-    for candidate in (key, key[:4]):
-        for station in station_catalog(network_id):
-            if station.id.upper() == candidate:
-                return station
+    usable = near is not None and (near.x, near.y, near.z) != (0.0, 0.0, 0.0)
+    for candidate in dict.fromkeys((key, key[:4])):
+        matches = [s for s in station_catalog(network_id) if s.id.upper() == candidate]
+        if not matches:
+            continue
+        if usable:
+            close = [(math.dist((s.position.x, s.position.y, s.position.z), (near.x, near.y, near.z)), i, s)
+                     for i, s in enumerate(matches)]
+            close = [c for c in close if c[0] <= SAME_STATION_M]
+            return min(close)[2] if close else None
+        return matches[0] if len(matches) == 1 else None
     return None
 
 

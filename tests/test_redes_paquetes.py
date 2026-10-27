@@ -21,6 +21,7 @@ import red_cacs_nrcan  # noqa: E402
 import red_comun  # noqa: E402
 import red_ergnss_ign  # noqa: E402
 import red_noaa_cors  # noqa: E402
+from tresvizo_ppk.model import Ecef  # noqa: E402
 from tresvizo_ppk.core import networks  # noqa: E402
 from tresvizo_ppk.core.geodesy import geodetic_to_ecef  # noqa: E402
 
@@ -374,6 +375,16 @@ def test_la_app_instala_y_muestra_las_redes(tmp_path, monkeypatch):
         rvdi = networks.find_station("RVDI")                    # ASH111661: calibración del NGS en el paquete
         assert rvdi is not None and not networks.station_notes(rvdi)
         assert any("ASH111661" in b for b in networks.antex_blocks())
+        # MELI es Lincoln (Maine) en la NOAA y Melilla en la del IGN: decide la posición aproximada del RINEX, y sin
+        # ella no se adivina; una base propia con esa clave lejos de las dos no toma ninguna coordenada oficial
+        lincoln = next(s for s in networks.station_catalog("noaa-cors") if s.id == "MELI")
+        melilla = next(s for s in networks.station_catalog("ergnss-ign") if s.id == "MELI")
+        near = lambda st, dx: Ecef(st.position.x + dx, st.position.y, st.position.z)
+        assert networks.find_station("MELI00USA", near=near(lincoln, 40.0)).network == "noaa-cors"
+        assert networks.find_station("MELI00ESP", near=near(melilla, -40.0)).network == "ergnss-ign"
+        assert networks.find_station("MELI") is None
+        assert networks.find_station("MELI", near=Ecef(-1262837.2, -5785732.6, 2365927.9)) is None
+        assert networks.find_station("YEBE", near=Ecef(-1262837.2, -5785732.6, 2365927.9)) is None
         # Canarias en REGCAN95, la Península en ETRS89
         assert networks.find_station("LPAL").position.frame == "REGCAN95"
         assert networks.find_station("YEBE").position.frame == "ETRS89"

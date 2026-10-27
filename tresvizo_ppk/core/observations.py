@@ -174,7 +174,8 @@ def prepare_observations(paths: list[Path], workdir: Path, *, pole_height_m: flo
     catalog = None
     if not recordings:
         from .networks import find_station          # estación de una red CORS: su antena y altura oficiales
-        catalog = find_station(header.marker or station_marker)
+        near = Ecef(*header.approx_xyz) if header.approx_xyz else None
+        catalog = find_station(header.marker or station_marker, near=near)
     if catalog is not None:
         label = f"catálogo {catalog.network_name or catalog.network}"
         diffs = []

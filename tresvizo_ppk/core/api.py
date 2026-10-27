@@ -14,7 +14,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-from ..model import (DataQuality, FieldPoint, ObservationSet, PointsResult, ProcessingOptions, StaticResult,
+from ..model import (DataQuality, Ecef, FieldPoint, ObservationSet, PointsResult, ProcessingOptions, StaticResult,
                      Station)
 from . import basecoord, field_csv, networks, observations, points, precise, quality, static, tools
 
@@ -50,8 +50,8 @@ def rgna_catalog() -> list[Station]:
     return networks.station_catalog()
 
 
-def find_station(marker: str, network_id: str | None = None) -> Station | None:
-    return networks.find_station(marker, network_id)
+def find_station(marker: str, network_id: str | None = None, near: Ecef | None = None) -> Station | None:
+    return networks.find_station(marker, network_id, near)
 
 
 def nearest_stations(position, count: int = 3, network_id: str | None = None):
