@@ -1,0 +1,371 @@
+{
+  "comment": "Proyecto de prueba de docs/oficina. Valores ya resueltos (lo que recibe el escritor tras convertir). Las dos apps leen este archivo en sus pruebas y comparan sus salidas con las de esta carpeta.",
+  "project": "Prueba oficina",
+  "fileBaseName": "Prueba_oficina",
+  "exportedAt": "2026-10-21T16:00:00-06:00",
+  "crs": {
+    "code": "EPSG:6368",
+    "name": "Mexico ITRF2008 / UTM zone 13N"
+  },
+  "heights": {
+    "reference": "cota sobre GGM10",
+    "verticalDatum": "GGM10"
+  },
+  "appVersion": "1.0 (800)",
+  "codes": [
+    {
+      "code": "POSTE",
+      "label": "Poste",
+      "layer": "POSTE",
+      "geometry": "point",
+      "attributes": [
+        {
+          "key": "material",
+          "label": "Material",
+          "kind": "choice",
+          "isRequired": true,
+          "choices": [
+            "concreto",
+            "madera",
+            "metal"
+          ]
+        },
+        {
+          "key": "altura_m",
+          "label": "Altura",
+          "kind": "number",
+          "isRequired": false,
+          "choices": [],
+          "unit": "m"
+        }
+      ]
+    },
+    {
+      "code": "CERCA",
+      "label": "Cerca",
+      "layer": "CERCA",
+      "geometry": "line",
+      "attributes": []
+    },
+    {
+      "code": "LINDERO",
+      "label": "Lindero",
+      "layer": "LINDERO",
+      "geometry": "polygon",
+      "attributes": []
+    },
+    {
+      "code": "EDIF",
+      "label": "Edificio",
+      "layer": "EDIFICIO",
+      "geometry": "polygon",
+      "attributes": []
+    },
+    {
+      "code": "ARB",
+      "label": "Árbol",
+      "layer": "ARBOL",
+      "geometry": "point",
+      "attributes": [
+        {
+          "key": "especie",
+          "label": "Especie",
+          "kind": "text",
+          "isRequired": false,
+          "choices": []
+        },
+        {
+          "key": "diametro_cm",
+          "label": "Diámetro",
+          "kind": "number",
+          "isRequired": false,
+          "choices": [],
+          "unit": "cm"
+        }
+      ]
+    }
+  ],
+  "points": [
+    {
+      "name": "P001",
+      "code": "POSTE",
+      "description": "Poste junto a la caseta",
+      "attributes": {
+        "material": "concreto",
+        "altura_m": "9"
+      },
+      "easting": "397512.345",
+      "northing": "3168004.210",
+      "elevation": "1432.118",
+      "latitude": "28.635062489",
+      "longitude": "-106.048541684",
+      "ellipsoidalHeight": "1411.927",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 12:44:19.8 UTC-06:00",
+      "photos": [
+        "fotos/P001_1.jpg",
+        "fotos/P001_2.jpg"
+      ]
+    },
+    {
+      "name": "P002",
+      "code": "CERCA",
+      "description": null,
+      "attributes": {},
+      "easting": "397530.000",
+      "northing": "3168010.000",
+      "elevation": "1432.500",
+      "latitude": "28.635116141",
+      "longitude": "-106.048361602",
+      "ellipsoidalHeight": "1412.309",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 12:46:02.1 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P003",
+      "code": "CERCA",
+      "description": null,
+      "attributes": {},
+      "easting": "397545.250",
+      "northing": "3168025.750",
+      "elevation": "1433.020",
+      "latitude": "28.635259491",
+      "longitude": "-106.048207015",
+      "ellipsoidalHeight": "1412.829",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 12:47:10.4 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P004",
+      "code": "CERCA",
+      "description": null,
+      "attributes": {},
+      "easting": "397560.125",
+      "northing": "3168031.400",
+      "elevation": "1433.415",
+      "latitude": "28.635311659",
+      "longitude": "-106.048055357",
+      "ellipsoidalHeight": "1413.224",
+      "origin": "Global",
+      "solution": "FLOAT",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 12:48:33.0 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P005",
+      "code": "LINDERO",
+      "description": null,
+      "attributes": {},
+      "easting": "397500.000",
+      "northing": "3168050.000",
+      "elevation": "1431.900",
+      "latitude": "28.635474764",
+      "longitude": "-106.048672076",
+      "ellipsoidalHeight": "1411.709",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 12:52:45.6 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P006",
+      "code": "LINDERO",
+      "description": null,
+      "attributes": {},
+      "easting": "397540.000",
+      "northing": "3168052.500",
+      "elevation": "1432.350",
+      "latitude": "28.635500493",
+      "longitude": "-106.048263119",
+      "ellipsoidalHeight": "1412.159",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 12:54:01.9 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P007",
+      "code": "LINDERO",
+      "description": "Vértice ingresado del plano",
+      "attributes": {},
+      "easting": "397520.000",
+      "northing": "3168080.000",
+      "elevation": null,
+      "latitude": "28.635747096",
+      "longitude": "-106.048470177",
+      "ellipsoidalHeight": null,
+      "origin": "Manual",
+      "solution": "MANUAL",
+      "precisionH": null,
+      "precisionV": null,
+      "antennaHeight": null,
+      "observedAt": null,
+      "photos": []
+    },
+    {
+      "name": "P008",
+      "code": "ARB",
+      "description": "Mezquite junto al mojón \"La Peña\"",
+      "attributes": {
+        "especie": "Mezquite",
+        "diametro_cm": "35"
+      },
+      "easting": "397575.500",
+      "northing": "3168060.250",
+      "elevation": "1434.010",
+      "latitude": "28.635573245",
+      "longitude": "-106.047900665",
+      "ellipsoidalHeight": "1413.819",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 13:02:17.3 UTC-06:00",
+      "photos": [
+        "fotos/P008_1.jpg"
+      ]
+    },
+    {
+      "name": "P009",
+      "code": "EDIF",
+      "description": null,
+      "attributes": {},
+      "easting": "397600.000",
+      "northing": "3168000.000",
+      "elevation": "1434.500",
+      "latitude": "28.635031430",
+      "longitude": "-106.047644640",
+      "ellipsoidalHeight": "1414.309",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 13:10:00.0 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P010",
+      "code": "EDIF",
+      "description": null,
+      "attributes": {},
+      "easting": "397620.000",
+      "northing": "3168000.000",
+      "elevation": "1434.520",
+      "latitude": "28.635033012",
+      "longitude": "-106.047440050",
+      "ellipsoidalHeight": "1414.329",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 13:11:00.0 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P011",
+      "code": "EDIF",
+      "description": null,
+      "attributes": {},
+      "easting": "397620.000",
+      "northing": "3168015.000",
+      "elevation": "1434.510",
+      "latitude": "28.635168386",
+      "longitude": "-106.047441395",
+      "ellipsoidalHeight": "1414.319",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 13:12:00.0 UTC-06:00",
+      "photos": []
+    },
+    {
+      "name": "P012",
+      "code": "EDIF",
+      "description": null,
+      "attributes": {},
+      "easting": "397600.000",
+      "northing": "3168015.000",
+      "elevation": "1434.490",
+      "latitude": "28.635166804",
+      "longitude": "-106.047645985",
+      "ellipsoidalHeight": "1414.299",
+      "origin": "Global",
+      "solution": "FIX",
+      "precisionH": "0.010",
+      "precisionV": "0.015",
+      "antennaHeight": "1.800",
+      "observedAt": "2026-10-15 13:13:00.0 UTC-06:00",
+      "photos": []
+    }
+  ],
+  "lines": [
+    {
+      "name": "CERCA 1",
+      "code": "CERCA",
+      "origin": "code",
+      "points": [
+        "P002",
+        "P003",
+        "P004"
+      ],
+      "isClosed": false
+    },
+    {
+      "name": "LINDERO 1",
+      "code": "LINDERO",
+      "origin": "code",
+      "points": [
+        "P005",
+        "P006",
+        "P007"
+      ],
+      "isClosed": true
+    },
+    {
+      "name": "EDIFICIO 1",
+      "code": "EDIF",
+      "origin": "code",
+      "points": [
+        "P009",
+        "P010",
+        "P011",
+        "P012"
+      ],
+      "isClosed": true
+    }
+  ],
+  "dbfAttributeFields": {
+    "MATERIAL": "material",
+    "ALTURA_M": "altura_m",
+    "ESPECIE": "especie",
+    "DIAMETRO_C": "diametro_cm"
+  }
+}

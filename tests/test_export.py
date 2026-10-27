@@ -138,7 +138,7 @@ def test_geojson_y_kml_dicen_lo_mismo(result, tmp_path):
 
 def test_errores(result, tmp_path):
     with pytest.raises(UserError, match="desconocido"):
-        api.export_points(result, CoordinateChoice(), "dxf", tmp_path / "x")
+        api.export_points(result, CoordinateChoice(), "dwg", tmp_path / "x")
     empty = replace(result, points=[p for p in result.points if p.solution == Solution.NONE])
     with pytest.raises(UserError, match="No hay puntos"):
         api.export_points(empty, CoordinateChoice(), "geojson", tmp_path / "x")

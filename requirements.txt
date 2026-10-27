@@ -8,6 +8,9 @@ reportlab==5.1.0
 # Solo pruebas
 pypdf==6.21.2
 pytest==9.1.1
+# Solo pruebas de la exportación para CAD: leer el DXF de vuelta y validar el LandXML contra su esquema
+ezdxf==1.4.5
+lxml==6.1.3
 # Interfaz
 Pillow==13.0.0
 tkinterdnd2==0.7.0

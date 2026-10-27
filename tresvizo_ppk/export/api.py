@@ -1,28 +1,39 @@
-"""Exportar los puntos posprocesados (especificación §1.2.5 y §8): `export_points(result, choice, formato, out)`.
+"""Exportar los resultados (especificación §1.2.5 y §8).
 
-Formatos:
+- `export_points(result, choice, formato, out)`: los puntos del PPK.
+- `export_static(result, choice, formato, out)`: el vértice del estático, con los mismos formatos.
+- `export_trajectory(result, choice, formato, out)`: la trayectoria del PPK, el `.pos` de RTKLIB o un CSV.
+- `export_rinex(observations, folder)`: el RINEX de la sesión (el convertido de la grabación del Meridian).
+
+Formatos de puntos:
 
 - `field_csv`: **el CSV de TresVizo Field** (`docs/csv-export.md` de las apps) con las coordenadas posprocesadas en
   sus columnas (Este, Norte, Cota, latitud, longitud, altura elipsoidal, RMS, estado de la solución, la base, el
-  sistema y el geoide) y las columnas de calidad del posproceso al final (solución, épocas, σ, base, la coordenada de
-  campo y la diferencia con ella). Las demás columnas de la fila original salen tal cual, en su orden y con sus
-  nombres (inglés o español, según venía). Mismas reglas de escritura que las apps: coma, punto decimal, comillas de
-  RFC 4180 solo donde hacen falta, CRLF, UTF-8 con BOM, vacío es «sin dato» (nunca 0) y nunca «-0.000».
-  Un punto que no se pudo posprocesar conserva sus coordenadas de campo y lo dice en «PPK solution» y «PPK message».
-- `csv`: CSV simple «Nombre, Este, Norte, Cota, Código» (o longitud y latitud en un sistema geográfico), solo los
-  puntos posprocesados.
+  sistema y el geoide) y las columnas de calidad del posproceso al final. En el PPK, las demás columnas de la fila
+  original salen tal cual, en su orden y con sus nombres (inglés o español, según venía); en el estático, las 94 de
+  «Todas las columnas» en inglés (lo de las apps por omisión), para reimportar el vértice como base o punto de
+  control. Mismas reglas de escritura que las apps: coma, punto decimal, comillas de RFC 4180 solo donde hacen
+  falta, CRLF, UTF-8 con BOM, vacío es «sin dato» (nunca 0) y nunca «-0.000». Un punto del PPK que no se pudo
+  posprocesar conserva sus coordenadas de campo y lo dice en «PPK solution» y «PPK message».
+- `csv`: sin opciones, el CSV simple «Nombre, Este, Norte, Cota, Código» (o longitud y latitud en un sistema
+  geográfico). Con `CsvOptions`, **el CSV a medida de las apps** («Opciones de CSV»): «Todas las columnas», PENZD,
+  PNEZD, NXYZD o «Personalizada»; coma, punto y coma o tabulador; encabezado en inglés (Emlid) o en español, o sin
+  encabezado en las tres cortas; con o sin BOM; coma decimal con punto y coma o tabulador. Solo los puntos
+  posprocesados.
 - `geojson`: RFC 7946, la geometría **siempre en longitud y latitud** con la altura elipsoidal (lo que manda el
   formato), y en `properties` la coordenada en el sistema elegido, su cota, su σ y su solución; los metadatos
   declaran el sistema, el marco, la época y el geoide.
 - `kml`: KML 2.2 con los mismos puntos, claves y valores que el GeoJSON (contrato `docs/KML_FORMAT.md` de las apps).
+- `dxf`: DXF R12 de las apps (`dxf.py`): una capa por código, el punto en 3D y su nombre y su cota como rótulos;
+  junto a él, el `.prj` del sistema (WKT1 de ESRI). Solo sistemas proyectados.
+- `landxml`: LandXML 1.2 de las apps (`landxml.py`) con `CgPoints`, para Civil 3D. Solo sistemas proyectados.
 """
 from __future__ import annotations
 
 import json
 import math
-import os
-import re
-import tempfile
+import shutil
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -30,16 +41,21 @@ from xml.sax.saxutils import escape
 
 from ..crs import api as crs
 from ..errors import UserError
-from ..model import CoordinateChoice, Ecef, Enu, PointsResult, ProcessedPoint, Solution, TransformedCoordinate
+from ..model import (CoordinateChoice, Ecef, Enu, ObservationSet, PointsResult, ProcessedPoint, Solution,
+                     StaticResult, Station, TransformedCoordinate)
 from ..nombres import station_label
 from ..version import __version__
-from . import columnas
+from . import columnas, dxf, landxml
+from .formato import CRLF, atomic_write, neutralized, number, quoted, write_rows  # noqa: F401 (API de las pruebas)
 
-FORMATS = ("field_csv", "csv", "geojson", "kml")
-EXTENSIONS = {"field_csv": ".csv", "csv": ".csv", "geojson": ".geojson", "kml": ".kml"}
+FORMATS = ("field_csv", "csv", "geojson", "kml", "dxf", "landxml")
+EXTENSIONS = {"field_csv": ".csv", "csv": ".csv", "geojson": ".geojson", "kml": ".kml", "dxf": ".dxf",
+              "landxml": ".xml"}
+TRAJECTORY_FORMATS = ("pos", "csv")
 APP = f"TresVizo Field PPK {__version__}"
 SOLUTION_STATUS = {Solution.FIXED: "FIX", Solution.FLOAT: "FLOAT", Solution.SINGLE: "SINGLE", Solution.NONE: "NONE"}
-CRLF = "\r\n"
+DXF_NOT_PROJECTED = "El DXF necesita un sistema proyectado. Exporta en UTM o usa CSV o GeoJSON."
+PLUMB = "en posproceso todo se asume plomeado: el punto es la antena menos la altura vertical del bastón"
 
 # Columnas de campo que dejan de valer cuando la coordenada es la del posproceso (hablaban de la solución RTK de
 # campo y de su base): se vacían en los puntos posprocesados. Las de la ocupación (inicio y fin, DOP, satélites,
@@ -48,68 +64,45 @@ CLEARED = {"mountPoint", "caster", "correctionAge", "correctionSource", "baseID"
            "baseShiftID", "correctionsFrame", "correctionsFrameEpoch", "correctionsFrameSource", "withinTolerance",
            "violations", "horizontalSpread", "verticalSpread", "receiverHeightReference"}
 
-
-# --- Formato de números y de texto (las reglas de las apps) -----------------------------------------------------------
-
-def number(value: float | None, decimals: int) -> str:
-    """Decimales fijos con punto, redondeo al par desde el binario exacto, vacío sin dato y nunca «-0.000»."""
-    if value is None or not math.isfinite(value):
-        return ""
-    text = f"{value:.{decimals}f}"
-    if text.startswith("-") and set(text[1:]) <= set("0."):
-        text = text[1:]
-    return text
+LAYOUTS = ("all", "penzd", "pnezd", "nxyzd", "custom")
+SHORT_LAYOUTS = {"penzd": ("name", "easting", "northing", "elevation", "description"),
+                 "nxyzd": ("name", "easting", "northing", "elevation", "description"),
+                 "pnezd": ("name", "northing", "easting", "elevation", "description")}
+SEPARATORS = (",", ";", "\t")
 
 
-_SIGNED_NUMBER = re.compile(r"^[+-](\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$")
+@dataclass(frozen=True)
+class CsvOptions:
+    """«Opciones de CSV» de las apps (`PointCSV.ExportOptions`)."""
+    layout: str = "all"                        # all | penzd | pnezd | nxyzd | custom
+    separator: str = ","                       # «,», «;» o tabulador
+    language: str = "en"                       # «en» (Emlid) o «es»
+    header: bool = True                        # solo cuenta en PENZD, PNEZD y NXYZD
+    bom: bool = True
+    decimal_comma: bool = False                # solo con punto y coma o tabulador
+    custom: tuple[tuple[str, str], ...] = ()   # «Personalizada»: (clave, encabezado propio o «»), en su orden
 
+    def validate(self, extra_keys: set[str]) -> None:
+        if self.layout not in LAYOUTS:
+            raise UserError(f"Disposición de CSV desconocida: «{self.layout}».")
+        if self.separator not in SEPARATORS:
+            raise UserError("El separador del CSV tiene que ser coma, punto y coma o tabulador.")
+        if self.language not in ("en", "es"):
+            raise UserError(f"Idioma de los encabezados desconocido: «{self.language}».")
+        if self.layout == "custom":
+            if not self.custom:
+                raise UserError("La disposición personalizada no tiene ninguna columna.")
+            unknown = [k for k, _ in self.custom if k not in columnas.ENGLISH and k not in extra_keys]
+            if unknown:
+                raise UserError(f"Columnas desconocidas en la disposición personalizada: {', '.join(unknown)}.")
 
-def neutralized(text: str) -> str:
-    """Un texto que una hoja de cálculo tomaría por fórmula lleva «'» delante (`SurveyExport.neutralized`)."""
-    if not text:
-        return text
-    first = text[0]
-    if first in "=@\t\r":
-        return "'" + text
-    if first in "+-":
-        return text if _SIGNED_NUMBER.match(text) else "'" + text
-    return text
+    @property
+    def writes_header(self) -> bool:
+        return self.header if self.layout in SHORT_LAYOUTS else True
 
-
-def quoted(field: str, separator: str = ",") -> str:
-    """Comillas de RFC 4180 solo si hacen falta, o si empieza por «#» (`SurveyExport.quoted`)."""
-    if separator in field or '"' in field or "\n" in field or "\r" in field or field.startswith("#"):
-        return '"' + field.replace('"', '""') + '"'
-    return field
-
-
-def write_rows(header: list[str], rows: list[list[str]], *, separator: str = ",", bom: bool = True) -> bytes:
-    """El archivo: encabezado y filas ya formateadas, comillas donde hacen falta, CRLF y BOM."""
-    lines = [separator.join(quoted(h, separator) for h in header)]
-    lines += [separator.join(quoted(v, separator) for v in row) for row in rows]
-    data = (CRLF.join(lines) + CRLF).encode("utf-8")
-    return (b"\xef\xbb\xbf" + data) if bom else data
-
-
-def _atomic(out: Path, data: bytes) -> Path:
-    try:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(prefix=".", suffix=".tmp", dir=out.parent)
-    except OSError as error:
-        raise UserError(f"No se puede escribir en «{out.parent}»: {error.strerror or error}.") from None
-    try:
-        with os.fdopen(fd, "wb") as handle:
-            handle.write(data)
-        os.chmod(tmp, 0o644)
-        os.replace(tmp, out)
-    except PermissionError:
-        Path(tmp).unlink(missing_ok=True)
-        raise UserError(f"No se pudo guardar «{out.name}»: el archivo está abierto en otro programa o la carpeta no "
-                        "permite escribir.") from None
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
-    return out
+    @property
+    def uses_decimal_comma(self) -> bool:
+        return self.decimal_comma and self.separator != ","
 
 
 # --- Lo común a todos los formatos ------------------------------------------------------------------------------------
@@ -123,20 +116,110 @@ def _plane(c: TransformedCoordinate | None) -> tuple[str, str]:
     return number(c.longitude_deg, 8), number(c.latitude_deg, 8)
 
 
-def _elevation(c: TransformedCoordinate | None, choice: CoordinateChoice) -> str:
+def _elevation_value(c: TransformedCoordinate | None, choice: CoordinateChoice) -> float | None:
     """La cota: sobre el geoide si se aplicó; sin geoide, la elipsoidal; con un geoide declarado que no se pudo
-    aplicar, vacía (otra clase de altura con el mismo nombre sería peor que nada)."""
+    aplicar, ninguna (otra clase de altura con el mismo nombre sería peor que nada)."""
     if c is None:
-        return ""
+        return None
     if c.orthometric_height_m is not None:
-        return number(c.orthometric_height_m, 3)
+        return c.orthometric_height_m
     if choice.geoid_id:
-        return ""
-    return number(c.ellipsoidal_height_m, 3)
+        return None
+    return c.ellipsoidal_height_m
 
+
+def _elevation(c: TransformedCoordinate | None, choice: CoordinateChoice) -> str:
+    return number(_elevation_value(c, choice), 3)
+
+
+def _geoid_column(choice: CoordinateChoice, c: TransformedCoordinate | None) -> str:
+    if not choice.geoid_id:
+        return ""
+    if c is not None and c.orthometric_height_m is not None:
+        return choice.geoid_id.upper()
+    return f"{choice.geoid_id.upper()} NO APLICADO"
+
+
+def _arp(station: Station) -> Ecef:
+    """La ARP de una base: su coordenada más la altura vertical de la antena (lo que dicen las columnas «Base»)."""
+    if not station.antenna_height_m:
+        return station.position
+    p = station.position
+    lat, lon, _ = crs.motor.geodetic(p.x, p.y, p.z, crs.definition("EPSG:6365").ellipsoid)
+    up = crs.enu_rotation(lat, lon)[2]
+    h = station.antenna_height_m
+    return Ecef(p.x + up[0] * h, p.y + up[1] * h, p.z + up[2] * h, p.frame, p.epoch)
+
+
+def _base_values(station: Station, choice: CoordinateChoice) -> dict[str, str]:
+    c = crs.transform(_arp(station), choice)
+    e, n = _plane(c)
+    return {"baseEasting": e, "baseNorthing": n, "baseElevation": _elevation(c, choice),
+            "baseLongitude": number(c.receiver_longitude_deg, 8), "baseLatitude": number(c.receiver_latitude_deg, 8),
+            "baseEllipsoidalHeight": number(c.ellipsoidal_height_m, 3), "baseReceiver": station.receiver,
+            "baseType": "Physical", "baseElevationReference": "ARP" if e else ""}
+
+
+def _fixed_choice(reference: Ecef, choice: CoordinateChoice) -> CoordinateChoice:
+    """Con una familia de zona automática, toda la exportación en la zona del primer punto (o de la base): una sola
+    cuadrícula por archivo, como el proyecto de las apps."""
+    if choice.crs_id not in crs.FAMILIES or choice.zone.strip():
+        return choice
+    zone = crs.transform(reference, CoordinateChoice(choice.crs_id, "", None)).zone
+    return CoordinateChoice(choice.crs_id, zone, choice.geoid_id, choice.label)
+
+
+def _app_time(moment: datetime) -> str:
+    """Una hora como la escriben las apps en el CSV: «2026-10-15 12:44:19.8 UTC-06:00» (aquí, en UTC)."""
+    m = moment.astimezone(timezone.utc)
+    return f"{m:%Y-%m-%d %H:%M:%S}.{m.microsecond // 100000} UTC+00:00"
+
+
+def _iso_from_app_time(text: str) -> str:
+    """«2026-10-15 12:44:19.8 UTC-06:00» → «2026-10-15T12:44:19.8-06:00» (el `timeStamp` de LandXML); vacío si
+    el texto no tiene esa forma."""
+    parts = text.split(" ")
+    if len(parts) != 3 or not parts[2].startswith("UTC") or len(parts[2]) != 9:
+        return ""
+    try:
+        datetime.strptime(parts[0] + " " + parts[1].split(".")[0], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return ""
+    return f"{parts[0]}T{parts[1]}{parts[2][3:]}"
+
+
+def _decimal_year(moment: datetime) -> float:
+    m = moment.astimezone(timezone.utc)
+    start = datetime(m.year, 1, 1, tzinfo=timezone.utc)
+    end = datetime(m.year + 1, 1, 1, tzinfo=timezone.utc)
+    return m.year + (m - start).total_seconds() / (end - start).total_seconds()
+
+
+@dataclass
+class _Row:
+    """Un punto listo para cualquier formato: los valores de las columnas del CSV de Field por clave (ya escritos con
+    sus reglas) y lo que piden el DXF, el LandXML y el GeoJSON."""
+    name: str
+    code: str
+    description: str
+    values: dict[str, str]
+    c: TransformedCoordinate | None
+    elevation: float | None = None
+    timestamp: str = ""
+    original: dict[str, str] = field(default_factory=dict)
+    computed: _Computed | None = None          # PPK: para el GeoJSON y el KML
+    sigma: Enu | None = None                   # estático: σ en el sistema elegido
+    solution: Solution | None = None           # estático: la del vértice
+
+    @property
+    def processed(self) -> bool:
+        return self.c is not None
+
+
+# --- PPK: las filas ---------------------------------------------------------------------------------------------------
 
 class _Computed:
-    """La coordenada de un punto en el sistema elegido, con su σ, y la de campo para compararla."""
+    """La coordenada de un punto del PPK en el sistema elegido, con su σ, y la de campo para compararla."""
 
     def __init__(self, pp: ProcessedPoint, choice: CoordinateChoice):
         self.pp = pp
@@ -157,12 +240,6 @@ class _Computed:
     def processed(self) -> bool:
         return self.c is not None
 
-    def plane(self, c: TransformedCoordinate | None = None) -> tuple[str, str]:
-        return _plane(c or self.c)
-
-    def elevation(self, choice: CoordinateChoice, c: TransformedCoordinate | None = None) -> str:
-        return _elevation(c or self.c, choice)
-
     def delta(self) -> Enu | None:
         p, f = self.pp.position, self.pp.point.field_position
         if p is None or f is None:
@@ -171,39 +248,6 @@ class _Computed:
         d = (p.x - f.x, p.y - f.y, p.z - f.z)
         return Enu(*(sum(r[i][k] * d[k] for k in range(3)) for i in range(3)))
 
-
-def _fixed_choice(result: PointsResult, choice: CoordinateChoice) -> CoordinateChoice:
-    """Con una familia de zona automática, toda la exportación en la zona del primer punto posprocesado (o de la
-    base): una sola cuadrícula por archivo, como el proyecto de las apps."""
-    if choice.crs_id not in crs.FAMILIES or choice.zone.strip():
-        return choice
-    ref = next((p.position for p in result.points if p.position is not None and p.solution != Solution.NONE),
-               result.base.position)
-    zone = crs.transform(ref, CoordinateChoice(choice.crs_id, "", None)).zone
-    return CoordinateChoice(choice.crs_id, zone, choice.geoid_id, choice.label)
-
-
-def _geoid_column(choice: CoordinateChoice, c: TransformedCoordinate | None) -> str:
-    if not choice.geoid_id:
-        return ""
-    if c is not None and c.orthometric_height_m is not None:
-        return choice.geoid_id.upper()
-    return f"{choice.geoid_id.upper()} NO APLICADO"
-
-
-def _base_arp(result: PointsResult) -> Ecef:
-    """La ARP de la base: su coordenada más la altura vertical de la antena (lo que dicen las columnas «Base»)."""
-    b = result.base
-    if not b.antenna_height_m:
-        return b.position
-    lat, lon, _ = crs.motor.geodetic(b.position.x, b.position.y, b.position.z, crs.definition("EPSG:6365").ellipsoid)
-    up = crs.enu_rotation(lat, lon)[2]
-    h = b.antenna_height_m
-    return Ecef(b.position.x + up[0] * h, b.position.y + up[1] * h, b.position.z + up[2] * h, b.position.frame,
-                b.position.epoch)
-
-
-# --- CSV de TresVizo Field --------------------------------------------------------------------------------------------
 
 def _language(rows: list[dict[str, str]]) -> str:
     for row in rows:
@@ -216,8 +260,93 @@ def _language(rows: list[dict[str, str]]) -> str:
     return "en"
 
 
-def _field_csv(result: PointsResult, choice: CoordinateChoice) -> bytes:
-    computed = [_Computed(p, choice) for p in result.points]
+def _original_by_key(row: dict[str, str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for name, value in row.items():
+        key = columnas.BY_HEADER.get(name.casefold())
+        if key:
+            out[key] = value
+    return out
+
+
+def _float(text: str) -> float | None:
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _ppk_rows(result: PointsResult, choice: CoordinateChoice) -> list[_Row]:
+    base = result.base
+    base_values = _base_values(base, choice)
+    rows = []
+    for pp in result.points:
+        comp = _Computed(pp, choice)
+        original = pp.point.row
+        by_key = _original_by_key(original)
+        values = {key: neutralized(by_key.get(key, "")) for key, _, _ in columnas.COLUMNS}
+        values["name"] = neutralized(pp.point.name)
+        if pp.point.code or not original:
+            values["code"] = neutralized(pp.point.code)
+        field_e, field_n = _plane(comp.field) if comp.field else ("", "")
+        if comp.processed:
+            c = comp.c
+            values["easting"], values["northing"] = _plane(c)
+            values["elevation"] = _elevation(c, choice)
+            values["longitude"] = number(c.receiver_longitude_deg, 8)
+            values["latitude"] = number(c.receiver_latitude_deg, 8)
+            values["ellipsoidalHeight"] = number(c.ellipsoidal_height_m, 3)
+            if comp.sigma is not None:
+                values["eastingRMS"] = number(comp.sigma.e, 3)
+                values["northingRMS"] = number(comp.sigma.n, 3)
+                values["elevationRMS"] = number(comp.sigma.u, 3)
+                values["lateralRMS"] = number(math.hypot(comp.sigma.e, comp.sigma.n), 3)
+            values["solutionStatus"] = SOLUTION_STATUS[pp.solution]
+            values["correctionType"] = "PPK"
+            values["samples"] = str(pp.epochs_fixed if pp.solution == Solution.FIXED else pp.epochs_total)
+            values.update({k: neutralized(v) for k, v in base_values.items()})
+            values["baseline"] = number(pp.distance_to_base_m, 3)
+            values["csName"] = neutralized(c.label)
+            values["csCode"] = c.crs_code
+            values["geoid"] = _geoid_column(choice, c)
+            values["geoidUndulation"] = number(c.undulation_m, 3)
+            values["frame"] = pp.position.frame
+            total = _float(by_key.get("totalAntennaHeight", ""))
+            if total is None:
+                total = pp.point.antenna_height_m
+            values["antennaEllipsoidalHeight"] = number(c.ellipsoidal_height_m + total, 3)
+            for key in CLEARED:
+                values[key] = ""
+        d = comp.delta()
+        values.update({
+            "ppkSolution": SOLUTION_STATUS[pp.solution] if comp.processed else "NONE",
+            "ppkFixedEpochs": str(pp.epochs_fixed), "ppkEpochs": str(pp.epochs_total),
+            "ppkEastingSigma": number(comp.sigma.e, 3) if comp.sigma else "",
+            "ppkNorthingSigma": number(comp.sigma.n, 3) if comp.sigma else "",
+            "ppkElevationSigma": number(comp.sigma.u, 3) if comp.sigma else "",
+            "ppkBase": neutralized(station_label(base)),
+            "ppkBaseline": number(pp.distance_to_base_m, 3),
+            "fieldEasting": field_e, "fieldNorthing": field_n,
+            "fieldElevation": _elevation(comp.field, choice) if comp.field else "",
+            "fieldSolution": neutralized(pp.point.field_solution),
+            "fieldDeltaHorizontal": number(math.hypot(d.e, d.n), 3) if d and comp.processed else "",
+            "fieldDeltaVertical": number(d.u, 3) if d and comp.processed else "",
+            "ppkMessage": neutralized(pp.message or ("" if comp.processed else
+                                                     "sin posproceso: van las coordenadas de campo")),
+            "ppkSoftware": APP,
+        })
+        stamp = _iso_from_app_time(by_key.get("averagingStart", ""))
+        if not stamp:
+            m = pp.point.start.astimezone(timezone.utc)
+            stamp = f"{m:%Y-%m-%dT%H:%M:%S}.{m.microsecond // 100000}+00:00"
+        row = _Row(pp.point.name, pp.point.code if (pp.point.code or not original) else by_key.get("code", ""),
+                   by_key.get("description", ""), values, comp.c, _elevation_value(comp.c, choice), stamp, original)
+        row.computed = comp
+        rows.append(row)
+    return rows
+
+
+def _ppk_field_csv(result: PointsResult, rows: list[_Row]) -> bytes:
     rows_in = [p.point.row for p in result.points]
     lang = _language(rows_in)
     names = columnas.ENGLISH if lang == "en" else columnas.SPANISH
@@ -238,120 +367,164 @@ def _field_csv(result: PointsResult, choice: CoordinateChoice) -> bytes:
             header.append(names[key])
             key_of[names[key]] = key
     ppk = [(k, en if lang == "en" else es) for k, en, es in columnas.PPK_COLUMNS]
-    header += [name for _, name in ppk]
-
-    base = result.base
-    arp = _base_arp(result)
-    base_c = crs.transform(arp, choice)
-    base_values = {
-        "baseEasting": "", "baseNorthing": "", "baseElevation": "", "baseLongitude": "", "baseLatitude": "",
-        "baseEllipsoidalHeight": "", "baseReceiver": base.receiver, "baseType": "Physical",
-        "baseElevationReference": "ARP",
-    }
-    e, n = _plane(base_c)
-    base_values.update(baseEasting=e, baseNorthing=n, baseElevation=_elevation(base_c, choice),
-                       baseLongitude=number(base_c.receiver_longitude_deg, 8),
-                       baseLatitude=number(base_c.receiver_latitude_deg, 8),
-                       baseEllipsoidalHeight=number(base_c.ellipsoidal_height_m, 3))
-
-    out_rows = []
-    for comp in computed:
-        pp = comp.pp
-        original = pp.point.row
-        values: dict[str, str] = {}
-        for name in header[: len(header) - len(ppk)]:
-            values[name] = neutralized(original.get(name, ""))
-        by_key = {key_of[name]: name for name in key_of if key_of[name]}
-
-        def put(key: str, value: str) -> None:
-            if key in by_key:
-                values[by_key[key]] = value
-
-        put("name", neutralized(pp.point.name))
-        if pp.point.code or not original:
-            put("code", neutralized(pp.point.code))
-        field_e, field_n = comp.plane(comp.field) if comp.field else ("", "")
-        if comp.processed:
-            c = comp.c
-            e, n = comp.plane()
-            put("easting", e)
-            put("northing", n)
-            put("elevation", comp.elevation(choice))
-            put("longitude", number(c.receiver_longitude_deg, 8))
-            put("latitude", number(c.receiver_latitude_deg, 8))
-            put("ellipsoidalHeight", number(c.ellipsoidal_height_m, 3))
-            if comp.sigma is not None:
-                put("eastingRMS", number(comp.sigma.e, 3))
-                put("northingRMS", number(comp.sigma.n, 3))
-                put("elevationRMS", number(comp.sigma.u, 3))
-                put("lateralRMS", number(math.hypot(comp.sigma.e, comp.sigma.n), 3))
-            put("solutionStatus", SOLUTION_STATUS[pp.solution])
-            put("correctionType", "PPK")
-            put("samples", str(pp.epochs_fixed if pp.solution == Solution.FIXED else pp.epochs_total))
-            for key, value in base_values.items():
-                put(key, neutralized(value))
-            put("baseline", number(pp.distance_to_base_m, 3))
-            put("csName", neutralized(c.label))
-            put("csCode", c.crs_code)
-            put("geoid", _geoid_column(choice, c))
-            put("geoidUndulation", number(c.undulation_m, 3))
-            put("frame", pp.position.frame)
-            total = _float(original.get(_header_for(by_key, "totalAntennaHeight"), ""))
-            if total is None:
-                total = pp.point.antenna_height_m
-            put("antennaEllipsoidalHeight", number(c.ellipsoidal_height_m + total, 3))
-            for key in CLEARED:
-                put(key, "")
-        d = comp.delta()
-        ppk_values = {
-            "ppkSolution": SOLUTION_STATUS[pp.solution] if comp.processed else "NONE",
-            "ppkFixedEpochs": str(pp.epochs_fixed), "ppkEpochs": str(pp.epochs_total),
-            "ppkEastingSigma": number(comp.sigma.e, 3) if comp.sigma else "",
-            "ppkNorthingSigma": number(comp.sigma.n, 3) if comp.sigma else "",
-            "ppkElevationSigma": number(comp.sigma.u, 3) if comp.sigma else "",
-            "ppkBase": neutralized(station_label(base)),
-            "ppkBaseline": number(pp.distance_to_base_m, 3),
-            "fieldEasting": field_e, "fieldNorthing": field_n,
-            "fieldElevation": comp.elevation(choice, comp.field) if comp.field else "",
-            "fieldSolution": neutralized(pp.point.field_solution),
-            "fieldDeltaHorizontal": number(math.hypot(d.e, d.n), 3) if d and comp.processed else "",
-            "fieldDeltaVertical": number(d.u, 3) if d and comp.processed else "",
-            "ppkMessage": neutralized(pp.message or ("" if comp.processed else
-                                                     "sin posproceso: van las coordenadas de campo")),
-            "ppkSoftware": APP,
-        }
-        for key, name in ppk:
-            values[name] = ppk_values[key]
-        out_rows.append([values[name] for name in header])
-    return write_rows(header, out_rows)
+    out = []
+    for row in rows:
+        line = [row.values[key_of[name]] if key_of[name] else neutralized(row.original.get(name, ""))
+                for name in header]
+        out.append(line + [row.values[k] for k, _ in ppk])
+    return write_rows(header + [name for _, name in ppk], out)
 
 
-def _header_for(by_key: dict[str, str], key: str) -> str:
-    return by_key.get(key, "")
+# --- Estático: la fila ------------------------------------------------------------------------------------------------
+
+def _used_baselines(result: StaticResult):
+    excluded = set(result.adjustment.excluded_baselines) if result.adjustment else set()
+    return [b for b in result.baselines if b.base.id not in excluded]
 
 
-def _float(text: str) -> float | None:
+def _static_solution(result: StaticResult) -> Solution:
+    used = _used_baselines(result)
+    if used and all(b.solution == Solution.FIXED for b in used):
+        return Solution.FIXED
+    if any(b.solution in (Solution.FIXED, Solution.FLOAT) for b in used):
+        return Solution.FLOAT
+    return Solution.SINGLE
+
+
+def _static_adjustment_text(result: StaticResult) -> str:
+    used = _used_baselines(result)
+    adj = result.adjustment
+    if adj is None:
+        return "una sola línea base, sin ajuste"
+    text = (f"mínimos cuadrados con {len(used)} líneas base, {adj.degrees_of_freedom} grados de libertad, "
+            f"σ0 {adj.sigma0:.2f}, prueba χ² {'pasa' if adj.passed else 'no pasa'}")
+    if adj.excluded_baselines:
+        text += f"; fuera: {', '.join(adj.excluded_baselines)}"
+    return text
+
+
+def _static_sigma(result: StaticResult, choice: CoordinateChoice) -> Enu | None:
+    covariance = result.adjustment.covariance_ecef if result.adjustment else None
     try:
-        return float(text)
-    except (TypeError, ValueError):
+        return crs.transform_sigma(result.position, result.sigma_enu, choice, covariance)
+    except UserError:
         return None
 
 
-# --- CSV simple -------------------------------------------------------------------------------------------------------
+def _static_row(result: StaticResult, choice: CoordinateChoice, code: str, description: str) -> _Row:
+    c = crs.transform(result.position, choice)
+    sigma = _static_sigma(result, choice)
+    rover = result.rover
+    used = _used_baselines(result)
+    solution = _static_solution(result)
+    values = {key: "" for key, _, _ in columnas.COLUMNS}
+    e, n = _plane(c)
+    satellites = sorted({s for b in used for s in b.satellites})
+    total = rover.antenna_height_m
+    pole = rover.pole_height_m
+    start = min((b.start for b in used), default=rover.start)
+    end = max((b.end for b in used), default=rover.end)
+    values.update({
+        "name": neutralized(result.point_name), "code": neutralized(code), "description": neutralized(description),
+        "easting": e, "northing": n, "elevation": _elevation(c, choice),
+        "longitude": number(c.receiver_longitude_deg, 8), "latitude": number(c.receiver_latitude_deg, 8),
+        "ellipsoidalHeight": number(c.ellipsoidal_height_m, 3), "origin": "Global",
+        "antennaHeight": number(pole if pole is not None else total, 3), "antennaHeightUnits": "m",
+        "solutionStatus": SOLUTION_STATUS[solution], "correctionType": "Static",
+        "samples": str(max((b.epochs_used for b in used), default=0)),
+        "csName": neutralized(c.label), "csCode": c.crs_code, "geoid": _geoid_column(choice, c),
+        "geoidUndulation": number(c.undulation_m, 3), "frame": result.position.frame,
+        "deviceType": neutralized(rover.receiver_model or rover.receiver), "app": APP,
+        "satellites": str(len(satellites)) if satellites else "",
+        "antennaOffset": number(rover.case_offset_m, 4) if pole is not None else "",
+        "totalAntennaHeight": number(total, 3),
+        "antennaEllipsoidalHeight": number(c.ellipsoidal_height_m + total, 3),
+    })
+    for key, prefix in (("gpsSatellites", "G"), ("glonassSatellites", "R"), ("galileoSatellites", "E"),
+                        ("beidouSatellites", "C"), ("qzssSatellites", "J")):
+        if satellites:
+            values[key] = str(sum(1 for s in satellites if s.startswith(prefix)))
+    if sigma is not None:
+        values.update(eastingRMS=number(sigma.e, 3), northingRMS=number(sigma.n, 3), elevationRMS=number(sigma.u, 3),
+                      lateralRMS=number(math.hypot(sigma.e, sigma.n), 3))
+    if start is not None and end is not None:
+        values.update(averagingStart=_app_time(start), averagingEnd=_app_time(end),
+                      averagingDuration=number((end - start).total_seconds(), 1),
+                      observationEpoch=number(_decimal_year(start + (end - start) / 2), 4))
+    if len(used) == 1:
+        values.update({k: neutralized(v) for k, v in _base_values(used[0].base, choice).items()})
+        values["baseline"] = number(used[0].length_m, 3)
+    values.update({
+        "staticSolution": SOLUTION_STATUS[solution],
+        "staticBases": neutralized("; ".join(f"{station_label(b.base)} {b.length_m / 1000:.3f} km "
+                                             f"{SOLUTION_STATUS[b.solution]}" for b in used)),
+        "staticAdjustment": neutralized(_static_adjustment_text(result)),
+        "ppkSoftware": APP,
+    })
+    stamp = ""
+    if start is not None:
+        m = start.astimezone(timezone.utc)
+        stamp = f"{m:%Y-%m-%dT%H:%M:%S}.{m.microsecond // 100000}+00:00"
+    row = _Row(result.point_name, code, description, values, c, _elevation_value(c, choice), stamp)
+    row.sigma = sigma
+    row.solution = solution
+    return row
 
-def _simple_csv(result: PointsResult, choice: CoordinateChoice) -> bytes:
-    rows = []
+
+# Las columnas que añade el estático, detrás de las 94 (clave, inglés, español).
+STATIC_COLUMNS: list[tuple[str, str, str]] = [
+    ("staticSolution", "Static solution", "Solución del estático"),
+    ("staticBases", "Static baselines", "Líneas base del estático"),
+    ("staticAdjustment", "Static adjustment", "Ajuste del estático"),
+    ("ppkSoftware", "Processed with", "Posprocesado con"),
+]
+
+
+def _static_field_csv(row: _Row) -> bytes:
+    keys = [k for k, _, _ in columnas.COLUMNS] + [k for k, _, _ in STATIC_COLUMNS]
+    header = [en for _, en, _ in columnas.COLUMNS] + [en for _, en, _ in STATIC_COLUMNS]
+    return write_rows(header, [[row.values[k] for k in keys]])
+
+
+# --- CSV simple y CSV a medida ----------------------------------------------------------------------------------------
+
+def _simple_csv(rows: list[_Row], choice: CoordinateChoice) -> bytes:
+    out = []
     geographic = False
-    for p in result.points:
-        comp = _Computed(p, choice)
-        if not comp.processed:
+    for row in rows:
+        if not row.processed:
             continue
-        geographic = comp.c.easting_m is None
-        e, n = comp.plane()
-        rows.append([neutralized(p.point.name), e, n, comp.elevation(choice), neutralized(p.point.code)])
+        geographic = row.c.easting_m is None
+        e, n = _plane(row.c)
+        out.append([neutralized(row.name), e, n, _elevation(row.c, choice), neutralized(row.code)])
     header = (["Nombre", "Longitud", "Latitud", "Cota", "Código"] if geographic else
               ["Nombre", "Este", "Norte", "Cota", "Código"])
-    return write_rows(header, rows)
+    return write_rows(header, out)
+
+
+def _custom_csv(rows: list[_Row], extras: list[tuple[str, str, str]], options: CsvOptions) -> bytes:
+    options.validate({k for k, _, _ in extras})
+    names = {k: (en if options.language == "en" else es) for k, en, es in list(columnas.COLUMNS) + list(extras)}
+    if options.layout == "all":
+        entries = [(k, "") for k, _, _ in columnas.COLUMNS] + [(k, "") for k, _, _ in extras]
+    elif options.layout in SHORT_LAYOUTS:
+        entries = [(k, "") for k in SHORT_LAYOUTS[options.layout]]
+    else:
+        entries = list(options.custom)
+    decimal = columnas.DECIMAL | columnas.PPK_DECIMAL
+    out = []
+    for row in rows:
+        if not row.processed:
+            continue
+        line = []
+        for key, _ in entries:
+            value = row.values.get(key, "")
+            if options.uses_decimal_comma and key in decimal:
+                value = value.replace(".", ",")
+            line.append(value)
+        out.append(line)
+    header = [title.strip() or names[key] for key, title in entries] if options.writes_header else None
+    return write_rows(header, out, separator=options.separator, bom=options.bom)
 
 
 # --- GeoJSON y KML ----------------------------------------------------------------------------------------------------
@@ -362,7 +535,22 @@ def _round(value: float | None, decimals: int):
     return round(value, decimals) + 0.0
 
 
-def _properties(comp: _Computed, choice: CoordinateChoice) -> dict:
+def _coordinate_properties(c: TransformedCoordinate, props: dict) -> None:
+    if c.easting_m is not None:
+        props["este_m"] = _round(c.easting_m, 3)
+        props["norte_m"] = _round(c.northing_m, 3)
+    props["altura_elipsoidal_m"] = _round(c.ellipsoidal_height_m, 3)
+    if c.orthometric_height_m is not None:
+        props["cota_m"] = _round(c.orthometric_height_m, 3)
+        props["ondulacion_m"] = _round(c.undulation_m, 3)
+        props["tipo_cota"] = c.height_kind
+
+
+def _sorted(d: dict) -> dict:
+    return dict(sorted(d.items(), key=lambda kv: kv[0].encode("utf-8")))
+
+
+def _ppk_properties(comp: _Computed) -> dict:
     p = comp.pp
     c = comp.c
     props: dict = {
@@ -378,14 +566,7 @@ def _properties(comp: _Computed, choice: CoordinateChoice) -> dict:
     if p.point.code:
         props["codigo"] = p.point.code
     if c is not None:
-        if c.easting_m is not None:
-            props["este_m"] = _round(c.easting_m, 3)
-            props["norte_m"] = _round(c.northing_m, 3)
-        props["altura_elipsoidal_m"] = _round(c.ellipsoidal_height_m, 3)
-        if c.orthometric_height_m is not None:
-            props["cota_m"] = _round(c.orthometric_height_m, 3)
-            props["ondulacion_m"] = _round(c.undulation_m, 3)
-            props["tipo_cota"] = c.height_kind
+        _coordinate_properties(c, props)
     if comp.sigma is not None:
         props["precision_h_m"] = _round(math.hypot(comp.sigma.e, comp.sigma.n), 3)
         props["precision_v_m"] = _round(comp.sigma.u, 3)
@@ -399,11 +580,17 @@ def _properties(comp: _Computed, choice: CoordinateChoice) -> dict:
         props["solucion_campo"] = p.point.field_solution
     if p.message:
         props["aviso"] = p.message
-    return dict(sorted(props.items(), key=lambda kv: kv[0].encode("utf-8")))
+    return _sorted(props)
 
 
-def _metadata(result: PointsResult, choice: CoordinateChoice, sample: TransformedCoordinate | None,
-              skipped: list[str]) -> dict:
+def _geoid_metadata(choice: CoordinateChoice, sample: TransformedCoordinate | None) -> str:
+    if sample is not None and sample.orthometric_height_m is not None:
+        return sample.geoid_name
+    return f"{choice.geoid_id} no aplicado" if choice.geoid_id else "ninguno"
+
+
+def _ppk_metadata(result: PointsResult, choice: CoordinateChoice, sample: TransformedCoordinate | None,
+                  skipped: list[str]) -> dict:
     pos = result.base.position
     meta = {
         "app": APP,
@@ -414,39 +601,80 @@ def _metadata(result: PointsResult, choice: CoordinateChoice, sample: Transforme
         "base": station_label(result.base),
         "base_fuente": result.base.source or ("oficial" if result.base.official else "manual"),
         "cota": "la geometría lleva la altura elipsoidal del punto en el suelo; la cota del sistema va en cota_m",
-        "geoide": (sample.geoid_name if sample and sample.orthometric_height_m is not None else
-                   (f"{choice.geoid_id} no aplicado" if choice.geoid_id else "ninguno")),
-        "plomeado": "en posproceso todo se asume plomeado: el punto es la antena menos la altura vertical del bastón",
+        "geoide": _geoid_metadata(choice, sample),
+        "plomeado": PLUMB,
         "puntos": len(result.points) - len(skipped),
     }
     if sample is not None and sample.attribution:
         meta["licencia_geoide"] = list(sample.attribution)
     if skipped:
         meta["puntos_sin_posproceso"] = skipped
-    return dict(sorted(meta.items(), key=lambda kv: kv[0].encode("utf-8")))
+    return _sorted(meta)
 
 
-def _features(result: PointsResult, choice: CoordinateChoice):
-    out, skipped, sample = [], [], None
-    for p in result.points:
-        comp = _Computed(p, choice)
-        if not comp.processed:
-            skipped.append(p.point.name)
+def _ppk_features(rows: list[_Row], result: PointsResult, choice: CoordinateChoice):
+    features, skipped, sample = [], [], None
+    for row in rows:
+        if not row.processed:
+            skipped.append(row.name)
             continue
-        sample = sample or comp.c
-        c = comp.c
+        sample = sample or row.c
+        c = row.c
         coords = [c.receiver_longitude_deg, c.receiver_latitude_deg, _round(c.ellipsoidal_height_m, 3)]
-        out.append((comp, coords))
-    return out, skipped, sample
+        features.append((row.name, _ppk_properties(row.computed), coords))
+    return _ppk_metadata(result, choice, sample, skipped), features
 
 
-def _geojson(result: PointsResult, choice: CoordinateChoice) -> bytes:
-    features, skipped, sample = _features(result, choice)
+def _static_features(row: _Row, result: StaticResult, choice: CoordinateChoice):
+    c = row.c
+    used = _used_baselines(result)
+    props: dict = {
+        "nombre": result.point_name,
+        "altura_en_geometria": "elipsoidal_del_suelo",
+        "solucion": SOLUTION_STATUS[row.solution],
+        "epocas": max((b.epochs_used for b in used), default=0),
+        "altura_antena_m": _round(result.rover.antenna_height_m, 3),
+        "lineas_base": [f"{station_label(b.base)}: {b.length_m / 1000:.3f} km, {SOLUTION_STATUS[b.solution]}"
+                        for b in used],
+    }
+    if row.code:
+        props["codigo"] = row.code
+    if row.description:
+        props["descripcion"] = row.description
+    start = min((b.start for b in used), default=result.rover.start)
+    end = max((b.end for b in used), default=result.rover.end)
+    if start is not None and end is not None:
+        props["inicio_utc"] = start.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        props["fin_utc"] = end.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _coordinate_properties(c, props)
+    if row.sigma is not None:
+        props["precision_h_m"] = _round(math.hypot(row.sigma.e, row.sigma.n), 3)
+        props["precision_v_m"] = _round(row.sigma.u, 3)
+    meta = {
+        "app": APP,
+        "exportado": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "sistema_de_las_propiedades": f"{c.crs_code} {c.label}",
+        "marco": result.position.frame,
+        "epoca_marco": result.position.epoch,
+        "bases": [station_label(s) for s in result.bases],
+        "ajuste": _static_adjustment_text(result),
+        "cota": "la geometría lleva la altura elipsoidal del punto en el suelo; la cota del sistema va en cota_m",
+        "geoide": _geoid_metadata(choice, c),
+        "plomeado": PLUMB,
+        "puntos": 1,
+    }
+    if c.attribution:
+        meta["licencia_geoide"] = list(c.attribution)
+    coords = [c.receiver_longitude_deg, c.receiver_latitude_deg, _round(c.ellipsoidal_height_m, 3)]
+    return _sorted(meta), [(result.point_name, _sorted(props), coords)]
+
+
+def _geojson(metadata: dict, features) -> bytes:
     doc = {
         "type": "FeatureCollection",
-        "metadata": _metadata(result, choice, sample, skipped),
+        "metadata": metadata,
         "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": coords},
-                      "properties": _properties(comp, choice)} for comp, coords in features],
+                      "properties": props} for _, props, coords in features],
     }
     return (json.dumps(doc, ensure_ascii=False, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
 
@@ -471,42 +699,275 @@ def _kml_value(value) -> str:
     return escape(str(value), {'"': "&quot;"})
 
 
-def _kml_number(value: float, decimals: int) -> str:
-    return number(value, decimals)
-
-
-def _kml(result: PointsResult, choice: CoordinateChoice) -> bytes:
-    features, skipped, sample = _features(result, choice)
+def _kml(name: str, metadata: dict, features) -> bytes:
     lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<kml xmlns="http://www.opengis.net/kml/2.2">', "<Document>",
-             f"<name>{escape(f'PPK {result.base.id} {result.rover.marker}'.strip())}</name>", "<ExtendedData>"]
-    for key, value in _metadata(result, choice, sample, skipped).items():
+             f"<name>{escape(name.strip())}</name>", "<ExtendedData>"]
+    for key, value in metadata.items():
         lines.append(f'<Data name="{key}"><value>{_kml_value(value)}</value></Data>')
     lines.append("</ExtendedData>")
-    for comp, coords in features:
-        lines += ["<Placemark>", f"<name>{escape(comp.pp.point.name)}</name>", "<ExtendedData>"]
-        for key, value in _properties(comp, choice).items():
+    for point_name, props, coords in features:
+        lines += ["<Placemark>", f"<name>{escape(point_name)}</name>", "<ExtendedData>"]
+        for key, value in props.items():
             lines.append(f'<Data name="{key}"><value>{_kml_value(value)}</value></Data>')
         lines.append("</ExtendedData>")
-        text = f"{_kml_number(coords[0], 9)},{_kml_number(coords[1], 9)}"
+        text = f"{number(coords[0], 9)},{number(coords[1], 9)}"
         if coords[2] is not None:
-            text += f",{_kml_number(coords[2], 3)}"
+            text += f",{number(coords[2], 3)}"
         lines += [f"<Point><coordinates>{text}</coordinates></Point>", "</Placemark>"]
     lines += ["</Document>", "</kml>"]
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-# --- Entrada ----------------------------------------------------------------------------------------------------------
+# --- DXF y LandXML ----------------------------------------------------------------------------------------------------
 
-def export_points(result: PointsResult, choice: CoordinateChoice, formato: str, out: str | Path) -> Path:
-    """Escribe los puntos posprocesados en `out` (se le pone la extensión del formato si no la trae)."""
+def esri_wkt(crs_code: str) -> str:
+    """La WKT1 de ESRI de un sistema con código EPSG (el texto del `.prj`, `06-formatos.md` §4); vacío si no hay."""
+    if not crs_code.upper().startswith("EPSG:"):
+        return ""
+    try:
+        from pyproj import CRS
+        return CRS.from_user_input(crs_code).to_wkt("WKT1_ESRI") or ""
+    except Exception:  # noqa: BLE001 — un código que PROJ no conoce se queda sin .prj, como en las apps
+        return ""
+
+
+def _epsg_name(c: TransformedCoordinate) -> str:
+    """El nombre del registro EPSG («Mexico ITRF2008 / UTM zone 13N», el de la referencia de las apps)."""
+    if c.crs_code.upper().startswith("EPSG:"):
+        try:
+            from pyproj import CRS
+            return CRS.from_user_input(c.crs_code).name
+        except Exception:  # noqa: BLE001
+            pass
+    return c.crs_name
+
+
+def _height_line(choice: CoordinateChoice, c: TransformedCoordinate) -> str:
+    if c.orthometric_height_m is not None:
+        line = f"{c.height_kind} (H)   modelo: {c.geoid_name}"
+        if c.height_kind == "normal":
+            line += "   AVISO: altura NORMAL, no ortometrica: no se mezcla con cotas ortometricas sin convertir"
+        return line
+    if choice.geoid_id:
+        return (f"vacia   geoide: NINGUNO APLICADO (se pidio {choice.geoid_id.upper()}, pero no se pudo aplicar: la "
+                "cota va vacia)")
+    return f"elipsoidal {c.frame_text} del punto en el suelo   geoide: ninguno"
+
+
+def _declaration(c: TransformedCoordinate, choice: CoordinateChoice, origin: list[str], rows: list[_Row],
+                 skipped: list[str], options: dxf.DxfOptions) -> list[str]:
+    lines = ["TresVizo Field PPK: coordenadas en metros, X = Este, Y = Norte",
+             f"sistema: {c.crs_code} {c.crs_name}",
+             f"marco: {c.frame_text}",
+             "Z: " + _height_line(choice, c)]
+    lines += origin
+    lines.append(f"plomeado: {PLUMB}")
+    if skipped:
+        lines.append(f"sin posproceso (no van en el dibujo): {', '.join(skipped)}")
+    if any(r.elevation is None for r in rows):
+        lines.append("capa SIN_COTA: puntos sin cota, sin Z")
+    if options.point_names and options.elevation_labels and any(r.elevation is not None for r in rows):
+        lines.append("capa COTA: la cota de cada punto como rotulo")
+    return lines
+
+
+def _require_projected(rows: list[_Row], message: str) -> None:
+    if any(r.c.easting_m is None for r in rows):
+        raise UserError(message)
+
+
+def _dxf(rows: list[_Row], choice: CoordinateChoice, origin: list[str], skipped: list[str],
+         options: dxf.DxfOptions) -> bytes:
+    _require_projected(rows, DXF_NOT_PROJECTED)
+    points = [dxf.DxfPoint(r.name, r.code, r.c.easting_m, r.c.northing_m, r.elevation, r.description) for r in rows]
+    return dxf.write(points, _declaration(rows[0].c, choice, origin, rows, skipped, options), options)
+
+
+def _landxml(rows: list[_Row], choice: CoordinateChoice, project: str, now: datetime | None) -> bytes:
+    _require_projected(rows, landxml.NOT_PROJECTED)
+    c = rows[0].c
+    d = crs.definition(c.crs_code)
+    vertical = (choice.geoid_id.upper() if c.orthometric_height_m is not None and choice.geoid_id else
+                ("" if choice.geoid_id else f"elipsoidal {c.frame_text.split(',')[0]}"))
+    epsg = c.crs_code.split(":", 1)[1] if c.crs_code.upper().startswith("EPSG:") else ""
+    system = landxml.CoordinateSystem(name=_epsg_name(c), epsg_code=epsg, horizontal_datum=d.datum if d else "",
+                                      vertical_datum=vertical, wkt=esri_wkt(c.crs_code))
+    points = [landxml.CgPoint(name=r.name, northing=r.values["northing"], easting=r.values["easting"],
+                              elevation=number(r.elevation, 3), code=r.code, desc=r.description,
+                              timestamp=r.timestamp) for r in rows]
+    doc = landxml.Document(project=project, application_version=__version__,
+                           exported_at=(now or datetime.now()).astimezone(), crs=system, points=points)
+    return landxml.write(doc)
+
+
+def _write_dxf(out: Path, data: bytes, c: TransformedCoordinate) -> Path:
+    """El DXF y, junto a él, su `.prj` (`06-formatos.md` §4.3), si el sistema tiene WKT de ESRI."""
+    path = atomic_write(out, data)
+    wkt = esri_wkt(c.crs_code)
+    if wkt:
+        atomic_write(out.with_suffix(".prj"), wkt.encode("ascii"))
+    return path
+
+
+# --- Entradas ---------------------------------------------------------------------------------------------------------
+
+def _target(out: str | Path, formato: str) -> Path:
     if formato not in FORMATS:
-        raise UserError(f"Formato de exportación desconocido: «{formato}». Usa CSV de TresVizo Field, CSV, GeoJSON o "
-                        "KML.")
+        raise UserError(f"Formato de exportación desconocido: «{formato}». Usa CSV de TresVizo Field, CSV, GeoJSON, "
+                        "KML, DXF o LandXML.")
     out = Path(out)
     if out.suffix.lower() != EXTENSIONS[formato] and not (formato == "geojson" and out.suffix.lower() == ".json"):
         out = out.with_name(out.name + EXTENSIONS[formato])
+    return out
+
+
+def export_points(result: PointsResult, choice: CoordinateChoice, formato: str, out: str | Path, *,
+                  csv_options: CsvOptions | None = None, dxf_options: dxf.DxfOptions | None = None,
+                  project: str = "", now: datetime | None = None) -> Path:
+    """Escribe los puntos posprocesados en `out` (se le pone la extensión del formato si no la trae)."""
+    out = _target(out, formato)
     if not any(p.position is not None and p.solution != Solution.NONE for p in result.points) and formato != "field_csv":
         raise UserError("No hay puntos posprocesados que exportar.")
-    choice = _fixed_choice(result, choice)
-    writer = {"field_csv": _field_csv, "csv": _simple_csv, "geojson": _geojson, "kml": _kml}[formato]
-    return _atomic(out, writer(result, choice))
+    reference = next((p.position for p in result.points if p.position is not None and p.solution != Solution.NONE),
+                     result.base.position)
+    choice = _fixed_choice(reference, choice)
+    rows = _ppk_rows(result, choice)
+    processed = [r for r in rows if r.processed]
+    skipped = [r.name for r in rows if not r.processed]
+    if formato == "field_csv":
+        data = _ppk_field_csv(result, rows)
+    elif formato == "csv":
+        data = (_custom_csv(rows, columnas.PPK_COLUMNS, csv_options) if csv_options is not None else
+                _simple_csv(rows, choice))
+    elif formato in ("geojson", "kml"):
+        metadata, features = _ppk_features(rows, result, choice)
+        data = (_geojson(metadata, features) if formato == "geojson" else
+                _kml(f"PPK {result.base.id} {result.rover.marker}", metadata, features))
+    elif formato == "dxf":
+        origin = [f"posproceso: PPK con base {station_label(result.base)}"]
+        data = _dxf(processed, choice, origin, skipped, dxf_options or dxf.DxfOptions())
+        return _write_dxf(out, data, processed[0].c)
+    else:
+        data = _landxml(processed, choice, project or f"PPK {result.base.id} {result.rover.marker}".strip(), now)
+    return atomic_write(out, data)
+
+
+def export_static(result: StaticResult, choice: CoordinateChoice, formato: str, out: str | Path, *,
+                  code: str = "", description: str = "", csv_options: CsvOptions | None = None,
+                  dxf_options: dxf.DxfOptions | None = None, project: str = "", now: datetime | None = None) -> Path:
+    """Escribe el vértice del estático en `out`, con los mismos formatos que el PPK. `code` y `description` son los
+    del punto en las apps (capa del DXF, `code` y `desc` del LandXML, «Code» y «Description» del CSV)."""
+    out = _target(out, formato)
+    choice = _fixed_choice(result.position, choice)
+    row = _static_row(result, choice, code.strip(), description.strip())
+    if formato == "field_csv":
+        data = _static_field_csv(row)
+    elif formato == "csv":
+        data = (_custom_csv([row], STATIC_COLUMNS, csv_options) if csv_options is not None else
+                _simple_csv([row], choice))
+    elif formato in ("geojson", "kml"):
+        metadata, features = _static_features(row, result, choice)
+        data = _geojson(metadata, features) if formato == "geojson" else _kml(result.point_name, metadata, features)
+    elif formato == "dxf":
+        used = _used_baselines(result)
+        origin = [f"posproceso: estatico, {len(used)} linea(s) base: "
+                  + "; ".join(f"{station_label(b.base)} {SOLUTION_STATUS[b.solution]}" for b in used),
+                  f"ajuste: {_static_adjustment_text(result)}"]
+        data = _dxf([row], choice, origin, [], dxf_options or dxf.DxfOptions())
+        return _write_dxf(out, data, row.c)
+    else:
+        data = _landxml([row], choice, project or result.point_name, now)
+    return atomic_write(out, data)
+
+
+# --- Trayectoria y RINEX ----------------------------------------------------------------------------------------------
+
+TRAJECTORY_HEADER = ["Época UTC", "Solución", "Satélites", "Razón", "Latitud", "Longitud",
+                     "Altura elipsoidal de la antena", "Este", "Norte", "Cota de la antena", "σ este local",
+                     "σ norte local", "σ vertical"]
+Q_STATUS = {1: "FIX", 2: "FLOAT", 3: "SBAS", 4: "DGPS", 5: "SINGLE", 6: "PPP"}
+
+
+def export_trajectory(result: PointsResult, choice: CoordinateChoice, formato: str, out: str | Path, *,
+                      progress=None, cancel=None) -> Path:
+    """La trayectoria de la antena (ARP) del PPK: `pos`, el `.pos` de RTKLIB tal cual (ECEF, hora GPS), o `csv`, una
+    fila por época en UTC con la solución, los satélites, la razón, la posición en el marco de la base y en el
+    sistema elegido, y la σ de RTKLIB en los ejes locales (este, norte, arriba)."""
+    if formato not in TRAJECTORY_FORMATS:
+        raise UserError(f"Formato de trayectoria desconocido: «{formato}». Usa .pos o CSV.")
+    pos = result.pos_file
+    if pos is None or not Path(pos).is_file():
+        raise UserError("La trayectoria ya no está en la carpeta de trabajo del proyecto: vuelve a procesar.")
+    out = Path(out)
+    suffix = ".pos" if formato == "pos" else ".csv"
+    if out.suffix.lower() != suffix:
+        out = out.with_name(out.name + suffix)
+    if formato == "pos":
+        return atomic_write(out, Path(pos).read_bytes())
+    from ..core.geodesy import gps_to_utc
+    from ..core.rtklib import parse_pos
+    epochs = parse_pos(Path(pos))
+    if not epochs:
+        raise UserError("La trayectoria no tiene ninguna época con solución.")
+    if not 6.0e6 < math.sqrt(sum(float(v) ** 2 for v in epochs[0].xyz)) < 7.0e6:
+        raise UserError("El .pos de la trayectoria no está en coordenadas ECEF (x, y, z): vuelve a procesar.")
+    frame, epoch = result.base.position.frame, result.base.position.epoch
+    choice = _fixed_choice(Ecef(*(float(v) for v in epochs[0].xyz), frame, epoch), choice)
+    rows = []
+    total = len(epochs)
+    for i, e in enumerate(epochs):
+        if cancel is not None and cancel.is_set():
+            raise UserError("Exportación cancelada.")
+        if progress is not None and i % 500 == 0:
+            progress(i / total, f"Época {i + 1} de {total}…")
+        position = Ecef(*(float(v) for v in e.xyz), frame, epoch)
+        c = crs.transform(position, choice)
+        r = crs.enu_rotation(c.receiver_latitude_deg, c.receiver_longitude_deg)
+        cov = [[sum(r[a][k] * e.cov[k][m] * r[b][m] for k in range(3) for m in range(3)) for b in range(3)]
+               for a in range(3)]
+        sigma = [math.sqrt(max(cov[k][k], 0.0)) for k in range(3)]
+        t = gps_to_utc(e.time.replace(tzinfo=timezone.utc))
+        east, north = (number(c.easting_m, 3), number(c.northing_m, 3)) if c.easting_m is not None else ("", "")
+        rows.append([f"{t:%Y-%m-%dT%H:%M:%S}.{t.microsecond // 1000:03d}Z", Q_STATUS.get(e.q, str(e.q)), str(e.ns),
+                     number(e.ratio, 1), number(c.receiver_latitude_deg, 9), number(c.receiver_longitude_deg, 9),
+                     number(c.ellipsoidal_height_m, 3), east, north, _elevation(c, choice),
+                     number(sigma[0], 3), number(sigma[1], 3), number(sigma[2], 3)])
+    if progress is not None:
+        progress(1.0, "Listo.")
+    return atomic_write(out, write_rows(TRAJECTORY_HEADER, rows))
+
+
+def export_rinex(observations: ObservationSet, folder: str | Path) -> list[Path]:
+    """Copia el RINEX de la sesión (observación y navegación, el convertido de la grabación del Meridian o el unido y
+    recortado) a `folder`, con sus nombres. Devuelve los archivos escritos."""
+    folder = Path(folder)
+    sources = [Path(p) for p in list(observations.obs) + list(observations.nav)]
+    missing = [p.name for p in sources if not p.is_file()]
+    if not sources:
+        raise UserError("La sesión no tiene archivos RINEX que exportar.")
+    if missing:
+        raise UserError(f"El RINEX de la sesión ya no está en la carpeta de trabajo ({', '.join(missing)}): vuelve "
+                        "a procesar.")
+    names = [p.name.casefold() for p in sources]
+    if len(set(names)) != len(names):
+        raise UserError("Hay dos archivos RINEX con el mismo nombre en la sesión; no se pueden copiar a una carpeta.")
+    written = []
+    for source in sources:
+        target = folder / source.name
+        if target.exists() and target.resolve() == source.resolve():
+            written.append(target)
+            continue
+        tmp = folder / f".{source.name}.tmp"
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, tmp)
+            tmp.replace(target)
+        except PermissionError:
+            tmp.unlink(missing_ok=True)
+            raise UserError(f"No se pudo guardar «{source.name}»: el archivo está abierto en otro programa o la "
+                            "carpeta no permite escribir.") from None
+        except OSError as error:
+            tmp.unlink(missing_ok=True)
+            raise UserError(f"No se puede escribir en «{folder}»: {error.strerror or error}.") from None
+        written.append(target)
+    return written

@@ -10,6 +10,7 @@ comprueban sus sistemas y geoides. Salen del repositorio de iOS (`TresVizoField`
 | `paquetes/crs-*.json.gz` | `tools/crs/salida/paquetes/` | los 34 paquetes publicados (`datos-2026-10-26`; los nueve primeros en su revisión 2); las pruebas comprueban que su SHA-256 es el del índice firmado |
 | `prueba_ntv2.gsb` | `tools/crs/salida/prueba_ntv2.gsb` | rejilla NTv2 sintética (madre e hija) de las pruebas de las apps |
 | `csv_referencia_todas.csv` | `TresVizo Field/Packages/MeridianVCore/Tests/MeridianVCoreTests/Resources/` (commit `f90b05f`) | el CSV «Todas las columnas» que las dos apps escriben byte a byte; la exportación tiene que reescribirlo igual |
+| `oficina/Prueba_oficina.xml`, `oficina/proyecto_oficina.json` | `docs/oficina/referencia/` (commit `2dd3e9f` del 21-10-2026; SHA-256 `e2bb0a50…` y `e5f1989f…`, los de su `SHA256SUMS`) | el LandXML de referencia de las apps y su proyecto de prueba; la exportación reproduce byte a byte lo que es de puntos |
 | `fixtures.json` | `tools/geoides/pruebas/fixtures.json` | rejilla `.mvgeoid` pequeña, ondulaciones de GGM10 y GGM25 calculadas por la referencia y sobres firmados con una llave **de prueba** (pública a propósito; nunca firmó nada real) |
 
 Si las apps regeneran sus vectores, se vuelven a copiar de ahí (los mismos bytes) y las pruebas tienen que seguir

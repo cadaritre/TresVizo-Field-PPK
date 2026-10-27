@@ -28,6 +28,8 @@ Los avisos completos van en cada carpeta y en el instalador.
 | reportlab | BSD 3 cláusulas | informes PDF |
 | pypdf (solo pruebas) | BSD 3 cláusulas | leer el texto de los informes en las pruebas |
 | pytest (solo pruebas) | MIT | pruebas |
+| ezdxf (solo pruebas; con pyparsing, fonttools y typing_extensions) | MIT (typing_extensions: PSF 2.0) | leer de vuelta el DXF exportado (capas, puntos y rótulos) |
+| lxml (solo pruebas) | BSD 3 cláusulas | validar el LandXML exportado contra `LandXML-1.2.xsd` |
 
 ## Interfaz y distribución
 
@@ -40,6 +42,9 @@ Los avisos completos van en cada carpeta y en el instalador.
 | pypdfium2 (con PDFium) | 5.14.0 | Apache 2.0 o BSD 3 cláusulas (PDFium: BSD 3 cláusulas y Apache 2.0) | dependencia | vista previa del informe |
 | PyInstaller (solo para armar) | 6.22.3 | GPL 2.0 con excepción del cargador: permite distribuir programas armados con él bajo cualquier licencia | `requirements-build.txt` | el ejecutable de Windows y la app de macOS |
 | WiX Toolset (solo para armar, Windows) | 4.0.6 | MS-RL; se incluye su licencia y el enlace a la fuente en el MSI | `scripts/installer/WiX-LICENSE.txt` | instalador MSI |
+
+El esquema `LandXML-1.2.xsd` de landxml.org no declara licencia: no se incluye ni se distribuye; las pruebas lo leen
+de la carpeta de datos (`docs/estado.md`).
 
 Los avisos completos de cada dependencia incluida se copian en la carpeta `licencias/` del programa instalado
 (`scripts/distribuir.py`).

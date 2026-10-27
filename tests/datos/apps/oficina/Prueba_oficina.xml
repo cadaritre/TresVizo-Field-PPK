@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.landxml.org/schema/LandXML-1.2 http://www.landxml.org/schema/LandXML-1.2/LandXML-1.2.xsd" version="1.2" date="2026-10-21" time="16:00:00" readOnly="false" language="Spanish">
+  <Units>
+    <Metric areaUnit="squareMeter" linearUnit="meter" volumeUnit="cubicMeter" temperatureUnit="celsius" pressureUnit="milliBars" angularUnit="decimal degrees" directionUnit="decimal degrees"/>
+  </Units>
+  <CoordinateSystem name="Mexico ITRF2008 / UTM zone 13N" epsgCode="6368" horizontalDatum="Mexico ITRF2008" verticalDatum="GGM10" ogcWktCode="PROJCS[&quot;Mexico_ITRF2008_UTM_Zone_13N&quot;,GEOGCS[&quot;GCS_Mexico_ITRF2008&quot;,DATUM[&quot;D_Mexico_ITRF2008&quot;,SPHEROID[&quot;GRS_1980&quot;,6378137.0,298.257222101]],PRIMEM[&quot;Greenwich&quot;,0.0],UNIT[&quot;Degree&quot;,0.0174532925199433]],PROJECTION[&quot;Transverse_Mercator&quot;],PARAMETER[&quot;False_Easting&quot;,500000.0],PARAMETER[&quot;False_Northing&quot;,0.0],PARAMETER[&quot;Central_Meridian&quot;,-105.0],PARAMETER[&quot;Scale_Factor&quot;,0.9996],PARAMETER[&quot;Latitude_Of_Origin&quot;,0.0],UNIT[&quot;Meter&quot;,1.0]]"/>
+  <Project name="Prueba oficina"/>
+  <Application name="TresVizo Field" manufacturer="TresVizo" version="1.0 (800)"/>
+  <CgPoints>
+    <CgPoint name="P001" code="POSTE" desc="Poste junto a la caseta" timeStamp="2026-10-15T12:44:19.8-06:00">3168004.210 397512.345 1432.118
+      <Feature code="TresVizo">
+        <Property label="altura_m" value="9"/>
+        <Property label="material" value="concreto"/>
+        <Property label="foto" value="fotos/P001_1.jpg"/>
+        <Property label="foto" value="fotos/P001_2.jpg"/>
+      </Feature>
+    </CgPoint>
+    <CgPoint name="P002" code="CERCA" timeStamp="2026-10-15T12:46:02.1-06:00">3168010.000 397530.000 1432.500</CgPoint>
+    <CgPoint name="P003" code="CERCA" timeStamp="2026-10-15T12:47:10.4-06:00">3168025.750 397545.250 1433.020</CgPoint>
+    <CgPoint name="P004" code="CERCA" timeStamp="2026-10-15T12:48:33.0-06:00">3168031.400 397560.125 1433.415</CgPoint>
+    <CgPoint name="P005" code="LINDERO" timeStamp="2026-10-15T12:52:45.6-06:00">3168050.000 397500.000 1431.900</CgPoint>
+    <CgPoint name="P006" code="LINDERO" timeStamp="2026-10-15T12:54:01.9-06:00">3168052.500 397540.000 1432.350</CgPoint>
+    <CgPoint name="P007" code="LINDERO" desc="Vértice ingresado del plano">3168080.000 397520.000</CgPoint>
+    <CgPoint name="P008" code="ARB" desc="Mezquite junto al mojón &quot;La Peña&quot;" timeStamp="2026-10-15T13:02:17.3-06:00">3168060.250 397575.500 1434.010
+      <Feature code="TresVizo">
+        <Property label="diametro_cm" value="35"/>
+        <Property label="especie" value="Mezquite"/>
+        <Property label="foto" value="fotos/P008_1.jpg"/>
+      </Feature>
+    </CgPoint>
+    <CgPoint name="P009" code="EDIF" timeStamp="2026-10-15T13:10:00.0-06:00">3168000.000 397600.000 1434.500</CgPoint>
+    <CgPoint name="P010" code="EDIF" timeStamp="2026-10-15T13:11:00.0-06:00">3168000.000 397620.000 1434.520</CgPoint>
+    <CgPoint name="P011" code="EDIF" timeStamp="2026-10-15T13:12:00.0-06:00">3168015.000 397620.000 1434.510</CgPoint>
+    <CgPoint name="P012" code="EDIF" timeStamp="2026-10-15T13:13:00.0-06:00">3168015.000 397600.000 1434.490</CgPoint>
+  </CgPoints>
+  <PlanFeatures name="Figuras">
+    <PlanFeature name="CERCA 1" code="CERCA">
+      <CoordGeom>
+        <Line><Start pntRef="P002">3168010.000 397530.000 1432.500</Start><End pntRef="P003">3168025.750 397545.250 1433.020</End></Line>
+        <Line><Start pntRef="P003">3168025.750 397545.250 1433.020</Start><End pntRef="P004">3168031.400 397560.125 1433.415</End></Line>
+      </CoordGeom>
+    </PlanFeature>
+    <PlanFeature name="LINDERO 1" code="LINDERO">
+      <CoordGeom>
+        <Line><Start pntRef="P005">3168050.000 397500.000 1431.900</Start><End pntRef="P006">3168052.500 397540.000 1432.350</End></Line>
+        <Line><Start pntRef="P006">3168052.500 397540.000 1432.350</Start><End pntRef="P007">3168080.000 397520.000</End></Line>
+        <Line><Start pntRef="P007">3168080.000 397520.000</Start><End pntRef="P005">3168050.000 397500.000 1431.900</End></Line>
+      </CoordGeom>
+    </PlanFeature>
+    <PlanFeature name="EDIFICIO 1" code="EDIF">
+      <CoordGeom>
+        <Line><Start pntRef="P009">3168000.000 397600.000 1434.500</Start><End pntRef="P010">3168000.000 397620.000 1434.520</End></Line>
+        <Line><Start pntRef="P010">3168000.000 397620.000 1434.520</Start><End pntRef="P011">3168015.000 397620.000 1434.510</End></Line>
+        <Line><Start pntRef="P011">3168015.000 397620.000 1434.510</Start><End pntRef="P012">3168015.000 397600.000 1434.490</End></Line>
+        <Line><Start pntRef="P012">3168015.000 397600.000 1434.490</Start><End pntRef="P009">3168000.000 397600.000 1434.500</End></Line>
+      </CoordGeom>
+    </PlanFeature>
+  </PlanFeatures>
+</LandXML>
