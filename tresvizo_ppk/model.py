@@ -343,6 +343,69 @@ class PointsResult:
     antennas: list[AntennaInfo] = field(default_factory=list)          # rover y base: modelo y fuente
 
 
+# --- Localización de proyecto (calibración local) --------------------------------------------------------------------
+#
+# Lo mismo que el registro de las apps TresVizo Field (`docs/localizacion.md` §5 de las apps, que viaja en su respaldo
+# ZIP y en el `.mvz`): **sus pares y sus opciones**. Los parámetros no se guardan: se recalculan siempre de aquí
+# (`crs.localizacion`), con el geoide que tenga el sistema elegido ahora. Lo que no se sabe es None, nunca 0.
+
+@dataclass
+class LocalizationControl:
+    """La coordenada local conocida de la marca. Norte y este None en un banco de nivel; la cota, en un vértice sin
+    cota."""
+    northing_m: float | None = None
+    easting_m: float | None = None
+    elevation_m: float | None = None
+
+
+@dataclass
+class LocalizationMeasured:
+    """Lo medido sobre la marca, como una foto al crear el par: latitud, longitud y altura elipsoidal del suelo en el
+    marco de la base (el «receptor» de las apps). `ellipsoidal_height_m` None: el par no puede usarse en cota."""
+    name: str = ""
+    latitude_deg: float = 0.0
+    longitude_deg: float = 0.0
+    ellipsoidal_height_m: float | None = None
+    point_id: str | None = None                # el punto de origen en las apps (UUID), si lo hay
+    source: str = ""                           # en la oficina: «PPK», «estático», «CSV de TresVizo Field»…
+
+
+@dataclass
+class LocalizationPair:
+    name: str                                  # el nombre de la marca, el de los residuos («C1»)
+    control: LocalizationControl = field(default_factory=LocalizationControl)
+    measured: LocalizationMeasured = field(default_factory=LocalizationMeasured)
+    uses_horizontal: bool = True               # entra al ajuste en planta; si no, es una comprobación
+    uses_vertical: bool = True
+    id: str = ""                               # UUID del par
+
+
+@dataclass
+class Localization:
+    """Una localización: pares y opciones. Métodos de las apps: planta «similarity», «rigid» o «translation»; cota
+    «automatic», «constant» o «none». La cuadrícula base es la proyección del sistema por su código («projectCRS») o,
+    en un sistema geográfico, una transversa de Mercator local («localTransverseMercator», con su meridiano central y
+    su elipsoide); `height_base_*` declara con qué alturas se aplicó (manda el geoide de ahora)."""
+    pairs: list[LocalizationPair] = field(default_factory=list)
+    horizontal_method: str = "similarity"
+    vertical_method: str = "automatic"
+    horizontal_tolerance_m: float = 0.020
+    vertical_tolerance_m: float = 0.040
+    base_grid_kind: str = "projectCRS"         # «projectCRS» o «localTransverseMercator»
+    base_grid_crs_code: str = ""               # «EPSG:6368»
+    base_grid_central_meridian_deg: float | None = None
+    base_grid_ellipsoid: str = ""              # «WGS 84», «GRS 1980»
+    height_base_kind: str = "ellipsoidal"      # «ellipsoidal» u «orthometric»
+    height_base_geoid_id: str = ""
+    id: str = ""                               # UUID
+    project_id: str = ""                       # UUID del proyecto de las apps (o uno propio de la oficina)
+    applied_at: datetime | None = None
+    removed_at: datetime | None = None         # None mientras está en uso
+    saved_system_id: str = ""                  # el de «Mis sistemas» de las apps, si salió de uno
+    saved_system_name: str = ""
+    origin: str = ""                           # de dónde salió: «calculada en la oficina», «importada de …»
+
+
 # --- Sistemas de coordenadas, usuario y proyecto ---------------------------------------------------------------------
 
 @dataclass
@@ -351,6 +414,9 @@ class CoordinateChoice:
     zone: str = ""                             # zona o variante del paquete, si aplica
     geoid_id: str | None = "ggm10"
     label: str = ""                            # cómo se llama en el informe
+    # Añadido por la localización: la que está en uso. Con ella, norte, este y cota del resultado, del informe y de la
+    # exportación son los locales (`crs.api.transform`).
+    localization: Localization | None = None
 
 
 @dataclass(frozen=True)
@@ -387,6 +453,15 @@ class TransformedCoordinate:
     label: str = ""                            # «Mexico ITRF2008 / UTM zona 14N + GGM10 height» (CS name del CSV)
     attribution: tuple[str, ...] = ()          # créditos y avisos que exige la licencia del geoide
     warnings: tuple[str, ...] = ()
+    # Añadido por la localización. Con una en uso, `northing_m`/`easting_m` son los **locales**,
+    # `orthometric_height_m` la cota local (`height_kind` «local»; None si no se sabe), `crs_code` es «LOCAL» y
+    # `label` el rótulo de las apps («Local · sobre UTM zona 13N»); la convergencia y el factor de escala, que son de
+    # la cuadrícula, van en None. Lo de la cuadrícula base queda aquí:
+    localized: bool = False
+    base_crs_code: str = ""                    # código de la cuadrícula base («EPSG:32613»); vacío en la transversa local
+    grid_northing_m: float | None = None       # en la cuadrícula base
+    grid_easting_m: float | None = None
+    base_height_m: float | None = None         # la altura base (elipsoidal u ortométrica) a la que se suma el plano
 
 
 @dataclass
@@ -421,3 +496,6 @@ class Project:
     source_project: str = ""                   # base propia encadenada: ruta relativa del proyecto estático
     position: Ecef | None = None               # estático: coordenada final del último proceso (para encadenar la base)
     sigma_enu: Enu | None = None               # y su σ
+    # Añadido por la localización: las que se quitaron (con `removed_at`), de la más antigua a la más reciente, como
+    # el historial de las apps. La en uso va en `coordinates.localization`.
+    localization_history: list[Localization] = field(default_factory=list)
