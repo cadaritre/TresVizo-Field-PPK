@@ -655,8 +655,8 @@ def test_se_guarda_en_el_proyecto(tmp_path):
                        at=datetime(2026, 10, 27, 12, 0, 0, tzinfo=timezone.utc))
     old = L.removed(L.applied(L.draft(_site_pairs()[:3], CoordinateChoice("EPSG:32613", "", None))),
                     at=datetime(2026, 10, 27, 13, 0, 0, tzinfo=timezone.utc))
-    project = Project(kind="points", coordinates=CoordinateChoice("EPSG:32613", "", "ggm10", "UTM 13N", record),
-                      localization_history=[old])
+    project = Project(kind="points", coordinates=CoordinateChoice("EPSG:32613", "", "ggm10", "UTM 13N", record,
+                                                                  [old]))
     path = projects.save(project, tmp_path / "obra.tvppk")
     data = json.loads(path.read_text("utf-8"))
     stored = data["coordinates"]["localization"]
@@ -665,7 +665,8 @@ def test_se_guarda_en_el_proyecto(tmp_path):
     assert stored["origin"] == "calculada en la oficina" and stored["appliedAt"] == "2026-10-27T12:00:00Z"
     again = projects.load(path)
     assert again.coordinates.localization == record
-    assert again.localization_history == [old] and again.localization_history[0].removed_at is not None
+    history = again.coordinates.localization_history
+    assert history == [old] and history[0].removed_at is not None
     assert projects.load(projects.save(Project(kind="static"), tmp_path / "sin.tvppk")).coordinates.localization is None
 
 

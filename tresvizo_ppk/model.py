@@ -415,8 +415,11 @@ class CoordinateChoice:
     geoid_id: str | None = "ggm10"
     label: str = ""                            # cómo se llama en el informe
     # Añadido por la localización: la que está en uso. Con ella, norte, este y cota del resultado, del informe y de la
-    # exportación son los locales (`crs.api.transform`).
+    # exportación son los locales (`crs.api.transform`). Y las que se quitaron (con `removed_at`), de la más antigua a
+    # la más reciente, como el historial de las apps: van con la elección del sistema para que el proyecto las guarde
+    # sin más (el sistema del proyecto y su historial son una sola cosa).
     localization: Localization | None = None
+    localization_history: list[Localization] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -496,6 +499,3 @@ class Project:
     source_project: str = ""                   # base propia encadenada: ruta relativa del proyecto estático
     position: Ecef | None = None               # estático: coordenada final del último proceso (para encadenar la base)
     sigma_enu: Enu | None = None               # y su σ
-    # Añadido por la localización: las que se quitaron (con `removed_at`), de la más antigua a la más reciente, como
-    # el historial de las apps. La en uso va en `coordinates.localization`.
-    localization_history: list[Localization] = field(default_factory=list)

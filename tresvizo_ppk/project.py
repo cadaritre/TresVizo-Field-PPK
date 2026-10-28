@@ -246,8 +246,9 @@ def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
             "options": _options(project.options, folder),
             "coordinates": {"crs_id": project.coordinates.crs_id, "zone": project.coordinates.zone,
                             "geoid_id": project.coordinates.geoid_id, "label": project.coordinates.label,
-                            "localization": _localization(project.coordinates.localization)},
-            "localization_history": [_localization(r) for r in project.localization_history],
+                            "localization": _localization(project.coordinates.localization),
+                            "localization_history": [_localization(r)
+                                                     for r in project.coordinates.localization_history]},
             "bases": [_station(s) for s in project.bases], "base_kind": project.base_kind,
             "source_project": project.source_project,
             "position": None if project.position is None else _ecef(project.position),
@@ -275,9 +276,10 @@ def from_dict(data: dict, folder: Path) -> Project:
                        coordinates=CoordinateChoice(crs_id=str(c.get("crs_id", CoordinateChoice.crs_id)),
                                                     zone=str(c.get("zone", "")), geoid_id=c.get("geoid_id"),
                                                     label=str(c.get("label", "")),
-                                                    localization=_parse_localization(c.get("localization"))),
-                       localization_history=[_parse_localization(r) for r in data.get("localization_history", [])
-                                             if r is not None],
+                                                    localization=_parse_localization(c.get("localization")),
+                                                    localization_history=[
+                                                        _parse_localization(r)
+                                                        for r in c.get("localization_history", []) if r is not None]),
                        pole_height_m=float(data.get("pole_height_m", 0.0)),
                        point_name=str(data.get("point_name", "")), number=str(data.get("number", "")),
                        point_code=str(data.get("point_code", "")),
