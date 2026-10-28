@@ -267,3 +267,40 @@
   GNSS: el informe da la EPV de cada punto y no los comprueba (lo dice).
 - El lugar de la firma (`Project.place`) se guarda en el proyecto pero el asistente todavía no lo pide: el informe
   deja la raya para escribirlo a mano.
+
+## Control de calidad: tolerancias, control y ocupaciones repetidas (§2; `tresvizo_ppk/calidad.py`)
+
+**Hecho y verificado (pruebas sintéticas; 27-10-2026):**
+- Tolerancias del proyecto con sus cifras de omisión del orden de la NT EEP (σH ≤ L/(1.2238·√2), σV ≤ 2L/1.96, L y 2L
+  entre ocupaciones y contra control, 95 % de fijas, cociente 3, PDOP 6, 30 s o 1 h): cada criterio probado justo en
+  su borde (pasa en el borde, revisar un milímetro o una décima después, falla al pasar del doble), con la cifra
+  impresa («σV 0.020 ≤ 0.020» con 0.0204). Un criterio vacío no se evalúa; uno sin dato dice «sin dato» y no cuenta.
+- Ocupaciones repetidas: dos ocupaciones resueltas a mano (media 1/σ² en E de 2.4 mm, cada una menos la media, σ que
+  no baja de la mínima del motor, 12 mm y 16 mm de diferencia contra 20 y 40 mm); solo las fijas entran si las hay;
+  con una sola con solución, «revisar» y esa como resultado; elegir una ocupación.
+- Control: residuos calculados a mano en UTM (ΔN +0.012, ΔE −0.009 → 0.015), cota solo con geoide, control sin
+  medición; el CSV PNEZD, PENZD y NXYZD con el lector de la localización.
+- PDOP de cada ocupación y de cada línea base: a mano (cenit y cuatro en el horizonte: 1.5) y la misma que la gráfica
+  del informe en un `.stat` sintético, sin contar dos veces la pasada de regreso del proceso combinado.
+- Informe (texto con pypdf), exportación (CSV simple, a medida, LandXML que sigue validando contra el esquema, CSV de
+  Field sin cambios) e interfaz (dobles del motor): tolerancias que se cambian sin volver a procesar, estado con
+  símbolo y palabra en la tabla, ocupación elegida, control importado, todo guardado en el proyecto.
+
+**No verificado / pendiente:**
+- No se ha probado con una jornada real con ocupaciones repetidas ni con un control medido de verdad (con los datos
+  de la RGNA de `validacion.md` no hay ni una cosa ni la otra). Falta un levantamiento con dos visitas al mismo punto
+  y coordenadas de control conocidas.
+- La media ponderada toma independientes las ocupaciones y su σ no baja de la mínima de un punto fijo (8 mm + 1 ppm,
+  15 mm + 2 ppm): es lo prudente con la misma base y el mismo día; ocupaciones de días distintos podrían promediarse
+  con σ menor, y no se distingue.
+- Las cifras de omisión de duración (30 s en PPK, 1 h en estático), PDOP 6 y 95 % de fijas no salen de una norma
+  mexicana (la NT EEP no las fija): son las usuales del ramo; el usuario las cambia en el proyecto.
+- El PDF usa «√», «▲» y «×» (Arial y Segoe UI no traen ✓ ni ✕); si la letra no los trae, va solo la palabra y el
+  color. En Windows real no se ha generado.
+- La interfaz no se revisó en una captura de pantalla (sin permiso de grabar la pantalla); la cuadrícula de
+  tolerancias pasa a una columna si no caben dos. Al elegir otra ocupación el resultado se vuelve a dibujar y la
+  vista vuelve arriba.
+- `tests/test_ui_widgets.py::test_nearby_stations_with_distance_and_network_notes` se cuelga en este Mac en
+  `app.update()` al abrir «Estaciones de referencia» (también sin los cambios de la interfaz de este paquete, con una
+  copia de `HEAD` hecha con `git archive`, y en la suite completa corrida antes de empezar): no es del control de
+  calidad; queda para quien lleve las redes en la interfaz.

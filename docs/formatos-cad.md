@@ -41,7 +41,9 @@ No hay biblioteca de códigos en la oficina: la capa es el código (lo que hacen
 aplicado o «elipsoidal ⟨marco⟩»; sin atributo si el geoide no se pudo aplicar) y `ogcWktCode` (el texto del `.prj`);
 `Project`; `Application` («TresVizo Field PPK», «TresVizo», versión); un `CgPoint` por punto con `name`, `code`,
 `desc` y `timeStamp` (el inicio de la ocupación: el de la fila de campo con su desfase, o el UTC con `+00:00`) y
-**norte, este, cota** (sin cota, solo norte y este). Solo sistemas proyectados.
+**norte, este, cota** (sin cota, solo norte y este). Solo sistemas proyectados. En `desc` va, detrás de la
+descripción, el estado del control de calidad del proyecto («mojonera · Revisar: σV 0.034 > 0.020»): es el único
+atributo de texto libre de `CgPoint` en el esquema (el resultado sigue validando).
 
 - Byte a byte con `referencia/Prueba_oficina.xml` de las apps en todo lo que la oficina escribe (cabecera y los diez
   puntos sin atributos), con su proyecto de prueba (`tests/datos/apps/oficina/`).
@@ -65,6 +67,12 @@ header, bom, decimal_comma, custom)`.
 - Mismas reglas de escritura que el CSV de Field (RFC 4180, CRLF, neutralizar fórmulas, vacío es sin dato).
 - Solo los puntos posprocesados (un PNEZD no tiene dónde decir que una fila es de campo). En geográficas, «Easting»
   es la longitud con 8 decimales, como en las apps.
+- El estado del control de calidad del proyecto, en dos columnas que se pueden elegir (y que «Todas las columnas»
+  pone al final): `qcStatus` («Estado»: Pasa, Revisar o Falla; en inglés «QC status»: Pass, Review, Fail) y
+  `qcReason` («Razón del estado»: «σV 0.034 > 0.020; PDOP 7.1 > 6.0», y «promedio de 2 ocupaciones» si lo es). El
+  CSV simple las lleva siempre, detrás del código. Un nombre repetido en el CSV de campo sale una vez, con la media de
+  sus ocupaciones o la elegida. **El CSV de TresVizo Field no las lleva**: conserva el formato de las apps y todas las
+  ocupaciones del campo.
 
 ## 4. El vértice del estático en el CSV de Field
 
