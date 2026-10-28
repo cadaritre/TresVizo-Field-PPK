@@ -110,6 +110,11 @@ class DataQuality:
     cycle_slips: dict[str, int] = field(default_factory=dict)     # satélite → saltos
     multipath_m: dict[str, float] = field(default_factory=dict)   # señal → MP RMS
     warnings: list[str] = field(default_factory=list)
+    # Añadido por el editor de sesión (línea de tiempo por satélite, en UTC): los tramos con datos de cada satélite
+    # (inicio, fin; un hueco de más de tres intervalos corta el tramo) y el momento de cada salto de ciclo
+    tracks: dict[str, list[tuple[datetime, datetime]]] = field(default_factory=dict)
+    slip_times: dict[str, list[datetime]] = field(default_factory=dict)
+    interval_s: float | None = None          # intervalo de registro (el del encabezado o el mediano)
 
 
 # --- Antenas: la que eligió el usuario y la que se usó ----------------------------------------------------------------
@@ -155,6 +160,14 @@ class AntennaInfo:
 
 # --- Opciones de proceso ---------------------------------------------------------------------------------------------
 
+@dataclass(frozen=True)
+class TimeWindow:
+    """Ventana de tiempo que se procesa (editor de sesión, como el Session Editor de TBC), en UTC con zona. None en
+    un extremo: desde el inicio o hasta el fin de los datos."""
+    start: datetime | None = None
+    end: datetime | None = None
+
+
 class Ephemeris(str, Enum):
     BROADCAST = "broadcast"
     PRECISE = "precise"
@@ -176,6 +189,11 @@ class ProcessingOptions:
     # ganan sobre el incluido, y la antena y la altura elegidas por extremo («rover», «base:<clave>»).
     antex_files: list[Path] = field(default_factory=list)
     antennas: dict[str, AntennaSelection] = field(default_factory=dict)
+    # Añadido por el editor de sesión: la ventana de tiempo que se procesa (None: toda la sesión común del rover y la
+    # base) y lo que se deja fuera del cálculo: satélites por su PRN de RINEX («G13», «R05», «E11») o sistemas
+    # completos por su letra («R», «C»). Valen para todas las líneas base y para la trayectoria del PPK.
+    time_window: TimeWindow | None = None
+    excluded_sats: list[str] = field(default_factory=list)
 
 
 # --- Resultados: estático --------------------------------------------------------------------------------------------
@@ -289,6 +307,9 @@ class StaticResult:
     antennas: list[AntennaInfo] = field(default_factory=list)           # rover y cada base: modelo y fuente
     # Añadido por las tolerancias: la evaluación contra las del proyecto (`calidad.evaluate_static`)
     quality: QualityReport | None = None
+    # Añadido por el editor de sesión: la ventana y los satélites fuera con que se calculó este resultado
+    time_window: TimeWindow | None = None
+    excluded_sats: list[str] = field(default_factory=list)
 
 
 # --- Resultados: PPK de puntos ---------------------------------------------------------------------------------------
@@ -353,6 +374,9 @@ class PointsResult:
     # Añadido por las tolerancias: la evaluación contra las del proyecto (`calidad.evaluate_points`). Con ella, el
     # resultado de cada nombre es el de `quality.points` (promedio de sus ocupaciones o la elegida).
     quality: QualityReport | None = None
+    # Añadido por el editor de sesión: la ventana y los satélites fuera con que se calculó este resultado
+    time_window: TimeWindow | None = None
+    excluded_sats: list[str] = field(default_factory=list)
 
 
 # --- Control de calidad: tolerancias del proyecto, puntos de control y ocupaciones repetidas -------------------------
