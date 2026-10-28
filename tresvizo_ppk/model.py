@@ -651,6 +651,18 @@ class NetworkAdjustment:
 
 
 @dataclass
+class ControlPairCheck:
+    """Dos puntos de control en el mínimamente restringido: (ajustada − coordenada) de uno menos la del otro, en ENU
+    de su punto medio. Si las líneas y las dos coordenadas concuerdan, es cero dentro de su σ."""
+    from_id: str
+    to_id: str
+    delta_enu: Enu
+    sigma_enu: Enu                             # del ajuste (relativa) más la de las dos coordenadas
+    max_standardized: float = 0.0
+    consistent: bool = True                    # |Δ|/σ ≤ 3.29 en las tres componentes
+
+
+@dataclass
 class NetworkResult:
     vectors: list[NetworkVector]               # todas, con `trivial` y `note` puestas
     constraints: list[NetworkConstraint]
@@ -660,6 +672,8 @@ class NetworkResult:
     constrained: NetworkAdjustment | None = None   # None sin fijas en uso
     loops: list[LoopClosure] = field(default_factory=list)
     unchecked: list[str] = field(default_factory=list)   # líneas independientes que ningún bucle comprueba
+    control_pairs: list[ControlPairCheck] = field(default_factory=list)
+    inconsistent_control: list[str] = field(default_factory=list)   # fijas que no concuerdan con las demás
     frame: str = OFFICIAL_FRAME
     epoch: float = OFFICIAL_EPOCH
     log: list[str] = field(default_factory=list)
