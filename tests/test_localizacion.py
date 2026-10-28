@@ -667,3 +667,51 @@ def test_se_guarda_en_el_proyecto(tmp_path):
     assert again.coordinates.localization == record
     assert again.localization_history == [old] and again.localization_history[0].removed_at is not None
     assert projects.load(projects.save(Project(kind="static"), tmp_path / "sin.tvppk")).coordinates.localization is None
+
+
+# --- El informe -------------------------------------------------------------------------------------------------------
+
+def _ppk_choice(result, n_pairs=5):
+    """Una localización de los puntos del PPK sintético: el sistema local girado 1°, corrido y 100 m arriba."""
+    plain = CoordinateChoice("EPSG:6368", "", "ggm10", "Mexico ITRF2008 / UTM zona 13N")
+    processed = [p for p in result.points if p.position is not None and p.solution.value != "none"]
+    measured = [L.measured_from_coordinate(p.point.name, crs.transform(p.position, plain), "PPK") for p in processed]
+    grid = L.frame_for(Localization(base_grid_crs_code="EPSG:6368"), "ggm10")
+    th = math.radians(1.0)
+    control = []
+    for m in measured[:n_pairs]:
+        e, n = grid.grid(m.latitude_deg, m.longitude_deg)
+        de, dn = e - 780000, n - 2420000
+        control.append(L.ControlPoint(m.name, 5000 + math.sin(th) * de + math.cos(th) * dn,
+                                      1000 + math.cos(th) * de - math.sin(th) * dn,
+                                      grid.base_height(m.ellipsoidal_height_m, m.latitude_deg, m.longitude_deg) + 100))
+    pairs, _ = L.pairs_from(control, measured)
+    return replace(plain, localization=L.applied(L.draft(pairs, plain)))
+
+
+def test_el_informe_sale_en_locales_con_su_seccion(tmp_path):
+    import sinteticos as s
+    from pypdf import PdfReader
+    from tresvizo_ppk.report import api as report
+    result = s.points_result(tmp_path)
+    project = replace(s.points_project(tmp_path), coordinates=_ppk_choice(result))
+    out = report.points_report(result, project, s.user(), tmp_path / "informe.pdf")
+    text = " ".join((page.extract_text() or "") for page in PdfReader(str(out)).pages)
+    text = " ".join(text.split())
+    for needle in ("Localización", "Local · sobre Mexico ITRF2008 / UTM zona 13N", "Residuos por par",
+                   "Sin el par dH", "Semejanza", "Plano inclinado", "Cota local", "calculada en la oficina",
+                   "LOCAL (cuadrícula base EPSG:6368)"):
+        assert needle in text, needle
+    c = crs.transform(next(p.position for p in result.points if p.position is not None), project.coordinates)
+    assert f"{c.northing_m:.3f}" in text            # la tabla de puntos, en locales
+    (tmp_path / "e").mkdir()
+    static = s.static_result(tmp_path / "e")
+    sp = s.static_project(tmp_path / "e")
+    plain = CoordinateChoice("EPSG:6368", "", "ggm10")
+    m = L.measured_from_coordinate("V1", crs.transform(static.position, plain), "estático")
+    one = L.applied(L.draft([LocalizationPair("V1", LocalizationControl(10000.0, 5000.0, 1500.0), m)], plain))
+    sp = replace(sp, coordinates=replace(plain, localization=one))
+    out = report.static_report(static, sp, s.user(), tmp_path / "e" / "informe.pdf")
+    text = " ".join(" ".join((page.extract_text() or "") for page in PdfReader(str(out)).pages).split())
+    assert "Solo traslación" in text and "10000.000" in text and "σ de la cota local" in text
+    assert "Sin comprobación en planta" in text            # un par: el aviso de las apps

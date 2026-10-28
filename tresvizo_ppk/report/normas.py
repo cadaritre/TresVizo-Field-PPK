@@ -95,6 +95,8 @@ def accuracy_fields(a: Accuracy, height_label: str = "de la cota") -> list[tuple
 
 
 def height_name(c: TransformedCoordinate | None) -> str:
+    if c is not None and c.localized:
+        return "de la cota local"
     return "de la cota normal" if c is not None and c.height_kind == "normal" else "de la cota ortométrica"
 
 

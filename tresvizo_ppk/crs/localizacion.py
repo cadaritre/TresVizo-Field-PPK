@@ -953,6 +953,7 @@ def apply(c: TransformedCoordinate, choice: CoordinateChoice, frame: str = OFFIC
     return replace(c, northing_m=N, easting_m=E, orthometric_height_m=Z, height_kind="local" if Z is not None else "",
                    convergence_deg=None, scale_factor=None, axis_order="E,N", crs_code=LOCAL_CODE, crs_name=label,
                    label=label, localized=True, base_crs_code=fr.crs_code, grid_easting_m=e, grid_northing_m=n,
+                   geoid_uncertainty_m=None,
                    base_height_m=v)
 
 

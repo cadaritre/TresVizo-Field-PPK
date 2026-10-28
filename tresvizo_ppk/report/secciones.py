@@ -10,8 +10,8 @@ from ..crs import api as crs
 from ..errors import UserError
 from .. import nombres
 from ..nombres import display_name
-from ..model import (CoordinateChoice, DataQuality, Ecef, Ephemeris, ObservationSet, ProcessingOptions, Project,
-                     Solution, Station, TransformedCoordinate)
+from ..model import (OFFICIAL_FRAME, CoordinateChoice, DataQuality, Ecef, Ephemeris, ObservationSet,
+                     ProcessingOptions, Project, Solution, Station, TransformedCoordinate)
 from . import estilo, graficas
 from .documento import CONTENT_WIDTH, Report, text
 from .estilo import num
@@ -37,6 +37,8 @@ def transform_or_none(position: Ecef | None, choice: CoordinateChoice) -> tuple[
 def system_name(c: TransformedCoordinate | None, choice: CoordinateChoice) -> str:
     if c is None:
         return display_name(choice.label) or choice.crs_id
+    if c.localized:             # en locales: el rótulo de las apps («Local · sobre UTM zona 13N»)
+        return c.label
     return display_name(choice.label or c.crs_name)
 
 
@@ -79,6 +81,8 @@ def base_notices(r: Report, stations: list[Station]) -> list[str]:
 
 
 def height_label(c: TransformedCoordinate | None) -> str:
+    if c is not None and c.localized:
+        return "Cota local (Z)"
     if c is not None and c.orthometric_height_m is not None:
         return "Cota normal (H*)" if c.height_kind == "normal" else "Cota ortométrica (H)"
     return "Altura elipsoidal (h)"
@@ -108,8 +112,11 @@ def coordinate_fields(c: TransformedCoordinate | None, position: Ecef, choice: C
         rows += [("Latitud", estilo.lat_text(c.latitude_deg)), ("Longitud", estilo.lon_text(c.longitude_deg))]
         if c.orthometric_height_m is not None:
             rows.append((height_label(c), num(c.orthometric_height_m, 3, "m")))
-            rows.append(("Ondulación N" if c.height_kind != "normal" else "Anomalía de altura ζ",
-                         num(c.undulation_m, 3, "m")))
+            if not c.localized or c.undulation_m is not None:
+                rows.append(("Ondulación N" if c.height_kind != "normal" else "Anomalía de altura ζ",
+                             num(c.undulation_m, 3, "m")))
+        elif c.localized:
+            rows.append((height_label(c), "— (sin altura base: no hay cota local)"))
         rows.append(("Altura elipsoidal (h)", num(c.ellipsoidal_height_m, 3, "m")))
         if c.convergence_deg is not None:
             sign = "−" if c.convergence_deg < 0 else "+"
@@ -132,11 +139,13 @@ def system_section(r: Report, c: TransformedCoordinate | None, choice: Coordinat
     r.h1("Sistema de coordenadas")
     pairs = [("Sistema elegido", system_name(c, choice))]
     if c is not None:
-        if c.crs_name and display_name(c.crs_name) != c.crs_name:
+        if c.crs_name and display_name(c.crs_name) != c.crs_name and not c.localized:
             pairs.append(("Nombre EPSG", c.crs_name))
-        pairs += [("Código", c.crs_code or "—"), ("Marco del sistema", c.frame_text or "—"),
+        code = (f"LOCAL (cuadrícula base {c.base_crs_code or 'transversa de Mercator local'})" if c.localized
+                else c.crs_code or "—")
+        pairs += [("Código", code), ("Marco del sistema", c.frame_text or "—"),
                   ("Marco del resultado", result_frame)]
-        definition = crs.definition(c.crs_code)
+        definition = crs.definition(c.base_crs_code if c.localized else c.crs_code)
         if definition is not None:
             if definition.is_projected:
                 pairs.append(("Proyección", definition.projection_name))
@@ -155,6 +164,9 @@ def system_section(r: Report, c: TransformedCoordinate | None, choice: Coordinat
         r.callout("error", "No se pudo expresar en el sistema elegido", [problem])
     if c is not None and c.attribution:
         r.para(" ".join(text(a) for a in c.attribution), "small")
+    if choice.localization is not None:
+        from .localizacion import localization_section
+        localization_section(r, choice, result_frame.split(",")[0].strip() or OFFICIAL_FRAME)
 
 
 def options_section(r: Report, options: ProcessingOptions, ephemeris_used: set[Ephemeris], log: list[str],

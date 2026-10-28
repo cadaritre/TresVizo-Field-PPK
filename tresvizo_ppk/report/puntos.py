@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
 from ..crs import api as crs
@@ -37,6 +38,8 @@ def _track(pos_file: Path | None, choice: CoordinateChoice) -> tuple[list[tuple[
     duration = (epochs[-1].time - epochs[0].time).total_seconds()
     step = max(1, len(epochs) // MAX_TRACK)
     plane = CoordinateChoice(choice.crs_id, choice.zone, None)
+    if choice.localization is not None:     # en locales, como los puntos (la planta no depende del geoide)
+        plane = replace(choice, geoid_id=None)
     grs80 = crs.definition("EPSG:6365").ellipsoid
     out = []
     zone_fixed = None
@@ -46,7 +49,8 @@ def _track(pos_file: Path | None, choice: CoordinateChoice) -> tuple[list[tuple[
         else:
             p = Ecef(*crs.motor.geocentric(e.lat, e.lon, e.height, grs80))
         try:
-            c = crs.transform(p, CoordinateChoice(zone_fixed or plane.crs_id, "", None) if zone_fixed else plane)
+            c = crs.transform(p, CoordinateChoice(zone_fixed or plane.crs_id, "", None)
+                              if zone_fixed and plane.localization is None else plane)
         except Exception:
             continue
         zone_fixed = zone_fixed or c.crs_code      # toda la trayectoria en la zona de la primera época
@@ -71,7 +75,7 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     if choice.crs_id in crs.FAMILIES and not choice.zone.strip():
         ref_c, _ = secciones.transform_or_none(ref or result.base.position, CoordinateChoice(choice.crs_id, "", None))
         if ref_c is not None:
-            point_choice = CoordinateChoice(choice.crs_id, ref_c.zone, choice.geoid_id, choice.label)
+            point_choice = replace(choice, zone=ref_c.zone)      # con la localización en uso, si la hay
     coords: list[tuple[ProcessedPoint, object, str]] = []
     for p in points:
         c, problem = secciones.transform_or_none(p.position, point_choice)

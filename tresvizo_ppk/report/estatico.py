@@ -160,7 +160,11 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
         prec.append(("Elipse de error (1σ)", f"{num(a, 3)} × {num(b, 3)} m, acimut del eje mayor {num(az, 1)}°"))
     if c is not None and c.orthometric_height_m is not None:
         h_sigma = crs.height_sigma(s.u, c)
-        prec.append((f"σ de la cota (con el geoide ±{num(c.geoid_uncertainty_m, 2)} m)", num(h_sigma, 3, "m")))
+        if c.localized:
+            prec.append(("σ de la cota local (la del GNSS; el geoide lo absorbe el ajuste vertical)",
+                         num(h_sigma, 3, "m")))
+        else:
+            prec.append((f"σ de la cota (con el geoide ±{num(c.geoid_uncertainty_m, 2)} m)", num(h_sigma, 3, "m")))
     r.fields(prec, columns=2, label_width=120)
     if acc is not None:
         r.space(4)
