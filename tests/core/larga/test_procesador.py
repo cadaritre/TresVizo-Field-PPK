@@ -117,3 +117,34 @@ def test_fix_float_coherence(larga_data, monkeypatch):
     sig_fail = np.sqrt(np.diag(covariance_ecef_to_enu(_official("UGTO"), res.covariance)))
     sig_short = np.sqrt(np.diag(covariance_ecef_to_enu(_official("UGTO"), good.float_covariance)))
     assert sig_fail[0] > sig_short[0] and sig_fail[2] > sig_short[2]
+
+
+def test_imported_antex_reaches_the_long_baseline(larga_data, tmp_path):
+    """Un ANTEX importado por el usuario (`antex.session`) cambia la solución del procesador de líneas largas, no solo
+    el informe: el rover con una antena «de laboratorio» igual a la suya pero con el PCO vertical de G01 y G02 50 mm más
+    alto da una altura (solo GPS) 50 mm más baja; sin importarlo, esa antena no tiene calibración."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from test_antenas import lab_antex
+
+    start = gps_seconds(datetime(2026, 10, 20, 0, 0))
+    base = _endpoint("UQRO", larga_data["uqro"], _official("UQRO"))
+
+    def run(antenna):
+        st = find_station("UGTO")
+        rover = procesador.Endpoint(larga_data["ugto"], _official("UGTO") + np.array([2.0, -3.0, 1.5]),
+                                    st.antenna_height_m, antenna, "UGTO")
+        return procesador.process(rover, base, [larga_data["nav"]], [], mask_deg=15.0, start=start, end=start + 3599,
+                                  systems="G")
+
+    ref = run(antena.receiver_antenna("TRM115000.00", "NONE"))
+    lab = lab_antex(tmp_path, "TVLAB50", source=("TRM115000.00", "NONE"))
+    assert antena.receiver_antenna("TVLAB50", "NONE") is None
+    with antex.session([lab], [("TVLAB50", "NONE")]):
+        imported = antena.receiver_antenna("TVLAB50", "NONE")
+    assert imported is not None
+    moved = run(imported)
+    d = np.array(ecef_delta_to_enu(_official("UGTO"), moved.float_position - ref.float_position)) * 1000
+    assert d[2] == pytest.approx(-50.0, abs=3.0), d
+    assert np.hypot(d[0], d[1]) < 3.0

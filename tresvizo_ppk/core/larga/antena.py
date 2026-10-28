@@ -169,8 +169,17 @@ def _bundled() -> tuple[dict[tuple[str, str], Antenna], dict[str, list[Antenna]]
 
 
 def receiver_antenna(type_name: str, radome: str) -> Antenna | None:
-    """Patrón completo de la antena de receptor que eligió `antex.choose` (tipo y radomo exactos del ANTEX)."""
+    """Patrón completo de la antena de receptor que eligió `antex.choose` (tipo y radomo exactos del ANTEX), en el
+    mismo orden que ella: el ANTEX que importó el usuario en la sesión (`antex.session`), el incluido y los paquetes de
+    red. Sin el importado, una calibración de laboratorio cambiaría lo que dice el informe pero no la solución."""
     key = (type_name.strip().upper(), (radome or "NONE").strip().upper())
+    block = antex_motor.receiver_block(type_name, radome or "NONE")
+    if block:
+        found, _ = parse(block.splitlines())
+        if key in found:
+            return found[key]
+        if len(found) == 1:
+            return next(iter(found.values()))
     receivers, _ = _bundled()
     if key in receivers:
         return receivers[key]
