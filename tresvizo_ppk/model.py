@@ -245,6 +245,9 @@ class BaselineSolution:
     # Añadido por el motor (procesador propio de líneas largas):
     engine: str = "RTKLIB"                     # «RTKLIB» o «TresVizo» (procesador propio, líneas largas)
     ambiguity: AmbiguityResolution | None = None   # resolución de ambigüedades del procesador propio
+    # Añadido por las tolerancias: PDOP máxima de las épocas con solución (de los satélites usados, del `.stat`);
+    # None si no se sabe (sin `.stat` o el procesador propio)
+    pdop_max: float | None = None
 
 
 @dataclass
@@ -284,6 +287,8 @@ class StaticResult:
     precise_files: list[str] = field(default_factory=list)              # nombres de los SP3 usados
     rtklib_version: str = ""
     antennas: list[AntennaInfo] = field(default_factory=list)           # rover y cada base: modelo y fuente
+    # Añadido por las tolerancias: la evaluación contra las del proyecto (`calidad.evaluate_static`)
+    quality: QualityReport | None = None
 
 
 # --- Resultados: PPK de puntos ---------------------------------------------------------------------------------------
@@ -320,6 +325,10 @@ class ProcessedPoint:
     antenna_position: Ecef | None = None       # la antena (ARP) promediada, antes de bajar la altura
     height_used_m: float | None = None         # altura vertical restada (marca → ARP)
     epochs_float: int = 0
+    # Añadido por las tolerancias: cociente (ratio) mediano de las épocas fijas promediadas y PDOP máxima de las
+    # épocas promediadas (de los satélites usados, del `.stat`); None si no se sabe
+    ratio: float | None = None
+    pdop_max: float | None = None
 
 
 @dataclass
@@ -341,6 +350,126 @@ class PointsResult:
     rtklib_version: str = ""
     trajectory: list[tuple[datetime, Ecef, Solution]] = field(default_factory=list)   # para la gráfica
     antennas: list[AntennaInfo] = field(default_factory=list)          # rover y base: modelo y fuente
+    # Añadido por las tolerancias: la evaluación contra las del proyecto (`calidad.evaluate_points`). Con ella, el
+    # resultado de cada nombre es el de `quality.points` (promedio de sus ocupaciones o la elegida).
+    quality: QualityReport | None = None
+
+
+# --- Control de calidad: tolerancias del proyecto, puntos de control y ocupaciones repetidas -------------------------
+#
+# Como los criterios de Trimble Business Center y Leica Infinity: el usuario fija las tolerancias del proyecto y cada
+# punto y cada línea base sale «pass» (pasa), «review» (revisar) o «fail» (falla), con la razón en una línea. Un
+# criterio en None no se evalúa. Se pasa a «review» al salir de la tolerancia y a «fail» al salir más de
+# `fail_factor` veces (o, en los mínimos, al quedar por debajo de la tolerancia entre `fail_factor`).
+
+QUALITY_LEVELS = ("pass", "review", "fail")
+
+
+@dataclass
+class ProjectTolerances:
+    """Las tolerancias del proyecto. `order` es el orden de exactitud de la NT EEP (tabla 1: «5 centímetros») del
+    que salieron las cifras (`calidad.tolerances_for_order`); vacío si se escribieron a mano. σ a 1σ, como las del
+    resultado. Las de omisión son las del orden de 5 cm."""
+    order: str = "5 centímetros"
+    max_sigma_h_m: float | None = 0.028        # σH = √(σE² + σN²)
+    max_sigma_v_m: float | None = 0.051
+    min_fixed_percent: float | None = 95.0     # PPK: épocas fijas de la ocupación
+    min_ratio: float | None = 3.0              # cociente de la solución fija
+    max_pdop: float | None = 6.0
+    min_duration_s: float | None = None        # ocupación del PPK o sesión del estático
+    max_repeat_h_m: float | None = 0.050       # entre ocupaciones repetidas del mismo punto
+    max_repeat_v_m: float | None = 0.100
+    max_control_h_m: float | None = 0.050      # contra la coordenada de control
+    max_control_v_m: float | None = 0.100
+    fail_factor: float = 2.0
+
+
+@dataclass
+class ControlCoordinate:
+    """Una coordenada de control conocida, en el sistema del resultado (norte, este y cota, locales si hay una
+    localización en uso). Norte y este None en un banco de nivel; la cota None en un vértice sin cota."""
+    name: str
+    northing_m: float | None = None
+    easting_m: float | None = None
+    elevation_m: float | None = None
+    description: str = ""
+
+
+@dataclass
+class QualityCheck:
+    """Un criterio evaluado: «sigma_h», «sigma_v», «fixed», «ratio», «pdop», «duration», «repeat_h», «repeat_v»,
+    «control_h», «control_v», «solution», «adjustment» o «baseline»."""
+    criterion: str
+    level: str                                 # uno de QUALITY_LEVELS
+    value: float | None = None
+    limit: float | None = None
+    text: str = ""                             # «σV 0.034 > 0.020»
+
+
+@dataclass
+class QualityStatus:
+    level: str = "pass"                        # el peor de sus criterios
+    reason: str = ""                           # una línea con lo que no pasa («σV 0.034 > 0.020; PDOP 7.1 > 6.0»)
+    checks: list[QualityCheck] = field(default_factory=list)
+
+
+@dataclass
+class ControlResidual:
+    """Lo medido menos el control, en el sistema del resultado."""
+    name: str
+    control: ControlCoordinate
+    northing_m: float | None = None            # lo medido
+    easting_m: float | None = None
+    elevation_m: float | None = None
+    delta_e_m: float | None = None
+    delta_n_m: float | None = None
+    delta_h_m: float | None = None             # en la cota
+    status: QualityStatus = field(default_factory=QualityStatus)
+    note: str = ""                             # por qué falta una componente
+
+
+@dataclass
+class OccupationGroup:
+    """Las ocupaciones de un mismo nombre en el CSV de campo, en su orden. `choice` 0: la media ponderada; k ≥ 1: la
+    ocupación k. `deltas_enu`: cada ocupación menos la media, en ENU (None si no tiene solución)."""
+    name: str
+    occupations: list[ProcessedPoint] = field(default_factory=list)
+    choice: int = 0
+    used: list[int] = field(default_factory=list)            # índices (desde 0) que entran a la media
+    deltas_enu: list[Enu | None] = field(default_factory=list)
+    spread_h_m: float | None = None            # la mayor diferencia horizontal entre dos ocupaciones usadas
+    spread_v_m: float | None = None
+    status: QualityStatus = field(default_factory=QualityStatus)
+
+
+@dataclass
+class PointQuality:
+    """El resultado de un nombre (el único, la media de sus ocupaciones o la elegida) con su estado."""
+    name: str
+    point: ProcessedPoint | None = None        # None en el estático (el vértice es el del resultado)
+    status: QualityStatus = field(default_factory=QualityStatus)
+    occupations: int = 1
+    averaged: bool = False
+    note: str = ""                             # «promedio de 2 ocupaciones», «ocupación 2 de 3 (elegida)»
+
+
+@dataclass
+class BaselineQuality:
+    base_id: str
+    status: QualityStatus = field(default_factory=QualityStatus)
+
+
+@dataclass
+class QualityReport:
+    tolerances: ProjectTolerances
+    level: str = "pass"                        # el peor de los puntos
+    points: list[PointQuality] = field(default_factory=list)
+    baselines: list[BaselineQuality] = field(default_factory=list)
+    groups: list[OccupationGroup] = field(default_factory=list)
+    control: list[ControlResidual] = field(default_factory=list)
+    control_missing: list[str] = field(default_factory=list)   # control sin punto medido del mismo nombre
+    control_source: str = ""
+    notes: list[str] = field(default_factory=list)
 
 
 # --- Localización de proyecto (calibración local) --------------------------------------------------------------------
@@ -499,3 +628,10 @@ class Project:
     source_project: str = ""                   # base propia encadenada: ruta relativa del proyecto estático
     position: Ecef | None = None               # estático: coordenada final del último proceso (para encadenar la base)
     sigma_enu: Enu | None = None               # y su σ
+    # Añadido por las tolerancias (control de calidad): las tolerancias (None: las de omisión del tipo de proyecto,
+    # `calidad.default_tolerances`), las coordenadas de control importadas y de qué archivo, y qué resultado se
+    # queda cada nombre repetido del CSV de campo (nombre → 0 la media ponderada, k la ocupación k)
+    tolerances: ProjectTolerances | None = None
+    control_points: list[ControlCoordinate] = field(default_factory=list)
+    control_source: str = ""
+    occupation_choices: dict[str, int] = field(default_factory=dict)
