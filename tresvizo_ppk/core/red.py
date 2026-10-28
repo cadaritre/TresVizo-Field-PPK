@@ -37,7 +37,7 @@ distancia.
 declarado: en cada sesión se quedan las del árbol de expansión mínima por longitud (Kruskal, primero las que el
 usuario marcó independientes); cada una de las demás es la más larga de un ciclo de su sesión y queda trivial,
 fuera del ajuste y de los bucles. Las sesiones se toman de `NetworkVector.session` o, si no viene, del horario: dos
-líneas son de la misma sesión si se traslapan más de `session_overlap` de la más corta.
+líneas son de la misma sesión si comparten más de `session_overlap` de la más larga.
 
 **Cierres de bucle** entre líneas independientes (como no hay ciclos dentro de una sesión, todo bucle junta
 sesiones independientes): para cada línea, el bucle más corto (en metros) que la contiene, sin repetir bucles; las
@@ -213,8 +213,10 @@ def vector_from_baseline(b: BaselineSolution, *, from_id: str | None = None, to_
 # --- Sesiones y líneas triviales -------------------------------------------------------------------------------------
 
 def assign_sessions(vectors: list[NetworkVector], overlap: float = 0.5) -> tuple[dict[str, list[str]], list[str]]:
-    """Sesión de cada línea en uso: la que trae o, sin ella, la deducida del horario (traslape de más de `overlap` de
-    la más corta). Pone `session` en las líneas (copias del ajuste) y devuelve sesión → ids y avisos."""
+    """Sesión de cada línea en uso: la que trae o, sin ella, la deducida del horario: dos líneas son de la misma
+    sesión si sus datos comunes pasan de `overlap` de la más larga (una línea de 5 h no es simultánea de una de 2 h
+    dentro de ella: la mayor parte de sus datos no los comparte). Pone `session` en las líneas (copias del ajuste) y
+    devuelve sesión → ids y avisos."""
     warnings: list[str] = []
     named = {v.session for v in vectors if v.session}
     pending = [v for v in vectors if not v.session and v.start and v.end]
@@ -230,8 +232,8 @@ def assign_sessions(vectors: list[NetworkVector], overlap: float = 0.5) -> tuple
         for j in range(i + 1, len(pending)):
             b = pending[j]
             common = (min(a.end, b.end) - max(a.start, b.start)).total_seconds()
-            shorter = min((a.end - a.start).total_seconds(), (b.end - b.start).total_seconds())
-            if shorter > 0 and common >= overlap * shorter:
+            longer = max((a.end - a.start).total_seconds(), (b.end - b.start).total_seconds())
+            if longer > 0 and common >= overlap * longer:
                 parent[find(i)] = find(j)
     groups: dict[int, list[NetworkVector]] = {}
     for i, v in enumerate(pending):
