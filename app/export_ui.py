@@ -1,8 +1,14 @@
-"""Exportar desde el resultado (estático y PPK): el menú, los diálogos de archivo y carpeta, y «Opciones de CSV».
+"""Exportar desde el resultado (estático y PPK): el menú, los diálogos de archivo y carpeta, «Opciones de CSV» y
+«Opciones de DXF».
 
 «Opciones de CSV» lleva las mismas opciones y los mismos textos que la hoja de las apps TresVizo Field
 (`PointCSV.Text` de iOS, `strings_csv.xml` de Android): disposición, columnas de «Personalizada», separador, coma
-decimal, encabezados y codificación. Lo elegido se recuerda en las preferencias.
+decimal, encabezados y codificación.
+
+«Opciones de DXF»: «Nombres de los puntos» con el texto de la hoja «Exportar» de las apps
+(`SurveyExport.Text.dxfPointNames` y su detalle); la altura del texto, que en las apps es la opción
+`dxfTextHeightMeters` del motor (0.5 m, sin control en su hoja), y el rótulo de la cota, que añade la oficina
+(`tresvizo_ppk/export/dxf.py`). Lo elegido en los dos diálogos se recuerda en las preferencias.
 """
 from __future__ import annotations
 
@@ -11,6 +17,7 @@ import tkinter as tk
 from tkinter import filedialog, ttk
 
 from tresvizo_ppk.export import columnas
+from tresvizo_ppk.export.dxf import DxfOptions
 
 from app import tasks
 
@@ -301,6 +308,118 @@ def csv_options(export, options: dict):
                              custom=tuple((k, t) for k, t in options['custom']))
 
 
+# --- «Opciones de DXF» -------------------------------------------------------------------------------------------
+
+DXF_TEXT = {
+    'title': 'Opciones de DXF', 'text_height': 'Altura del texto',
+    'text_height_footer': 'En metros del dibujo. Por omisión 0.5 m, como las apps.',
+    # Los dos de la hoja «Exportar» de las apps (`SurveyExport.Text`).
+    'point_names': 'Nombres de los puntos',
+    'point_names_detail': 'En el DXF, el nombre en la capa TEXTO y la descripción en DESCRIPCION.',
+    'elevation': 'Cota como rótulo', 'elevation_detail': 'La cota de cada punto debajo de su nombre, en la capa COTA.',
+    'bad_height': 'Escribe una altura del texto de 0.01 a 100 m.',
+}
+DXF_DEFAULTS = {'text_height_m': 0.5, 'point_names': True, 'elevation_labels': True}
+DXF_HEIGHT_RANGE = (0.01, 100.0)
+
+
+def dxf_options_from_prefs(data) -> dict:
+    """Lo guardado en las preferencias, campo a campo: lo que no se entiende vuelve al valor por omisión."""
+    data = data if isinstance(data, dict) else {}
+    out = dict(DXF_DEFAULTS)
+    height = data.get('text_height_m')
+    if isinstance(height, (int, float)) and not isinstance(height, bool) and \
+            DXF_HEIGHT_RANGE[0] <= height <= DXF_HEIGHT_RANGE[1]:
+        out['text_height_m'] = float(height)
+    for key in ('point_names', 'elevation_labels'):
+        if isinstance(data.get(key), bool):
+            out[key] = data[key]
+    return out
+
+
+def dxf_options(options: dict) -> DxfOptions:
+    """El `DxfOptions` del motor a partir de las opciones del diálogo (o de las preferencias)."""
+    options = dxf_options_from_prefs(options)
+    return DxfOptions(text_height_m=options['text_height_m'], point_names=options['point_names'],
+                      elevation_labels=options['point_names'] and options['elevation_labels'])
+
+
+class DxfOptionsDialog(tk.Toplevel):
+    """«Opciones de DXF» antes de elegir el archivo. `result`: el diccionario de opciones, o None si se canceló."""
+
+    def __init__(self, app, initial: dict):
+        super().__init__(app)
+        self.app, self.result = app, None
+        self.title(DXF_TEXT['title'])
+        self.transient(app)
+        self.resizable(False, False)
+        width = int(320*app.ui_scale*app.theme.text_scale())
+        body = ttk.Frame(self, padding=20)
+        body.pack(fill='both', expand=True)
+        self.height = tk.StringVar(value=f"{initial['text_height_m']:g}")
+        self.names = tk.BooleanVar(value=initial['point_names'])
+        self.elevation = tk.BooleanVar(value=initial['elevation_labels'])
+
+        def footer(text, padx=0):
+            ttk.Label(body, text=text, style='Subtitle.TLabel', wraplength=width, justify='left').pack(
+                anchor='w', padx=(padx, 0), pady=(2, 10))
+
+        ttk.Label(body, text=DXF_TEXT['text_height'], style='Section.TLabel').pack(anchor='w', pady=(0, 4))
+        row = ttk.Frame(body)
+        row.pack(anchor='w')
+        self.height_entry = ttk.Spinbox(row, from_=0.1, to=10, increment=0.1, textvariable=self.height, width=8,
+                                        format='%.2f')
+        self.height_entry.pack(side='left')
+        ttk.Label(row, text='m').pack(side='left', padx=(6, 0))
+        footer(DXF_TEXT['text_height_footer'])
+        self.names_check = ttk.Checkbutton(body, text=DXF_TEXT['point_names'], variable=self.names,
+                                           command=self.refresh)
+        self.names_check.pack(anchor='w')
+        footer(DXF_TEXT['point_names_detail'], 24)
+        self.elevation_check = ttk.Checkbutton(body, text=DXF_TEXT['elevation'], variable=self.elevation)
+        self.elevation_check.pack(anchor='w')
+        footer(DXF_TEXT['elevation_detail'], 24)
+        self.error = ttk.Label(body, text='', style='error.TLabel', wraplength=width, justify='left')
+        self.error.pack(anchor='w')
+        actions = ttk.Frame(body)
+        actions.pack(fill='x', pady=(12, 0))
+        ttk.Button(actions, text='Cancelar', command=self.destroy).pack(side='right')
+        ok = ttk.Button(actions, text='Exportar DXF…', style='Primary.TButton', command=self.accept)
+        app.icons.bind(ok, 'share')
+        ok.pack(side='right', padx=8)
+        self.bind('<Escape>', lambda e: self.destroy())
+        self.bind('<Return>', lambda e: self.accept())
+        self.refresh()
+        app.theme.walk(self)
+        app.set_window_icon(self)
+        self.height_entry.focus_set()
+        self.grab_set()
+
+    def refresh(self):
+        # Sin nombres no hay rótulos (el motor tampoco escribe la cota ni la descripción).
+        self.elevation_check.state(['!disabled'] if self.names.get() else ['disabled'])
+
+    def options(self) -> dict | None:
+        from app.wizard import parse_number
+        try:
+            height = parse_number(self.height.get())
+        except ValueError:
+            return None
+        if not DXF_HEIGHT_RANGE[0] <= height <= DXF_HEIGHT_RANGE[1]:
+            return None
+        return {'text_height_m': height, 'point_names': bool(self.names.get()),
+                'elevation_labels': bool(self.elevation.get())}
+
+    def accept(self):
+        options = self.options()
+        if options is None:
+            self.error.configure(text=DXF_TEXT['bad_height'])
+            self.height_entry.focus_set()
+            return
+        self.result = options
+        self.destroy()
+
+
 # --- Lo común de las dos páginas --------------------------------------------------------------------------------
 
 class ExportActions:
@@ -345,6 +464,33 @@ class ExportActions:
         except Exception:  # noqa: BLE001 — si no se pueden guardar las preferencias, se exporta igual
             pass
         return dialog.result
+
+    def ask_dxf_options(self):
+        """«Opciones de DXF»; lo elegido queda en las preferencias para la próxima vez."""
+        if self.app.backend.export is None or self.output is None:
+            return None
+        dialog = DxfOptionsDialog(self.app, dxf_options_from_prefs(self.app.settings.values.dxf_export))
+        self.app.wait_window(dialog)
+        if dialog.result is None:
+            return None
+        try:
+            self.app.settings.save(dxf_export=dialog.result)
+        except Exception:  # noqa: BLE001 — si no se pueden guardar las preferencias, se exporta igual
+            pass
+        return dialog.result
+
+    def export_dxf_options(self, chosen) -> DxfOptions:
+        """Las del diálogo o, si se exporta sin él, las recordadas."""
+        return dxf_options(chosen if chosen is not None else self.app.settings.values.dxf_export)
+
+    def export_from_menu(self, formato, suffix, kind):
+        """Un formato del menú «Exportar»: el DXF pregunta antes sus opciones."""
+        if formato != 'dxf':
+            self.export(formato, suffix, kind)
+            return
+        options = self.ask_dxf_options()
+        if options is not None:
+            self.export(formato, suffix, kind, dxf=options)
 
     def export_rinex(self):
         """Copia el RINEX de la sesión (el convertido de la grabación) a una carpeta que elige el usuario."""

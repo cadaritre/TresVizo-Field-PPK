@@ -175,7 +175,10 @@ def test_ppk_exporta_cad_trayectoria_y_rinex(app, tmp_path, monkeypatch):
         save_as(monkeypatch, target)
         page.export(formato, suffix, formato)
         pump(app, lambda: target.exists())
-        assert export.calls[-1][0] == formato and export.calls[-1][3] == {'project': 'jornada'}
+        expected = {'project': 'jornada'}
+        if formato == 'dxf':    # sin el diálogo, las opciones recordadas (las de omisión)
+            expected['dxf_options'] = export_ui.DxfOptions()
+        assert export.calls[-1][0] == formato and export.calls[-1][3] == expected
     for formato, suffix in (('pos', '.pos'), ('csv', '.csv')):
         target = tmp_path/f'trayectoria{suffix}'
         asked = save_as(monkeypatch, target)
@@ -194,3 +197,79 @@ def test_ppk_exporta_cad_trayectoria_y_rinex(app, tmp_path, monkeypatch):
     page.export_rinex()
     pump(app, lambda: (tmp_path/'rinex'/'SESION.26O').exists())
     assert not app.shown
+
+
+# --- «Opciones de DXF» ---------------------------------------------------------------------------------------------
+
+def test_opciones_de_dxf_por_omision_y_recordadas():
+    assert export_ui.dxf_options_from_prefs(None) == export_ui.DXF_DEFAULTS
+    assert export_ui.dxf_options_from_prefs({'text_height_m': 0.25, 'point_names': False}) == {
+        'text_height_m': 0.25, 'point_names': False, 'elevation_labels': True}
+    # Lo que no se entiende vuelve al valor por omisión, campo a campo.
+    assert export_ui.dxf_options_from_prefs({'text_height_m': -1, 'point_names': 'sí', 'elevation_labels': 0}) == \
+        export_ui.DXF_DEFAULTS
+    assert export_ui.dxf_options_from_prefs({'text_height_m': True}) == export_ui.DXF_DEFAULTS
+    # Sin nombres no hay rótulo de la cota.
+    assert export_ui.dxf_options({'point_names': False, 'elevation_labels': True}).elevation_labels is False
+    # Los textos de las apps (`SurveyExport.Text`).
+    assert export_ui.DXF_TEXT['point_names'] == 'Nombres de los puntos'
+    assert export_ui.DXF_TEXT['point_names_detail'] == ('En el DXF, el nombre en la capa TEXTO y la descripción en '
+                                                        'DESCRIPCION.')
+
+
+def test_dialogo_de_dxf_en_el_estatico_y_el_ppk(app, tmp_path, monkeypatch):
+    page, path = static_page(app, tmp_path)
+    export = app.backend.export
+    target = tmp_path/'v.dxf'
+    save_as(monkeypatch, target)
+    seen = {}
+
+    def answer(dialog):
+        seen['initial'] = (dialog.height.get(), dialog.names.get(), dialog.elevation.get())
+        dialog.height.set('0,25')                # coma decimal
+        dialog.elevation.set(False)
+        dialog.accept()
+    monkeypatch.setattr(app, 'wait_window', answer)
+    page.export_from_menu('dxf', '.dxf', 'DXF')
+    pump(app, lambda: target.exists())
+    assert seen['initial'] == ('0.5', True, True)
+    assert export.calls[-1][-1]['dxf_options'] == export_ui.DxfOptions(0.25, True, False)
+    assert app.settings.values.dxf_export == {'text_height_m': 0.25, 'point_names': True, 'elevation_labels': False}
+
+    # Una altura fuera de rango no cierra el diálogo; sin nombres, la cota queda apagada; cancelar no exporta.
+    def wrong(dialog):
+        seen['initial'] = (dialog.height.get(), dialog.names.get(), dialog.elevation.get())
+        dialog.height.set('0')
+        dialog.accept()
+        seen['error'] = dialog.error.cget('text')
+        seen['open'] = dialog.winfo_exists()
+        dialog.names.set(False)
+        dialog.refresh()
+        seen['elevation'] = dialog.elevation_check.instate(['disabled'])
+        dialog.destroy()
+    monkeypatch.setattr(app, 'wait_window', wrong)
+    calls = len(export.calls)
+    page.export_from_menu('dxf', '.dxf', 'DXF')
+    app.update()
+    assert seen['initial'] == ('0.25', True, False)     # lo recordado
+    assert seen['error'] == export_ui.DXF_TEXT['bad_height'] and seen['open'] and seen['elevation']
+    assert len(export.calls) == calls
+
+    # El PPK usa el mismo diálogo y lo recordado.
+    from test_ui_calidad import points_page
+    points, _ = points_page(app, tmp_path)
+    target = tmp_path/'p.dxf'
+    save_as(monkeypatch, target)
+    monkeypatch.setattr(app, 'wait_window', lambda dialog: (dialog.names.set(False), dialog.accept()))
+    points.export_from_menu('dxf', '.dxf', 'DXF')
+    pump(app, lambda: target.exists())
+    assert export.calls[-1][3]['dxf_options'] == export_ui.DxfOptions(0.25, False, False)
+
+
+def test_las_opciones_llegan_al_dxf_real():
+    from tresvizo_ppk.export import dxf
+    point = dxf.DxfPoint('P1', 'BN', 500000.0, 2400000.0, 1890.123, 'mojón')
+    text = dxf.write([point], ['prueba'], export_ui.dxf_options({'text_height_m': 0.25})).decode('cp1252')
+    assert '\r\n40\r\n0.250\r\n' in text and 'COTA' in text and 'mojón' in text
+    bare = dxf.write([point], ['prueba'], export_ui.dxf_options({'point_names': False})).decode('cp1252')
+    assert 'TEXT\r\n' not in bare.replace('ENTITIES', '') and 'P1' not in bare

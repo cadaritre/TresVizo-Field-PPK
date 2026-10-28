@@ -398,14 +398,14 @@ class StaticPage(ExportActions, WizardPage):
         if self.app.backend.available('export'):
             menu.add_separator()
             for formato, label, suffix, kind in POINT_FORMATS:
-                menu.add_command(label=label, command=lambda f=formato, s=suffix, k=kind: self.export(f, s, k))
+                menu.add_command(label=label, command=lambda f=formato, s=suffix, k=kind: self.export_from_menu(f, s, k))
             menu.add_command(label=CUSTOM_CSV_LABEL, command=self.export_custom_csv)
             menu.add_separator()
             self.add_rinex_item(menu)
         button.configure(menu=menu)
         return button
 
-    def export(self, formato, suffix, kind, csv=None):
+    def export(self, formato, suffix, kind, csv=None, dxf=None):
         """El vértice en un archivo, con los formatos del PPK (`export_static`)."""
         export = self.app.backend.export
         if export is None or self.output is None:
@@ -420,6 +420,8 @@ class StaticPage(ExportActions, WizardPage):
             options['csv_options'] = csv_options(export, csv)
         if formato in ('dxf', 'landxml'):
             options['project'] = self.project.name if self.project else ''
+        if formato == 'dxf':
+            options['dxf_options'] = self.export_dxf_options(dxf)
         self.run_export(lambda p, c: export.export_static(result, choice, formato, Path(target), **options),
                         lambda path: f'Vértice exportado: {path.name}.')
 
