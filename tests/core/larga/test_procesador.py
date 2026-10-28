@@ -148,3 +148,22 @@ def test_imported_antex_reaches_the_long_baseline(larga_data, tmp_path):
     d = np.array(ecef_delta_to_enu(_official("UGTO"), moved.float_position - ref.float_position)) * 1000
     assert d[2] == pytest.approx(-50.0, abs=3.0), d
     assert np.hypot(d[0], d[1]) < 3.0
+
+
+def test_excluded_satellites_from_the_session_editor(larga_data):
+    """El editor de sesión deja fuera satélites sueltos: no entran en la solución del procesador propio y se anota;
+    el estático se los pasa (baseline.own_takes_exclusions)."""
+    from tresvizo_ppk.core import baseline
+    assert baseline.own_takes_exclusions()
+    rover = _endpoint("UGTO", larga_data["ugto"], _official("UGTO") + np.array([2.0, -3.0, 1.5]))
+    base = _endpoint("UQRO", larga_data["uqro"], _official("UQRO"))
+    start = gps_seconds(datetime(2026, 10, 20, 0, 0))
+    full = _run(larga_data, 60)
+    out = [s for s in ("G14", "E07") if s in full.satellites]
+    assert out
+    res = procesador.process(rover, base, [larga_data["nav"]], [], mask_deg=15.0, start=start, end=start + 3599,
+                             excluded_sats=out)
+    assert not set(out) & set(res.satellites)
+    assert set(res.satellites) == set(full.satellites) - set(out)
+    assert any("editor de sesión" in n and out[0] in n for n in res.notes)
+    assert res.fixed

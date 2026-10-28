@@ -262,12 +262,16 @@ def _pick_pair(sat: str, rov: observaciones.Observations, bas: observaciones.Obs
 
 def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: list[Path], *, mask_deg: float,
             start: float, end: float, interval_s: float | None = None, systems: str = "GEC",
-            progress: tools.Progress | None = None, cancel: threading.Event | None = None) -> LongResult:
+            progress: tools.Progress | None = None, cancel: threading.Event | None = None,
+            excluded_sats: list[str] | tuple[str, ...] = ()) -> LongResult:
     """Procesa la línea base rover–base (tiempos en segundos GPS) y devuelve la solución fija o flotante.
 
-    Si los datos no alcanzan para una solución con fundamento, `InsufficientData` con el porqué."""
+    `excluded_sats`: satélites sueltos que el usuario dejó fuera en el editor de sesión («G05», «E11»); la ventana de
+    tiempo llega como `start`/`end` y los sistemas fuera completos, en `systems`. Si los datos no alcanzan para una
+    solución con fundamento, `InsufficientData` con el porqué."""
     result = _process(rover, base, nav, precise_files, mask_deg=mask_deg, start=start, end=end,
-                      interval_s=interval_s, systems=systems, progress=progress, cancel=cancel)
+                      interval_s=interval_s, systems=systems, progress=progress, cancel=cancel,
+                      excluded_sats=excluded_sats)
     mixed = [g for g in result.groups if "~" in g.key]
     if mixed and not result.fixed:
         k2 = MIXED_FLOAT_FACTOR ** 2
@@ -292,7 +296,8 @@ def process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: lis
 
 def _process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: list[Path], *, mask_deg: float,
              start: float, end: float, interval_s: float | None = None, systems: str = "GEC",
-             progress: tools.Progress | None = None, cancel: threading.Event | None = None) -> LongResult:
+             progress: tools.Progress | None = None, cancel: threading.Event | None = None,
+             excluded_sats: list[str] | tuple[str, ...] = ()) -> LongResult:
     step = progress or (lambda f, m: None)
     log: list[str] = []
     notes: list[str] = []
@@ -336,7 +341,12 @@ def _process(rover: Endpoint, base: Endpoint, nav: list[Path], precise_files: li
     when = gps_datetime(times[0]).replace(tzinfo=None)
 
     # Satélites y parejas
-    common = [s for s in rov.sats if s in bas.sats and s in orbits.satellites and s[0] in systems]
+    excluded = {str(s).strip().upper() for s in excluded_sats}
+    common = [s for s in rov.sats if s in bas.sats and s in orbits.satellites and s[0] in systems and
+              s not in excluded]
+    left_out = sorted(excluded & set(rov.sats) & set(bas.sats))
+    if left_out:
+        notes.append("Fuera por el editor de sesión: " + ", ".join(left_out) + ".")
     off_systems = [senales.SYSTEM_NAMES[c] for c in "GEC" if c not in systems]
     if off_systems:
         notes.append("Sin " + ", ".join(off_systems) + " (apagados en las opciones).")
