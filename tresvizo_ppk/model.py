@@ -680,6 +680,100 @@ class NetworkResult:
     warnings: list[str] = field(default_factory=list)
 
 
+# --- Estático de varios puntos (proyecto «network», `core/static.process_network`) ------------------------------------
+
+FIX_MODES = ("fixed", "weighted", "check")
+
+
+@dataclass
+class NetworkRover:
+    """Un receptor que midió puntos nuevos: su grabación (o RINEX) va en las entradas del proyecto como
+    «rover:<key>» y, si las ocupaciones salen del CSV de TresVizo Field, el CSV como «csv:<key>». Sin CSV, toda la
+    grabación es una sola ocupación del punto `point_name`, con su altura."""
+    key: str                                   # «R1», «R2»…
+    point_name: str = ""                       # sin CSV: el punto que ocupó
+    pole_height_m: float | None = None         # sin CSV: altura del bastón o trípode (o a la ARP en un RINEX)
+    code: str = ""
+    description: str = ""
+    label: str = ""                            # cómo se llama en pantalla («MeridianV 0417», el nombre del archivo)
+
+
+@dataclass
+class NetworkOccupation:
+    """Una ocupación de un punto de la red por un receptor: su grabación entera o el tramo del CSV de campo."""
+    name: str                                  # el punto (las ocupaciones del mismo nombre son el mismo punto)
+    receiver: str                              # la clave de su NetworkRover
+    start: datetime | None = None              # None: toda la grabación
+    end: datetime | None = None
+    antenna_height_m: float | None = None      # marca → ARP, vertical; None: la de la grabación o el RINEX
+    code: str = ""
+    description: str = ""
+    source: str = ""                           # «CSV de TresVizo Field, fila 7», «grabación completa»
+    height_note: str = ""                      # cómo salió la altura o por qué falta
+
+
+@dataclass
+class NetworkFixChoice:
+    """Cómo entra un punto de control al ajuste restringido: «fixed» (fijo duro), «weighted» (con la σ de su
+    coordenada) o «check» (solo comprobación: no restringe), en planta, en cota o en las dos."""
+    point_id: str
+    mode: str = "fixed"
+    horizontal: bool = True
+    vertical: bool = True
+
+
+@dataclass
+class NetworkLine:
+    """Una línea base procesada de la red: de una estación a una ocupación («base») o entre dos ocupaciones
+    simultáneas de receptores distintos («rover»)."""
+    id: str                                    # el de la línea en el ajuste («INEG–P1 · 15-07 06:00»)
+    from_id: str
+    to_id: str
+    kind: str                                  # «base» o «rover»
+    baseline: BaselineSolution
+    occupation: str = ""                       # la ocupación del punto final (nombre@receptor)
+
+
+@dataclass
+class NetworkFinalPoint:
+    """La coordenada final de un punto nuevo: la del ajuste restringido (o la del mínimamente restringido si no hay
+    fijas en su parte de la red)."""
+    name: str
+    position: Ecef
+    sigma_enu: Enu
+    covariance_ecef: Matrix3
+    adjustment: str = "constrained"            # «constrained» o «minimal»
+    code: str = ""
+    description: str = ""
+    occupations: int = 1
+    lines: int = 0                             # líneas que entran al ajuste
+    ellipse95: tuple[float, float, float] = (0.0, 0.0, 0.0)
+
+
+@dataclass
+class NetworkStaticResult:
+    occupations: list[NetworkOccupation]
+    rovers: dict[str, ObservationSet]          # clave → observaciones (las de la grabación entera)
+    bases: list[Station]
+    lines: list[NetworkLine]
+    network: NetworkResult | None
+    points: list[NetworkFinalPoint] = field(default_factory=list)
+    failed_lines: list[str] = field(default_factory=list)   # «INEG–P2: por qué no dio solución»
+    rover_quality: dict[str, DataQuality] = field(default_factory=dict)
+    base_quality: dict[str, DataQuality] = field(default_factory=dict)
+    log: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+    ephemeris: Ephemeris = Ephemeris.BROADCAST
+    precise_files: list[str] = field(default_factory=list)
+    rtklib_version: str = ""
+    antennas: list[AntennaInfo] = field(default_factory=list)
+    quality: QualityReport | None = None       # `calidad.evaluate_network`
+    time_window: TimeWindow | None = None
+    excluded_sats: list[str] = field(default_factory=list)
+    fix: list[NetworkFixChoice] = field(default_factory=list)          # con lo que se ajustó
+    line_choices: dict[str, str] = field(default_factory=dict)
+
+
 # --- Localización de proyecto (calibración local) --------------------------------------------------------------------
 #
 # Lo mismo que el registro de las apps TresVizo Field (`docs/localizacion.md` §5 de las apps, que viaja en su respaldo
@@ -815,7 +909,7 @@ class UserProfile:
 @dataclass
 class Project:
     version: int = 1
-    kind: str = "static"                       # «static» o «points»
+    kind: str = "static"                       # «static», «points» o «network» (estático de varios puntos)
     name: str = ""
     number: str = ""                           # número o clave del proyecto que da el usuario (sale en el informe)
     place: str = ""                            # lugar de la firma del informe («Aguascalientes, Ags.»); vacío: a mano
@@ -844,3 +938,9 @@ class Project:
     control_points: list[ControlCoordinate] = field(default_factory=list)
     control_source: str = ""
     occupation_choices: dict[str, int] = field(default_factory=dict)
+    # Añadido por la red (proyecto «network»): los receptores de los puntos nuevos, cómo entra cada estación al ajuste,
+    # las opciones del ajuste y lo que el usuario decidió de cada línea (id → «off», «independent» o «trivial»)
+    rovers: list[NetworkRover] = field(default_factory=list)
+    network_fix: list[NetworkFixChoice] = field(default_factory=list)
+    network_options: NetworkOptions = field(default_factory=NetworkOptions)
+    line_choices: dict[str, str] = field(default_factory=dict)
