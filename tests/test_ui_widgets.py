@@ -222,6 +222,8 @@ def test_points_own_base_and_switch_keeps_kinds_apart(app, tmp_path):
 def test_updates_in_settings(app, tmp_path, monkeypatch):
     from app import updates
     import app.main_window as main_window
+    # El camino firmado (con llave de publicación); sin llave lo prueba test_ui_actualizaciones.py.
+    monkeypatch.setattr(updates, 'PUBLIC_KEY_HEX', 'ab'*32)
     page = app.show('Ajustes')
     release = updates.parse_release({'tag_name': 'v99.0.0', 'body': '- Algo nuevo', 'assets': []})
     page.show_release(release)
