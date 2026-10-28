@@ -377,9 +377,165 @@ Reproducir (ver la ayuda del script; `--referencia` guarda el PPP, `--limpiar` b
 - **Costa y carga oceánica:** MERI–ICAM, TAMP–ICVT e ICEP–UVER fijan con errores como los del interior, pero la
   referencia (PPP sin carga oceánica, vertical ±1–3 cm) no alcanza para medir el efecto de 5–10 mm.
 
+## 8. Arreglos tras la verificación fuera de muestra, y tercer día como prueba final
+
+**Fecha:** 27-10-2026. Lo que se cambió en el motor por los fallos y las recomendaciones de la §7, y el resultado con
+los tres días de antes (293, 196 y 049, ahora días de calibración) y con un **tercer día guardado** que no se miró
+hasta congelar los umbrales (commit `2b12e3f`).
+
+### Qué se cambió
+
+1. **Épocas desalineadas** (fallo 1): cada receptor se lee diezmado al intervalo de proceso y las épocas se alinean
+   en la rejilla común con 20 ms de tolerancia (`larga.procesador.align_epochs`); la geometría se calcula en la
+   etiqueta real de cada receptor. Huecos, épocas sueltas, 15 s contra 30 s, 1 Hz contra 15 s y etiquetas corridas
+   unos ms dan la misma solución (`tests/core/larga/test_alineacion.py`). La unión de archivos horarios con un hueco
+   y RTKLIB no tenían el problema (`tests/core/test_entrega_inegi.py`). La hora 12 que falta en MERI el 15-07 ya no
+   tumba la línea: las sesiones que la tocan dicen «solo hay 2 épocas comunes» y las demás se procesan.
+2. **Receptores mixtos y datos que no alcanzan** (fallo 3). MEXI (Trimble Alloy) registra L2C en los satélites
+   modernos y L2 P(Y) solo en los viejos; IMIE (NetR9, RINEX 2.10) solo P(Y). Antes esos satélites quedaban fuera
+   y con 2 satélites o ninguna doble diferencia salían «flotantes» de 14 m a 96 000 km. Decisión, con la práctica
+   profesional:
+   - **La fase de clases distintas sí sirve:** el desfase de cada clase (el cuarto de ciclo de L2C respecto de
+     P(Y), que RINEX 3 declara en `SYS / PHASE SHIFT`) es el mismo en todos los satélites de un receptor, así que se
+     cancela si las dobles diferencias se forman dentro de un grupo con las mismas clases. Esos satélites forman un
+     grupo aparte.
+   - **El código no:** el sesgo de código de cada satélite entre clases (DCB C2W−C2L, del orden de ±1 ns) no se
+     cancela entre receptores y sesga la Melbourne-Wübbena unas 0.15 ciclos por ns: su ancho de carril no se fija
+     (ambigüedad flotante) y su código entra con ese sesgo como incertidumbre constante por arco
+     (`DCB_SIGMA_M` = 0.3 m). Corregirlo con los sesgos publicados por satélite (OSB del CODE o del CAS) permitiría
+     fijarlos; no se hace todavía (hay que bajar ese producto: `docs/estado.md`).
+   - Con MEXI–IMIE (137 km) quedan flotantes de 5 a 33 cm de error; el RMS de error/σ era 1.7–1.8, así que la σ de
+     una flotante con clases mezcladas se multiplica por 1.8 (`MIXED_FLOAT_FACTOR`, calibrado con esas 16 sesiones de
+     1 h: es el único par mixto de la RGNA). El informe dice «los receptores no comparten la misma clase de señal
+     (GPS L1/L2, L2C en el rover y P(Y) en la base)».
+   - **Ninguna solución absurda llega al usuario** (`InsufficientData`): menos de 4 dobles diferencias por época en
+     la mitad de la sesión («Solo hay 3 satélites comunes útiles… hacen falta al menos 5 a la vez»), sin dos
+     frecuencias en común («en GPS el rover registra L1, L2 y la base L1»), σ de la flotante de más de 1 m o de la
+     solución de código de más de 5 m, fases a más de 5 m del código, menos de 20 épocas comunes. No se pasa a RTKLIB
+     (tendría los mismos datos); con varias bases, esa se deja fuera con aviso y las demás se ajustan.
+3. **ZIP del INEGI** (fallo 4): el almanaque `.26a` (y cualquier archivo que no sea observación ni navegación) se
+   ignora con una nota; un ZIP dañado (`MERI196m_304.zip`) se deja fuera con aviso del hueco y se usan las otras
+   horas. IMIE se lee tal como lo entrega el INEGI.
+4. **Umbrales e incertidumbre** (fallo 2 y recomendaciones), con fundamento antes que factores:
+   - **Prueba de coherencia fija–flotante:** con enteros correctos la fija cae dentro de la región de confianza de
+     la flotante, que no depende de los enteros; si algún componente se aleja más de 3σ (σ realista de la flotante),
+     no se fija. El fijo de +136 mm (6.8σ, razón 10) de UGTO–INEG con máscara de 30° se aleja 135 mm de su flotante
+     (3.5σ) y queda flotante con el porqué. Con la máscara de 15° no se disparó en ninguna de las 1 624 fijas de los tres días.
+   - **Máscara de más de 20°: 2 h para fijar** (sin satélites bajos la altura y el retardo cenital no se separan en
+     una hora). **Bajo 60 km: 45 min** en vez de 30.
+   - **σ vertical de la fija ×1.15**; **σ de la flotante ×1.6 en el este y ×1.2 en la vertical**, y ×2.4 y ×1.4 si
+     una sesión que debía fijar queda flotante (la flotante «fallida» es de datos peores).
+   - Sin tocar `NL_MIN_FIXED`, la razón ni la tasa de éxito (no separan los fijos erróneos, §7).
+   - La comprobación con RTKLIB (`CHECK_H_M`/`CHECK_V_M`) **no avisó en ninguno de los fijos a más de 3σ de la §7**:
+     su tolerancia es la σ de la libre de ionosfera de RTKLIB (4–5 cm en la vertical con 1 h a 140 km), más gruesa
+     que esos errores. Solo atrapa fallos gruesos (saltos de ciclo que RTKLIB no ve, MEXI–IMIE de antes); se deja así.
+5. **Relojes precisos (fallo 5):** la app baja solo el SP3 (`core/precise.py`) y el script le pasa solo el SP3. En
+   dobles diferencias el reloj del satélite se cancela: los dos receptores lo ven con menos de 0.5 ms de diferencia y
+   el error de interpolar el reloj del SP3 cada 5 min es el mismo en los dos; en la emisión, 1 ns de reloj mueve el
+   satélite 4 µm. Comprobado: UGTO–INEG 1 h (04 y 16 h del 15-07) con SP3 solo y con SP3 + CLK de 30 s da lo mismo a
+   0.1 mm. Se deja así.
+
+### Resultado en los días de calibración (antes → después, mismas sesiones)
+
+Procesador propio (desde 20 km), sin las líneas con IZAC (referencia, §7) ni MEXI–IMIE (aparte); fijos a más de
+3σ = fija con algún componente del error contra el PPP a más de 3 veces su σ. RMS y máximo de error/σ por
+componente (E / N / U). Tablas con `scripts/validacion_rgna.py --resumen … --por-dia --excluir IZAC`; JSON en
+`DATOS/validacion/v2/`.
+
+| Día | Líneas base | Fijas | Flotantes | Fijas > 3σ | Flotantes > 3σ | RMS error/σ fijas | Máx. fijas | RMS error/σ flotantes | Máx. flotantes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 20-10 (293) antes | 192 | 136 | 56 | 0 | 0 | 0.84 / 0.91 / 0.97 | 2.3 / 2.0 / 2.8 | 1.34 / 0.90 / 1.19 | 3.0 / 2.0 / 2.6 |
+| 20-10 (293) después | 192 | 128 | 64 | **0** | 0 | 0.85 / 0.90 / 0.85 | 2.3 / 2.0 / 2.2 | 1.10 / 0.87 / 1.11 | 2.7 / 1.9 / 2.4 |
+| 15-07 (196) antes | 1100 | 779 | 321 | 11 | 33 | 0.83 / 0.57 / 1.17 | 2.2 / 3.4 / 3.4 | 1.71 / 0.75 / 1.25 | 6.1 / 2.5 / 5.2 |
+| 15-07 (196) después | 1100 | 771 | 329 | **1** | 22 | 0.83 / 0.56 / 1.04 | 2.2 / 2.8 / 3.1 | 1.32 / 0.75 / 1.17 | 5.6 / 2.5 / 5.0 |
+| 18-02 (049) antes | 1038 | 732 | 306 | 6 | 12 | 0.92 / 0.44 / 1.07 | 2.6 / 2.5 / 3.7 | 1.25 / 0.73 / 1.06 | 5.0 / 3.1 / 3.9 |
+| 18-02 (049) después | 1038 | 725 | 313 | **4** | 8 | 0.92 / 0.43 / 0.96 | 2.7 / 1.8 / 3.5 | 0.99 / 0.75 / 0.97 | 4.8 / 3.1 / 3.5 |
+
+- **El día 293 no empeora:** ninguna fija a más de 3σ antes ni después; la vertical de la fija pasa de RMS 0.97 a
+  0.85 y su máximo de 2.8 a 2.2σ. Las 8 fijas de menos son las de 30 min a 30 km (ITLA–ICEP), ahora flotantes por
+  el mínimo de 45 min.
+- Las fijas de menos de los otros días son las de 30 min a 30 km (8 + 7). Con 1 h a 100–141 km (sin IZAC) siguen
+  fijas 150 de 152 (15-07) y 134 de 136 (18-02), igual que antes.
+- Los fijos que quedan a más de 3σ (todos en la vertical, 3.1–3.5σ): 18-02 ITLA–IHID 1 h 00 h difundidas y
+  precisas, ITLA–TOL2 1 h 00 h y 2 h 03 h precisas; 15-07 ICEP–UVER 2 h 21 h (219 km, 2147 m de desnivel). Son la
+  troposfera de la noche de la §7 (la flotante tiene casi el mismo error): ningún umbral de enteros los separa.
+- Las flotantes a más de 3σ (22 y 8) son de 15–45 min a 100–240 km, casi todas en el este: la σ de la flotante corta
+  sigue algo corta en el este el 15-07 (RMS 1.32); se dejó el factor recomendado (1.6) en vez de ajustarlo a ese día.
+- **Ataques con máscara alta (15-07, UGTO con tres bases):** con 25° y 30°, 18 de 36 sesiones fijan (las de 2 h) y
+  **ninguna fija pasa de 3σ** (antes 2 y 2, una a 6.8σ); las de 1 h quedan flotantes con el porqué, la de +136 mm a
+  +1.5 mm.
+- **Nuevos:** MERI–ICAM del 15-07 (antes tumbado por el ZIP dañado): 42 fijas de 58, 1 a 3.3σ (24 h precisas, U,
+  costa: carga oceánica sin modelar) y 4 sesiones de la hora que falta con su error. **MEXI–IMIE:** 92 líneas base,
+  ninguna absurda: 88 flotantes (error/σ máx. 3.4) y 2 fijas de 4 h el 18-02 con los 6 satélites viejos que sí
+  comparten P(Y), una a 3.1σ en la vertical (+42 mm): con receptores y antenas distintos (NetR9 con TRM55971.00) y
+  tan pocas combinaciones, la fija es frágil; ver «Lo que no se pudo».
+
+### Tercer día: 15-04-2026 (día 105, fin de la temporada seca), prueba final
+
+**Datos:** RGNA del 15-04-2026, bajada de la página pública «Archivos RINEX de la RGNA» (ZIP horarios, RINEX 3.04
+cada 15 s): UGTO, UQRO, ISLP, INEG, ITLA, ICEP, IHID y TOL2; órbitas y relojes finales de la ESA de los días 104–106
+(`DATOS/precisas/dia105`); referencia PPP de 24 h como en el «Diseño» (`DATOS/validacion/oos_ref_105.json`). Se bajó
+antes de tocar los umbrales y se corrió una sola vez, después de congelarlos. Líneas: UGTO con UQRO, ISLP e INEG
+(100–141 km), ITLA con ICEP, IHID y TOL2 (31–150 km), ICEP con IHID y TOL2 (133 y 156 km), TOL2 con UQRO e IHID
+(165 y 132 km), INEG con ISLP y UQRO (135 y 240 km); sesiones de 15 min a 24 h (8 o 12 por duración), difundidas y
+precisas: **756 líneas base**. Reproducir (`--salida DATOS/validacion/v2/oos105_ugto`, etc.):
+
+    python scripts/validacion_rgna.py --datos DATOS/rgna/20260415 --precisas DATOS/precisas/dia105 \
+        --fecha 2026-04-15 --referencia DATOS/validacion/oos_ref_105.json --limpiar --seguir \
+        --rover UGTO --bases UQRO,ISLP,INEG --sesiones 1,2,4,24 --ventanas 12 --salida DATOS/validacion/v2/oos105_ugto
+
+| Día | Líneas base | Fijas | Flotantes | Fijas > 3σ | Flotantes > 3σ | RMS error/σ fijas | Máx. fijas | RMS error/σ flotantes | Máx. flotantes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 15-04 (105) | 756 | 591 | 165 | **4** (0.7 %) | 12 | 0.90 / 0.57 / 1.03 | 2.5 / 2.3 / 4.1 | 1.41 / 0.93 / 1.21 | 5.0 / 2.8 / 3.9 |
+
+| Sesión | 30.7 km | 100–141 km | 150–165 km |
+| --- | --- | --- | --- |
+| 15 / 30 min | flotantes (8) | flotantes (80) | flotantes (8) |
+| 45 min | 8/8 fijas | flotantes (44) | flotantes (8) |
+| 1 h | 16/16 | **134/136** | 54/64 |
+| 2 h | 16/16 | 136/136 | 64/64 |
+| 4 h / 24 h | 12/12 · 2/2 | 84/84 · 14/14 | 43/48 · 8/8 |
+
+- **Ninguna sesión falló ni dio una solución absurda.** 4 fijas de 591 (0.7 %) pasan de 3σ, todas en la vertical:
+  INEG–ISLP e INEG–UQRO 1 h a las 09 h UTC difundidas (3.6 y 3.9σ) y ITLA–TOL2 y TOL2–IHID 2 h a las 00 h precisas
+  (−3.2 y 4.1σ). El RMS de error/σ de las fijas es 0.90 / 0.57 / 1.03: la σ de la fija está bien calibrada.
+- Las flotantes a más de 3σ son sobre todo **las de TOL2 a las 00 h UTC**: en las seis líneas con TOL2 la sesión de
+  1 h de las 00 h no pasó la razón (1.1–1.3) y quedó flotante con 11–15 cm en el este (3.1–3.9σ con la σ de
+  «fallida»). Bien que no fijó; la σ de esa flotante se queda corta. Es de la estación esa hora (todas sus líneas a
+  la vez), no del procesador.
+- El este de la flotante corta sigue algo optimista (RMS 1.41): con los cuatro días, la σ de la flotante de menos de
+  la duración mínima vale para decidir, no para entregar coordenadas de centímetro.
+
+### Lo que ahora se sostiene
+
+Con los cuatro días (20-10, 15-07, 18-02 y 15-04; tres temporadas), 16 líneas de 30 a 240 km y receptores Trimble
+Alloy:
+- **Con 1 h o más a 30–141 km el procesador fija el 98–99 % de las sesiones** (con 1 h a 100–141 km, 150/152,
+  134/136 y 134/136 los días 15-07, 18-02 y 15-04; a 150–165 km, 54 de 64 el 15-04), y desde 2 h casi todas hasta 183 km.
+- **De 2 215 fijas, 9 (0.4 %) pasan de 3σ, ninguna a más de 4.1σ, todas en la vertical (4–8 cm)**: la troposfera de
+  la noche y de la tarde de lluvias, que la σ cubre casi siempre; ningún fijo erróneo como el de +136 mm. El RMS de
+  error/σ de las fijas queda en 0.85–1.04 por componente: la σ que se entrega es realista (1σ ≈ 68 %).
+- Las flotantes dicen por qué no fijaron; su σ puede quedarse corta en el este (RMS 1.1–1.4).
+- Lo que no se puede resolver con fundamento no entrega solución: pocos satélites, sin frecuencias en común, fases
+  incoherentes.
+- **Ya no se sostiene «sin fijos erróneos»** tal cual: la frase correcta es «0.4 % de las fijas fuera de 3σ, en la
+  vertical, y ninguna a más de 4.1σ».
+
+### Lo que no se pudo
+
+- **Receptores mixtos de verdad:** solo MEXI–IMIE (y con antenas distintas); allí la fija con pocas combinaciones
+  (6, de los satélites viejos) dio 3.1σ en la vertical. Ningún Meridian. Los sesgos de código publicados (OSB) para
+  fijar con clases mezcladas, sin hacer.
+- **σ de la flotante en el este:** el factor 1.6 deja el RMS de error/σ en 1.1–1.4; las colas (TOL2 00 h, 15–45 min
+  a 150–240 km) llegan a 5σ. No se ajustó más para no calibrar sobre los mismos días.
+- **20–30 km**, la carga oceánica en la costa (MERI–ICAM 24 h, 3.3σ en la vertical) y la referencia PPP de RTKLIB
+  (±1–3 cm en la vertical): como en la §7.
+- Los días 196 y 049 pasaron a ser de calibración (los umbrales de la §8 salieron de ellos y del 293); el único día
+  fuera de muestra para estos umbrales es el 15-04.
+
 ## Lo que esta validación no cubre
 
-- **Un solo día (la §7 añade dos más y 15 líneas) y una sola marca de receptor y antena:** todas las estaciones son Trimble Alloy con TRM115000.00 NONE.
+- **Cuatro días (§7 y §8) y una sola marca de receptor y antena en las líneas fijas:** todas las estaciones son Trimble Alloy con TRM115000.00 NONE.
   Con receptores distintos (un MeridianV o MeridianVI contra la RGNA) los sesgos de código y fase entre clases de señal
   no se cancelan: el motor solo forma dobles diferencias con la misma clase en los dos receptores (lo que no coincide
   queda flotante), pero eso no se ha probado con datos reales mixtos. La antena de los Meridian no tiene calibración:

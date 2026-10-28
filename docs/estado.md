@@ -41,15 +41,22 @@
   rosca o al gancho, o inclinada al borde (√(s² − r²) − d) con r y d de 54 antenas leídos de los dibujos acotados del
   antenna.gra de la IGS (`core/data/antex/medidas_inclinada.json`). Órbitas SP3 a petición (ESA o IGS en el BKG).
 - **Procesador propio de líneas largas** (`tresvizo_ppk/core/larga`, desde 20 km en «auto»): libre de ionosfera de
-  GPS, Galileo y BeiDou con la misma clase de señal en los dos receptores, órbitas difundidas o SP3, PCO/PCV de
+  GPS, Galileo y BeiDou (clases de señal distintas en los dos receptores, como L2C contra P(Y), entran con su
+  ambigüedad flotante), órbitas difundidas o SP3, PCO/PCV de
   receptor y satélite, mareas sólidas y GMF del IERS 2010, troposfera estimada con gradientes, wind-up; saltos de ciclo
   con Melbourne-Wübbena y libre de geometría; ancho de carril por arco y carril estrecho con LAMBDA, tasa de éxito,
-  prueba de razón, prueba χ² de la distancia entera y resolución parcial; duración mínima para fijar (30 min hasta
-  60 km, 1 h desde ahí); RTKLIB corre como comprobación independiente. **Validado con la RGNA**
-  (`docs/validacion.md`): fijó las 104 sesiones de 1 h a 24 h a 30–141 km sin ningún fijo erróneo, con 1 h a
-  100–141 km un RMS del error de 0.4–1.2 cm en horizontal y 0.6–2.2 cm en vertical (antes, flotante con RTKLIB, 2.1 y
-  3.2 cm) y σ realista; modelos probados contra los casos del IERS,
-  de RTKLIB y de Teunissen. El informe dice la resolución de ambigüedades o por qué quedó flotante.
+  prueba de razón, prueba χ² de la distancia entera, resolución parcial y coherencia de la fija con la flotante
+  (3σ); duración mínima para fijar (45 min hasta 60 km, 1 h desde ahí, 2 h con máscara de más de 20°); épocas
+  desalineadas (huecos, 1 Hz contra 15 s, etiquetas a unos ms) alineadas a la rejilla común; sin solución, con el
+  porqué, si los datos no alcanzan (pocos satélites comunes, sin dos frecuencias en común); RTKLIB corre como
+  comprobación independiente. **Validado con la RGNA en cuatro días de tres temporadas** (`docs/validacion.md` §1, §7
+  y §8; 16 líneas de 30 a 240 km, Trimble Alloy): con 1 h o más a 30–141 km fija el 98–99 % de las sesiones; de
+  2 215 fijas, 9 (0.4 %) pasan de 3σ, todas en la vertical (4–8 cm, troposfera de la noche y de la tarde) y ninguna a
+  más de 4.1σ; RMS de error/σ de las fijas 0.85–1.04 por componente. El día guardado como prueba final (15-04-2026,
+  756 líneas base) dio 4 de 591 fijas fuera de 3σ y ninguna solución absurda. Con 1 h a 100–141 km, RMS del error de
+  0.4–1.2 cm en horizontal y 0.6–2.2 cm en vertical (antes, flotante con RTKLIB, 2.1 y 3.2 cm). Modelos probados
+  contra los casos del IERS, de RTKLIB y de Teunissen. El informe dice la resolución de ambigüedades o por qué quedó
+  flotante.
 - Estático: estrategia por longitud, modelo de error calibrado, ajuste por mínimos cuadrados con chi², prueba w y
   exclusión automática de la línea que no cuadra con tres bases (lectura de datos de Baarda; aviso si las que quedan
   no pasan la χ² por el movimiento de las bases desde la época de su coordenada).
@@ -65,14 +72,17 @@
 - **Ninguna grabación real de MeridianV/MeridianVI** ni jornada real con el CSV de TresVizo Field: falta una muestra
   del propietario (base + rover + CSV) para validar el PPK de puntos y la resolución de ambigüedades en cinemático.
   Con una estación de la RGNA como rover a 30 km y 20 min, los puntos salen flotantes (0.1–0.5 m).
-- **Líneas largas: validadas con un solo día, una región y un solo tipo de receptor y antena** (Trimble Alloy con
-  TRM115000.00 en todas las estaciones). Falta probarlas con un MeridianV/MeridianVI contra la RGNA (receptores
-  distintos: el motor solo hace dobles diferencias con la misma clase de señal, lo demás queda flotante) y, sobre todo,
+- **Líneas largas: validadas con cuatro días y un solo tipo de receptor y antena en las fijas** (Trimble Alloy con
+  TRM115000.00). Con receptores mixtos solo MEXI–IMIE (Alloy con L2C contra NetR9 con P(Y)): los satélites con clases
+  distintas quedan flotantes (5–33 cm, σ ×1.8) y la fija con los pocos que comparten clase dio 3.1σ en la vertical.
+  Para fijarlos haría falta corregir el código con los sesgos publicados por satélite (OSB del CODE o del CAS,
+  descarga pública): sin hacer. La σ de la flotante en el este sigue algo optimista (RMS de error/σ 1.1–1.4). Falta
+  probarlas con un MeridianV/MeridianVI contra la RGNA y, sobre todo,
   con la calibración de la antena de los Meridian: en la libre de ionosfera la diferencia de centro de fase con la de
   la base pesa unas 3 veces más que en L1 (centímetros en la vertical). Sin carga oceánica (1–2 mm tierra adentro;
   hasta 5–10 mm en la costa). Sin pares de la RGNA de 20–30 km ni de más de 141 km para probar. GLONASS no entra en
   el propio (FDMA), ni QZSS; BeiDou geoestacionario tampoco. La duración mínima y los modelos de error se calibraron
-  con ese día (`docs/validacion.md` §3 y §4): conviene repetir la validación con otro día y otra zona.
+  con tres días (20-10, 15-07 y 18-02); el 15-04 es el único fuera de muestra para ellos.
 - El procesador propio deja en el motor el aviso de la licencia del software de las Convenciones del IERS (GMF y
   mareas, `tresvizo_ppk/core/larga/iers.py`): la licencia pide su fuente y el aviso íntegro en toda distribución de
   la fuente; el instalador lleva bytecode. Conviene copiar `iers.py` (o el aviso) a la carpeta `licencias/` del
