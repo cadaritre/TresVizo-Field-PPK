@@ -91,6 +91,11 @@
   La tabla de altura inclinada no trae las Zephyr Geodetic de Trimble (TRM55971.00, TRM115000.00): su dibujo de la
   IGS no da la altura de las muescas y la hoja del fabricante no se pudo leer; r y d se escriben a mano. El ANTEX
   incluido pesa 9.4 MB en gzip (4.6 MB en xz), porque el procesador propio lo abre con gzip.
+- Antenas en el asistente (`AntennaPanel`): probadas con los widgets reales y el motor de antenas de verdad
+  (`tests/test_ui_antenas.py`), pero no revisadas en pantalla (27-10-2026 la pantalla del Mac no respondía: hasta
+  `test_nearby_stations_with_distance_and_network_notes`, que no toca antenas, se colgaba igual en el commit 4f0fb4b).
+  Falta mirar el acomodo con letra «muy grande» y en ventanas angostas. El ANTEX importado se guarda como referencia
+  con su SHA-256, igual que los RINEX (si se mueve o cambia, al abrir el proyecto se avisa); no se copia al proyecto.
 - La comprobación completa de los paquetes `cors-network` se registra al importar `tresvizo_ppk.core.networks`
   (lo hace `core.api`): si la biblioteca instala una red antes de cargarse el motor, solo se comprueba el JSON.
 - Compilación de RTKLIB en Windows (MinGW/MSVC) y Linux sin probar aquí.
