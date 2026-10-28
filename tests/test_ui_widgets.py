@@ -369,6 +369,32 @@ def test_table_columns_stay_in_view(app):
     window.destroy()
 
 
+def test_fitted_table_settles_without_relayout(app):
+    """Con el ancho ya repartido, otro <Configure> no vuelve a poner los anchos: reponerlos, aunque sean los mismos,
+    dispara otro <Configure>, y con la tabla en un marco desplazable su ancho rebotaba 2 px sin fin y la ventana se
+    congelaba (al abrir «Estaciones de referencia» después de otras pantallas)."""
+    from app.components import fit_columns
+    window = tk.Toplevel(app)
+    tree = tk.ttk.Treeview(window, columns=['a', 'b', 'c'], show='headings')
+    for c in ('a', 'b', 'c'):
+        tree.heading(c, text=f'Columna {c}')
+    tree.insert('', 'end', values=['uno', 'dos', 'tres'])
+    tree.place(x=0, y=0, width=500, height=120)
+    fit_columns(tree, app, stretch='c')
+    window.update()
+    tree.event_generate('<Configure>')
+    window.update()
+    settled = {c: tree.column(c, 'width') for c in ('a', 'b', 'c')}
+    calls = []
+    original = tree.column
+    tree.column = lambda column, option=None, **kw: (calls.append(kw) if kw else None, original(column, option, **kw))[1]
+    tree.event_generate('<Configure>')
+    window.update()
+    assert not [kw for kw in calls if 'width' in kw]
+    assert {c: original(c, 'width') for c in ('a', 'b', 'c')} == settled
+    window.destroy()
+
+
 def test_own_base_from_rinex_reads_arp_height_and_candidates_after_network_use(app, tmp_path):
     """Los mismos RINEX ya leídos como estación de una red se vuelven a leer con sus candidatas al pasarlos a base
     propia, y la altura de un RINEX es a la ARP (la del encabezado), no del bastón."""

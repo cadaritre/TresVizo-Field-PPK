@@ -92,8 +92,7 @@
   IGS no da la altura de las muescas y la hoja del fabricante no se pudo leer; r y d se escriben a mano. El ANTEX
   incluido pesa 9.4 MB en gzip (4.6 MB en xz), porque el procesador propio lo abre con gzip.
 - Antenas en el asistente (`AntennaPanel`): probadas con los widgets reales y el motor de antenas de verdad
-  (`tests/test_ui_antenas.py`), pero no revisadas en pantalla (27-10-2026 la pantalla del Mac no respondía: hasta
-  `test_nearby_stations_with_distance_and_network_notes`, que no toca antenas, se colgaba igual en el commit 4f0fb4b).
+  (`tests/test_ui_antenas.py`), pero no revisadas en pantalla.
   Falta mirar el acomodo con letra «muy grande» y en ventanas angostas. El ANTEX importado se guarda como referencia
   con su SHA-256, igual que los RINEX (si se mueve o cambia, al abrir el proyecto se avisa); no se copia al proyecto.
 - La comprobación completa de los paquetes `cors-network` se registra al importar `tresvizo_ppk.core.networks`
@@ -300,7 +299,8 @@
 - La interfaz no se revisó en una captura de pantalla (sin permiso de grabar la pantalla); la cuadrícula de
   tolerancias pasa a una columna si no caben dos. Al elegir otra ocupación el resultado se vuelve a dibujar y la
   vista vuelve arriba.
-- `tests/test_ui_widgets.py::test_nearby_stations_with_distance_and_network_notes` se cuelga en este Mac en
-  `app.update()` al abrir «Estaciones de referencia» (también sin los cambios de la interfaz de este paquete, con una
-  copia de `HEAD` hecha con `git archive`, y en la suite completa corrida antes de empezar): no es del control de
-  calidad; queda para quien lleve las redes en la interfaz.
+- Resuelto (27-10-2026): la suite completa se colgaba en `test_nearby_stations_with_distance_and_network_notes`
+  al abrir «Estaciones de referencia» después de otras pantallas. No era la pantalla del Mac: `fit_columns`
+  (`app/components.py`) reponía los anchos en cada `<Configure>` y, con la tabla en un marco desplazable, su ancho
+  rebotaba 2 px sin fin (657 ↔ 659). La app real se habría congelado igual. Ahora no repone diferencias de pocos
+  píxeles; prueba `test_fitted_table_settles_without_relayout`.

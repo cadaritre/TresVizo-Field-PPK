@@ -674,8 +674,15 @@ def fit_columns(tree, app, stretch=None, limit=400, maximum=520):
                 factor = min(1.0, (total-stretch)/max(1, sum(others.values())))
                 widths = {c: max(48, int(w*factor)) for c, w in others.items()}
                 widths[column] = max(stretch, total-sum(widths.values()))
+            # Poner un ancho, aunque sea el mismo, recalcula la geometría y dispara otro <Configure>. Dentro de un marco
+            # desplazable el ancho de la tabla sigue al de sus columnas y rebotaba entre dos valores a 2 px (657 ↔ 659):
+            # un ciclo sin fin que congelaba la ventana. Diferencias de unos pocos píxeles no se reponen.
+            current = {c: int(tree.column(c, 'width')) for c in widths}
+            if all(abs(w-current[c]) <= 4 for c, w in widths.items()):
+                return
             for c, w in widths.items():
-                tree.column(c, width=w, minwidth=min(w, 40))
+                if current[c] != w:
+                    tree.column(c, width=w, minwidth=min(w, 40))
         tree.bind('<Configure>', fit, add='+')
         tree.fit_bound = True
     later(tree, 'idle', lambda: tree.event_generate('<Configure>'))
