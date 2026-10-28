@@ -96,6 +96,10 @@ archivo) y «Abrir paquete…».
   1/σ² de las fijas (las flotantes solo si no hay fijas), cuya σ no baja de la mínima de un punto fijo del motor; cada
   ocupación menos la media y la mayor diferencia contra la tolerancia; el resultado del punto es la media, marcada
   «promedio de N ocupaciones», o la ocupación que elija el usuario.
+- **Editor de sesión** (como el Session Editor de TBC): línea de tiempo por satélite y receptor con huecos y saltos de
+  ciclo; recortar el inicio y el fin, quitar satélites o constelaciones, volver a procesar y comparar con el resultado
+  anterior (ΔE, ΔN, ΔU, σ y solución). Se guarda en el proyecto y vale para todas las líneas base; el informe dice qué
+  se recortó y qué se quitó.
 - **Instalador** para Windows (MSI, como TresVizo Med) y para macOS (`.app` en `.dmg`), armados en GitHub Actions.
 
 ## 3. Datos externos (todos con su fuente, licencia y fecha)

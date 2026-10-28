@@ -349,3 +349,34 @@
   (`app/components.py`) reponía los anchos en cada `<Configure>` y, con la tabla en un marco desplazable, su ancho
   rebotaba 2 px sin fin (657 ↔ 659). La app real se habría congelado igual. Ahora no repone diferencias de pocos
   píxeles; prueba `test_fitted_table_settles_without_relayout`.
+
+## Editor de sesión (§2; paquete 8 de la auditoría, 27-10-2026)
+
+**Hecho y verificado (macOS arm64, RTKLIB-EX 2.5.1, ITLA–ICEP del 20-10-2026):**
+- `ProcessingOptions.time_window` (inicio y fin en UTC) y `excluded_sats` (PRN como «G13» o sistemas enteros como
+  «R»), normalizados y validados en `core/sesion.py`. La ventana recorta la sesión común de cada línea base y de la
+  trayectoria del PPK: RTKLIB la recibe con `-ts/-te`; el procesador propio, con su inicio y su fin. Los sistemas
+  fuera salen de `pos1-navsys` y de los sistemas del propio; los satélites sueltos van en `pos1-exclsats`.
+- Con RTKLIB real (`tests/core/test_sesion.py`): quitar un satélite y GLONASS cambia el `.conf`, los satélites usados y
+  la coordenada; con la ventana 14:05–14:15 UTC el `.pos` tiene exactamente las 40 épocas del rover dentro de ella; el
+  PPK respeta los dos y el punto fuera de la ventana lo dice; el procesador propio recibe la ventana (segundos GPS) y
+  los sistemas sin el quitado.
+- El control de calidad guarda por satélite sus tramos con datos y el momento de cada salto (`DataQuality.tracks`,
+  `slip_times`, en UTC); el proyecto guarda la ventana y lo quitado (lo ilegible de un proyecto editado a mano se
+  descarta); el informe los dice en «Ajustes del proceso» («toda la sesión» y «ninguno» si no se editó).
+- Pantalla «Sesión» (`app/session_ui.py`) desde el resultado del estático y del PPK, probada con los widgets reales y
+  los dobles (`tests/test_ui_sesion.py`): arrastrar y escribir el inicio y el fin, quitar con un clic o escribiendo,
+  volver a procesar, guardar y reabrir, y la comparación (ΔE, ΔN, ΔU, σ y solución) con valores sintéticos; con letra
+  «muy grande» a 520 px los controles se envuelven y la línea de tiempo conserva al menos cuatro filas.
+
+**Pendiente o sin verificar:**
+- **Procesador propio de líneas largas (`core/larga/`, otro agente):** todavía no acepta satélites sueltos fuera.
+  `baseline.py` le pasa `excluded_sats=[…]` (PRN normalizados) en cuanto `procesador.process` tenga ese argumento
+  (se mira su firma); hasta entonces el resultado avisa que esos PRN siguen en su solución (la comprobación de RTKLIB sí
+  los quita). La ventana y los sistemas enteros ya los respeta.
+- La pantalla no se revisó en una captura de la ventana (sin permiso de grabar la pantalla en el entorno de los
+  agentes): se revisó el dibujo de la línea de tiempo reproduciendo los objetos de sus Canvas en una imagen, en claro y
+  oscuro, a letra normal y muy grande. Sin probar en Windows.
+- La comparación vive en memoria (la del último «Volver a procesar» desde el editor); no se guarda en el proyecto ni
+  sale en el informe, que dice solo qué se recortó y qué se quitó.
+- Arrastrar las marcas va al píxel (unos segundos en sesiones largas); el segundo exacto se escribe en los campos.
