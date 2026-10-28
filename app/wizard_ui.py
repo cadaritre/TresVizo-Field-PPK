@@ -852,8 +852,8 @@ class OptionsPanel(ttk.Frame):
         # Tolerancias y control: cambiarlos vuelve a evaluar el resultado, sin volver a procesar
         from app.calidad_ui import options_cards
         from app.wizard import StaticJob
-        options_cards(self, app, job, 'static' if isinstance(job, StaticJob) else 'points',
-                      quality_changed or changed)
+        kind = getattr(job, 'QUALITY_KIND', 'static' if isinstance(job, StaticJob) else 'points')
+        options_cards(self, app, job, kind, quality_changed or changed)
         frame, body = card(self, None)
         frame.pack(fill='x', pady=(16, 0))
         advanced = Collapsible(body, app, 'Opciones avanzadas de RTKLIB')

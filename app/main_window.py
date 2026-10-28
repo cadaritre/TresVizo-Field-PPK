@@ -25,7 +25,10 @@ from app.ui_theme import ThemeManager
 
 APP_USER_MODEL_ID = 'TresVizo.FieldPPK.Desktop'
 NAV = [('Inicio', 'house'), ('Georreferenciar punto', 'map-pin'), ('PPK de puntos', 'route'),
-       ('Sistemas y geoides', 'globe'), ('Estaciones de referencia', 'radio-tower')]
+       ('Red estática', 'chart-scatter'), ('Sistemas y geoides', 'globe'),
+       ('Estaciones de referencia', 'radio-tower')]
+# La página de cada tipo de proyecto (`Project.kind`)
+KIND_PAGES = {'static': 'Georreferenciar punto', 'points': 'PPK de puntos', 'network': 'Red estática'}
 NAV_BOTTOM = [('Ajustes', 'settings'), ('Acerca de', 'info')]
 
 
@@ -220,6 +223,7 @@ class Application(TkinterDnD.Tk):
         file_menu = tk.Menu(menubar, tearoff=False)
         file_menu.add_command(label='Georreferenciar punto nuevo', command=lambda: self.new_job('Georreferenciar punto'))
         file_menu.add_command(label='PPK de puntos nuevo', command=lambda: self.new_job('PPK de puntos'))
+        file_menu.add_command(label='Red estática nueva', command=lambda: self.new_job('Red estática'))
         file_menu.add_separator()
         file_menu.add_command(label='Abrir proyecto…', accelerator='⌘O', command=self.ask_open_project)
         file_menu.add_command(label='Abrir paquete de proyecto…',
@@ -241,10 +245,12 @@ class Application(TkinterDnD.Tk):
         from app.home import HomePage
         from app.static_ui import StaticPage
         from app.points_ui import PointsPage
+        from app.red_ui import NetworkPage
         from app.crs_ui import CrsPage
         from app.networks_ui import NetworksPage
         from app.settings_ui import SettingsPage, AboutPage
         return {'Inicio': HomePage, 'Georreferenciar punto': StaticPage, 'PPK de puntos': PointsPage,
+                'Red estática': NetworkPage,
                 'Sistemas y geoides': CrsPage, 'Estaciones de referencia': NetworksPage, 'Ajustes': SettingsPage,
                 'Acerca de': AboutPage}
 
@@ -311,7 +317,7 @@ class Application(TkinterDnD.Tk):
             self.show('Inicio')
             self.page('Inicio').relink(Path(path), reopen=True)
             return
-        name = 'Georreferenciar punto' if project.kind == 'static' else 'PPK de puntos'
+        name = KIND_PAGES.get(project.kind, 'PPK de puntos')
         page = self.page(name)
         if not page.confirm_discard():
             return

@@ -13,7 +13,7 @@ from app import tasks
 from app.components import (Banner, CellTips, FlowFrame, ProgressPanel, ScrollFrame, card, fit_columns, scrolled,
                             size_text, wrap_label)
 
-KINDS = {'static': 'Georreferenciar punto', 'points': 'PPK de puntos'}
+KINDS = {'static': 'Georreferenciar punto', 'points': 'PPK de puntos', 'network': 'Red estática'}
 
 
 def project_summary(path: Path) -> tuple[str, str, str]:
@@ -46,15 +46,18 @@ class HomePage(ttk.Frame):
         self.notices.pack(fill='x')
         tiles = ttk.Frame(body)
         tiles.pack(fill='x')
-        tiles.columnconfigure((0, 1), weight=1, uniform='tiles')
+        tiles.columnconfigure((0, 1, 2), weight=1, uniform='tiles')
         for column, (name, icon, text) in enumerate([
                 ('Georreferenciar punto', 'map-pin',
                  'Un punto estático contra una a tres estaciones de referencia, con ajuste por mínimos cuadrados e informe '
                  'de línea base.'),
                 ('PPK de puntos', 'route',
-                 'La jornada cinemática del receptor y el CSV de TresVizo Field, con base de una red o propia.')]):
+                 'La jornada cinemática del receptor y el CSV de TresVizo Field, con base de una red o propia.'),
+                ('Red estática', 'chart-scatter',
+                 'Varios puntos de control con uno o más receptores: líneas a las estaciones y entre receptores, '
+                 'ajuste de red, cierres de bucle e informe de ajuste.')]):
             frame = ttk.Frame(tiles, style='Card.TFrame', padding=18)
-            frame.grid(row=0, column=column, sticky='nsew', padx=(0, 12) if column == 0 else (12, 0))
+            frame.grid(row=0, column=column, sticky='nsew', padx=(0 if column == 0 else 8, 0 if column == 2 else 8))
             app.icons.label(frame, icon, 30, token='primary', background='surface', style='Card.TLabel').pack(
                 anchor='w')
             ttk.Label(frame, text=name, style='Card.Section.TLabel').pack(anchor='w', pady=(10, 4))
@@ -201,7 +204,7 @@ class HomePage(ttk.Frame):
 
     def open_page(self, path: Path):
         """La página que tiene abierto ese proyecto, si alguna."""
-        for name in ('Georreferenciar punto', 'PPK de puntos'):
+        for name in ('Georreferenciar punto', 'PPK de puntos', 'Red estática'):
             page = self.app.pages.get(name)
             if page is not None and getattr(page, 'path', None) is not None:
                 try:

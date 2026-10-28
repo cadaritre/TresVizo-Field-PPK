@@ -33,7 +33,16 @@ FIELDS = (('max_sigma_h_m', 'σH máxima', 'm', '√(σE² + σN²), 1σ'),
           ('max_repeat_v_m', 'Entre ocupaciones, cota', 'm', ''),
           ('max_control_h_m', 'Contra control, planta', 'm', ''),
           ('max_control_v_m', 'Contra control, cota', 'm', ''))
-DECIMALS = {'m': 3, '%': 1, '': 1, 's': 0}
+# Solo en la red: el cierre de bucle, en mm + ppm de la longitud del bucle
+NETWORK_FIELDS = (('max_loop_h_m', 'Cierre de bucle, planta', 'm', 'más los ppm de abajo'),
+                  ('max_loop_h_ppm', 'Cierre en planta, ppm', 'ppm', 'de la longitud del bucle'),
+                  ('max_loop_v_m', 'Cierre de bucle, cota', 'm', 'más los ppm de abajo'),
+                  ('max_loop_v_ppm', 'Cierre en cota, ppm', 'ppm', 'de la longitud del bucle'))
+DECIMALS = {'m': 3, '%': 1, '': 1, 's': 0, 'ppm': 1}
+
+
+def fields_for(kind: str) -> tuple:
+    return FIELDS + NETWORK_FIELDS if kind == 'network' else FIELDS
 
 
 def order_label(order: str) -> str:
@@ -99,7 +108,7 @@ class TolerancesPanel(ttk.Frame):
         self.vars: dict[str, tk.StringVar] = {}
         self.entries: dict[str, ttk.Entry] = {}
         self.cells: list[ttk.Frame] = []
-        for index, (attr, label, unit, hint) in enumerate(FIELDS):
+        for index, (attr, label, unit, hint) in enumerate(fields_for(kind)):
             cell = ttk.Frame(grid, style='Flat.Card.TFrame')
             self.cells.append(cell)
             ttk.Label(cell, text=label, style='Card.TLabel', width=24).pack(side='left')
@@ -144,7 +153,7 @@ class TolerancesPanel(ttk.Frame):
         try:
             t = self.job.tolerances
             self.order.set(order_label(t.order) if calidad.matches_order(t, self.kind) else MANUAL)
-            for attr, _, unit, _ in FIELDS:
+            for attr, _, unit, _ in fields_for(self.kind):
                 self.vars[attr].set(_text(getattr(t, attr), unit))
             self.factor.set(f'{t.fail_factor:g}')
         finally:
@@ -172,6 +181,8 @@ class TolerancesPanel(ttk.Frame):
             value = None if not text and attr != 'fail_factor' else parse_number(text)
         except ValueError:
             value = float('nan')        # la validación del paso lo dice
+        if attr.endswith('_ppm') and value is None:
+            value = 0.0                 # sin ppm: solo la parte fija
         setattr(t, attr, value)
         # sigue siendo el orden si las cifras son las suyas; si no, quedan «escritas a mano»
         if not calidad.matches_order(t, self.kind):
