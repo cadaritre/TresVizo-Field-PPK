@@ -39,11 +39,12 @@ from decimal import Decimal
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+from .. import calidad
 from ..crs import api as crs
 from ..crs import localizacion
 from ..errors import UserError
-from ..model import (CoordinateChoice, Ecef, Enu, ObservationSet, PointsResult, ProcessedPoint, Solution,
-                     StaticResult, Station, TransformedCoordinate)
+from ..model import (CoordinateChoice, Ecef, Enu, ObservationSet, PointsResult, ProcessedPoint, QualityReport,
+                     QualityStatus, Solution, StaticResult, Station, TransformedCoordinate)
 from ..nombres import station_label
 from ..version import __version__
 from . import columnas, dxf, landxml
@@ -213,6 +214,8 @@ class _Row:
     computed: _Computed | None = None          # PPK: para el GeoJSON y el KML
     sigma: Enu | None = None                   # estático: σ en el sistema elegido
     solution: Solution | None = None           # estático: la del vértice
+    status: QualityStatus | None = None        # control de calidad del proyecto
+    status_note: str = ""                      # «promedio de 2 ocupaciones»
 
     @property
     def processed(self) -> bool:
@@ -483,6 +486,11 @@ STATIC_COLUMNS: list[tuple[str, str, str]] = [
 ]
 
 
+# Las columnas que se pueden elegir en el CSV a medida (las del CSV de Field más el estado del control de calidad).
+PPK_CUSTOM_COLUMNS = list(columnas.PPK_COLUMNS) + list(columnas.QUALITY_COLUMNS)
+STATIC_CUSTOM_COLUMNS = list(STATIC_COLUMNS) + list(columnas.QUALITY_COLUMNS)
+
+
 def _static_field_csv(row: _Row) -> bytes:
     keys = [k for k, _, _ in columnas.COLUMNS] + [k for k, _, _ in STATIC_COLUMNS]
     header = [en for _, en, _ in columnas.COLUMNS] + [en for _, en, _ in STATIC_COLUMNS]
@@ -499,9 +507,10 @@ def _simple_csv(rows: list[_Row], choice: CoordinateChoice) -> bytes:
             continue
         geographic = row.c.easting_m is None
         e, n = _plane(row.c)
-        out.append([neutralized(row.name), e, n, _elevation(row.c, choice), neutralized(row.code)])
+        out.append([neutralized(row.name), e, n, _elevation(row.c, choice), neutralized(row.code),
+                    row.values.get("qcStatus", ""), row.values.get("qcReason", "")])
     header = (["Nombre", "Longitud", "Latitud", "Cota", "Código"] if geographic else
-              ["Nombre", "Este", "Norte", "Cota", "Código"])
+              ["Nombre", "Este", "Norte", "Cota", "Código"]) + ["Estado", "Razón del estado"]
     return write_rows(header, out)
 
 
@@ -524,6 +533,8 @@ def _custom_csv(rows: list[_Row], extras: list[tuple[str, str, str]], options: C
             value = row.values.get(key, "")
             if options.uses_decimal_comma and key in decimal:
                 value = value.replace(".", ",")
+            if key == "qcStatus" and options.language == "en":
+                value = columnas.QUALITY_ENGLISH.get(value, value)
             line.append(value)
         out.append(line)
     header = [title.strip() or names[key] for key, title in entries] if options.writes_header else None
@@ -586,6 +597,14 @@ def _ppk_properties(comp: _Computed) -> dict:
     return _sorted(props)
 
 
+def _status_properties(row: _Row, props: dict) -> dict:
+    if row.status is not None:
+        props["estado"] = row.values.get("qcStatus", "")
+        if row.values.get("qcReason"):
+            props["razon_estado"] = row.values["qcReason"]
+    return _sorted(props)
+
+
 def _geoid_metadata(choice: CoordinateChoice, sample: TransformedCoordinate | None) -> str:
     if sample is not None and sample.orthometric_height_m is not None:
         return sample.geoid_name
@@ -639,7 +658,7 @@ def _ppk_features(rows: list[_Row], result: PointsResult, choice: CoordinateChoi
         sample = sample or row.c
         c = row.c
         coords = [c.receiver_longitude_deg, c.receiver_latitude_deg, _round(c.ellipsoidal_height_m, 3)]
-        features.append((row.name, _ppk_properties(row.computed), coords))
+        features.append((row.name, _status_properties(row, _ppk_properties(row.computed)), coords))
     return _ppk_metadata(result, choice, sample, skipped), features
 
 
@@ -685,7 +704,7 @@ def _static_features(row: _Row, result: StaticResult, choice: CoordinateChoice):
         meta["licencia_geoide"] = list(c.attribution)
     _localization_metadata(meta, choice, c, result.position.frame)
     coords = [c.receiver_longitude_deg, c.receiver_latitude_deg, _round(c.ellipsoidal_height_m, 3)]
-    return _sorted(meta), [(result.point_name, _sorted(props), coords)]
+    return _sorted(meta), [(result.point_name, _status_properties(row, props), coords)]
 
 
 def _geojson(metadata: dict, features) -> bytes:
@@ -833,11 +852,43 @@ def _landxml(rows: list[_Row], choice: CoordinateChoice, project: str, now: date
     system = landxml.CoordinateSystem(name=_epsg_name(c), epsg_code=epsg, horizontal_datum=d.datum if d else "",
                                       vertical_datum=vertical, wkt=esri_wkt(c.crs_code))
     points = [landxml.CgPoint(name=r.name, northing=r.values["northing"], easting=r.values["easting"],
-                              elevation=number(r.elevation, 3), code=r.code, desc=r.description,
+                              elevation=number(r.elevation, 3), code=r.code, desc=_landxml_desc(r),
                               timestamp=r.timestamp) for r in rows]
     doc = landxml.Document(project=project, application_version=__version__,
                            exported_at=(now or datetime.now()).astimezone(), crs=system, points=points)
     return landxml.write(doc)
+
+
+def _landxml_desc(r: _Row) -> str:
+    """La descripción del punto y, detrás, su estado del control de calidad («mojonera · Revisar: σV 0.034 >
+    0.020»): `desc` es el único atributo de texto libre de CgPoint en el esquema LandXML 1.2."""
+    status = r.values.get("qcStatus", "")
+    if not status:
+        return r.description
+    reason = r.values.get("qcReason", "")
+    text = f"{status}: {reason}" if reason else status
+    return f"{r.description} · {text}" if r.description else text
+
+
+def _set_status(row: _Row, status: QualityStatus | None, note: str = "") -> None:
+    row.status, row.status_note = status, note
+    if status is None:
+        return
+    row.values["qcStatus"] = calidad.LEVEL_TEXT[status.level]
+    reason = status.reason
+    if note:
+        reason = f"{reason} ({note})" if reason else note
+    row.values["qcReason"] = neutralized(reason)
+
+
+def points_quality(result: PointsResult, choice: CoordinateChoice) -> QualityReport:
+    """La evaluación que trae el resultado (la de la interfaz, con las tolerancias, el control y las ocupaciones
+    elegidas del proyecto) o, si no la trae, la de las tolerancias de omisión."""
+    return result.quality or calidad.evaluate_points(result, choice=choice)
+
+
+def static_quality(result: StaticResult, choice: CoordinateChoice) -> QualityReport:
+    return result.quality or calidad.evaluate_static(result, choice=choice)
 
 
 def _write_dxf(out: Path, data: bytes, c: TransformedCoordinate) -> Path:
@@ -871,13 +922,18 @@ def export_points(result: PointsResult, choice: CoordinateChoice, formato: str, 
     reference = next((p.position for p in result.points if p.position is not None and p.solution != Solution.NONE),
                      result.base.position)
     choice = _fixed_choice(reference, choice)
-    rows = _ppk_rows(result, choice)
+    if formato == "field_csv":
+        # el de las apps: todas las ocupaciones del CSV de campo, tal cual, sin el estado
+        return atomic_write(out, _ppk_field_csv(result, _ppk_rows(result, choice)))
+    # los demás: un resultado por nombre (la media de sus ocupaciones o la elegida) con su estado
+    quality = points_quality(result, choice)
+    rows = _ppk_rows(replace(result, points=[pq.point for pq in quality.points if pq.point is not None]), choice)
+    for row, pq in zip(rows, [pq for pq in quality.points if pq.point is not None]):
+        _set_status(row, pq.status, pq.note)
     processed = [r for r in rows if r.processed]
     skipped = [r.name for r in rows if not r.processed]
-    if formato == "field_csv":
-        data = _ppk_field_csv(result, rows)
-    elif formato == "csv":
-        data = (_custom_csv(rows, columnas.PPK_COLUMNS, csv_options) if csv_options is not None else
+    if formato == "csv":
+        data = (_custom_csv(rows, PPK_CUSTOM_COLUMNS, csv_options) if csv_options is not None else
                 _simple_csv(rows, choice))
     elif formato in ("geojson", "kml"):
         metadata, features = _ppk_features(rows, result, choice)
@@ -900,10 +956,13 @@ def export_static(result: StaticResult, choice: CoordinateChoice, formato: str, 
     out = _target(out, formato)
     choice = _fixed_choice(result.position, choice)
     row = _static_row(result, choice, code.strip(), description.strip())
+    if formato != "field_csv":          # el CSV de TresVizo Field conserva el formato de las apps
+        quality = static_quality(result, choice)
+        _set_status(row, quality.points[0].status if quality.points else None)
     if formato == "field_csv":
         data = _static_field_csv(row)
     elif formato == "csv":
-        data = (_custom_csv([row], STATIC_COLUMNS, csv_options) if csv_options is not None else
+        data = (_custom_csv([row], STATIC_CUSTOM_COLUMNS, csv_options) if csv_options is not None else
                 _simple_csv([row], choice))
     elif formato in ("geojson", "kml"):
         metadata, features = _static_features(row, result, choice)

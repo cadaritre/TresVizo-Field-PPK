@@ -1,5 +1,6 @@
 """El control de calidad en los informes (texto extraído con pypdf): el resumen, el estado de cada punto con su razón,
-las ocupaciones repetidas y la sección «Control» con los residuos."""
+las ocupaciones repetidas y la sección «Control» con los residuos; y en la exportación (un resultado por nombre con su
+estado, y el CSV de TresVizo Field intacto)."""
 from __future__ import annotations
 
 import re
@@ -90,3 +91,42 @@ def test_static_report_quality_and_control(tmp_path):
     # medido − control: ΔN +0.012, ΔE −0.016 → ΔH 0.020 ≤ 0.020
     assert "+0.012" in t and ("-0.016" in t.replace("−", "-")) and "0.020" in t
     assert "Estado" in t and ("Revisar" in t or "Falla" in t)
+
+
+# --- La exportación ---------------------------------------------------------------------------------------------------
+
+def _csv(path: Path) -> list[list[str]]:
+    import csv
+    import io
+    return list(csv.reader(io.StringIO(path.read_bytes().decode("utf-8-sig"), newline="")))
+
+
+def test_export_one_result_per_name_with_status_and_field_csv_untouched(tmp_path):
+    import xml.etree.ElementTree as ET
+    from tresvizo_ppk.export import api as export
+    from tresvizo_ppk.model import CoordinateChoice
+    result = s.points_result(tmp_path)
+    p2 = result.points[1]
+    again = replace(p2, point=replace(p2.point, start=p2.point.start + timedelta(minutes=10),
+                                      end=p2.point.end + timedelta(minutes=10)),
+                    position=_moved(p2.position, 0.006, 0.0, 0.009))
+    result.points.insert(2, again)
+    project = s.points_project(tmp_path)
+    result.quality = calidad.evaluate_points(result, choice=project.coordinates)
+    mean = result.quality.points[1].point
+    rows = _csv(export.export_points(result, CoordinateChoice(), "csv", tmp_path / "simple.csv"))
+    names = [r[0] for r in rows[1:]]
+    assert names.count("P02") == 1 and len(names) == 11
+    p02 = rows[1 + names.index("P02")]
+    assert p02[5] == "Pasa" and p02[6] == "promedio de 2 ocupaciones"
+    c = crs.transform(mean.position, calidad.fixed_choice(result.points[0].position, CoordinateChoice()))
+    assert p02[1] == f"{c.easting_m:.3f}" and p02[2] == f"{c.northing_m:.3f}"
+    # el CSV de TresVizo Field: las 13 ocupaciones del campo, sin columnas nuevas
+    field = _csv(export.export_points(result, CoordinateChoice(), "field_csv", tmp_path / "field.csv"))
+    assert len(field) == 14 and "Estado" not in field[0] and "QC status" not in field[0]
+    # LandXML: un CgPoint por nombre y el estado en desc
+    path = export.export_points(result, CoordinateChoice(), "landxml", tmp_path / "puntos.xml")
+    ns = "{http://www.landxml.org/schema/LandXML-1.2}"
+    points = ET.parse(path).getroot().findall(f"{ns}CgPoints/{ns}CgPoint")
+    p = next(x for x in points if x.get("name") == "P02")
+    assert len(points) == 11 and p.get("desc") == "Pasa: promedio de 2 ocupaciones"

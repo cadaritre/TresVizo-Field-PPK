@@ -136,5 +136,12 @@ PPK_COLUMNS: list[tuple[str, str, str]] = [
     ("ppkMessage", "PPK message", "Aviso PPK"),
     ("ppkSoftware", "Processed with", "Posprocesado con"),
 ]
+# El estado del control de calidad del proyecto (pasa, revisar o falla, y su razón): en el CSV simple, el a medida y
+# el LandXML; nunca en el CSV de TresVizo Field, que conserva el formato de las apps.
+QUALITY_COLUMNS: list[tuple[str, str, str]] = [
+    ("qcStatus", "QC status", "Estado"),
+    ("qcReason", "QC reason", "Razón del estado"),
+]
+QUALITY_ENGLISH = {"Pasa": "Pass", "Revisar": "Review", "Falla": "Fail"}
 PPK_DECIMAL = {"ppkEastingSigma", "ppkNorthingSigma", "ppkElevationSigma", "ppkBaseline", "fieldEasting",
                "fieldNorthing", "fieldElevation", "fieldDeltaHorizontal", "fieldDeltaVertical"}

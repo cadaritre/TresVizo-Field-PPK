@@ -232,7 +232,10 @@ def test_landxml_del_ppk_y_del_estatico_pasan_el_esquema(result, static, tmp_pat
     points = root.findall(f"{LANDXML_NS}CgPoints/{LANDXML_NS}CgPoint")
     assert len(points) == 11
     first = points[0]
-    assert first.get("name") == WEIRD_NAME and first.get("code") == WEIRD_CODE and first.get("desc") == WEIRD_DESC
+    # la descripción y, detrás, el estado del control de calidad (`desc` es el texto libre de CgPoint)
+    assert first.get("name") == WEIRD_NAME and first.get("code") == WEIRD_CODE
+    assert first.get("desc") == f"{WEIRD_DESC} · Pasa"
+    assert points[7].get("desc").startswith("Falla: σH 0.078 > 0.028")
     choice = api._fixed_choice(result.points[0].position, CoordinateChoice())
     c = crs.transform(result.points[0].position, choice)
     assert first.text == f"{c.northing_m:.3f} {c.easting_m:.3f} {c.orthometric_height_m:.3f}"   # N E Z
@@ -300,7 +303,11 @@ def test_csv_a_medida_espanol_separadores_bom_coma_decimal_y_personalizada(resul
     assert rows[0] == ["Código Civil", "Name", "PPK solution", "h"] and rows[1][:3] == [WEIRD_CODE, WEIRD_NAME, "FIX"]
     options = api.CsvOptions(layout="all", language="es")
     _, rows = _rows(api.export_points(result, CoordinateChoice(), "csv", tmp_path / "d", csv_options=options))
-    assert rows[0] == [es for _, _, es in columnas.COLUMNS] + [es for _, _, es in columnas.PPK_COLUMNS]
+    assert rows[0] == [es for _, _, es in columnas.COLUMNS] + [es for _, _, es in columnas.PPK_COLUMNS] + \
+        ["Estado", "Razón del estado"]
+    options = api.CsvOptions(layout="custom", language="en", custom=(("name", ""), ("qcStatus", ""), ("qcReason", "")))
+    _, rows = _rows(api.export_points(result, CoordinateChoice(), "csv", tmp_path / "qc", csv_options=options))
+    assert rows[0] == ["Name", "QC status", "QC reason"] and rows[1][1] == "Pass" and rows[8][1] == "Fail"
     for bad, message in ((api.CsvOptions(layout="xyz"), "Disposición"), (api.CsvOptions(separator="|"), "separador"),
                          (api.CsvOptions(layout="custom"), "ninguna columna"),
                          (api.CsvOptions(layout="custom", custom=(("nada", ""),)), "desconocidas")):
@@ -367,7 +374,8 @@ def test_estatico_en_todos_los_formatos(static, tmp_path):
                                       csv_options=api.CsvOptions(layout="pnezd", header=False)))
     assert len(rows) == 1 and rows[0][0] == "VERT-01"
     _, rows = _rows(api.export_static(static, CoordinateChoice(), "csv", tmp_path / "simple"))
-    assert rows[0] == ["Nombre", "Este", "Norte", "Cota", "Código"] and rows[1][4] == ""
+    assert rows[0] == ["Nombre", "Este", "Norte", "Cota", "Código", "Estado", "Razón del estado"]
+    assert rows[1][4] == "" and rows[1][5] in ("Pasa", "Revisar", "Falla")
 
 
 # --- Trayectoria y RINEX ----------------------------------------------------------------------------------------------

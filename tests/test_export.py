@@ -103,10 +103,13 @@ def test_csv_en_espanol_y_sin_filas(result, tmp_path):
 
 def test_csv_simple(result, tmp_path):
     header, rows = _read_csv(api.export_points(result, CoordinateChoice(), "csv", tmp_path / "simple.csv"))
-    assert header == ["Nombre", "Este", "Norte", "Cota", "Código"]
+    assert header == ["Nombre", "Este", "Norte", "Cota", "Código", "Estado", "Razón del estado"]
     assert [r["Nombre"] for r in rows] == [f"P{i:02d}" for i in range(1, 12)]   # P12 no se posprocesó
+    # el estado del control de calidad (tolerancias de omisión: orden de 5 cm): el flotante P08 falla
+    assert rows[0]["Estado"] == "Pasa" and rows[0]["Razón del estado"] == ""
+    assert rows[7]["Estado"] == "Falla" and rows[7]["Razón del estado"].startswith("σH 0.078 > 0.028; σV 0.110 > 0.051")
     header, rows = _read_csv(api.export_points(result, CoordinateChoice("wgs84", "", None), "csv", tmp_path / "g.csv"))
-    assert header == ["Nombre", "Longitud", "Latitud", "Cota", "Código"]
+    assert header == ["Nombre", "Longitud", "Latitud", "Cota", "Código", "Estado", "Razón del estado"]
     assert rows[0]["Longitud"].startswith("-102.") and len(rows[0]["Longitud"].split(".")[1]) == 8
 
 
