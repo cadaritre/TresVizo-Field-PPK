@@ -171,6 +171,39 @@
 - PPK de puntos de punta a punta con datos reales del MeridianV y su CSV: probado solo con los dobles.
 - Sin lector de pantalla certificado (Tk no expone un árbol de accesibilidad completo); el teclado sí se revisó.
 
+## Proyecto portátil e intermedios livianos (§1.4; paquete 3 de la auditoría, 27-10-2026)
+
+**Hecho y verificado (macOS arm64, RTKLIB-EX 2.5.1, datos públicos de la RGNA del 20-10-2026):**
+- Un solo juego de productos por proceso (`core/intermedios.py`): el ANTEX recortado se escribe una vez en
+  `<trabajo>/productos/` y lo nombran todas las líneas base; las órbitas y relojes se descomprimen (o se enlazan, o se
+  copian una vez si están en otro disco) en `productos/orbitas/`, de donde RTKLIB y el procesador propio los toman con
+  enlaces duros, y se borran al terminar. Al terminar (bien o mal) se borran las ventanas y el RINEX unido de cada
+  base y lo descomprimido antes de unir; nunca fuera de la carpeta de trabajo ni lo que entregó el usuario.
+- **UGTO con UQRO, ISLP e INEG, 4 h, órbitas y relojes finales de la ESA** (lo que hace la app, sin la ventana, con un
+  guion de verificación en el scratch del agente, fuera de git): la carpeta de trabajo pasa de **129.5 MB** (antes; el recorrido midió 134 MB y la
+  auditoría 205 MB con el CLK copiado por línea) a **32.9 MB con el informe** (31.1 MB de intermedios: 7.3 MB el RINEX
+  del rover, 3 × 6.0 MB de `.stat`, 5.5 MB el ANTEX). La coordenada no cambia (diferencia 0.0 mm). «Limpiar
+  intermedios» deja 1.85 MB (informe y bitácora) y volver a procesar da la misma coordenada (0.0 mm). Con las entradas
+  movidas a otra carpeta, «Buscar los archivos en…» encontró las 24 por SHA-256 en 0.04 s y el proceso dio 0.0 mm. El
+  paquete ZIP pesa 22.2 MB (0.7 s); abierto en otra carpeta sin los datos originales, sus 24 entradas pasan la SHA-256
+  y procesado ahí da 0.0 mm.
+- Pruebas: `tests/core/test_intermedios.py` (RTKLIB real: lo que queda tras procesar, limpiar y volver a procesar al
+  0.1 mm, órbitas comprimidas, PPK de puntos, que no se borre nada fuera), `tests/test_proyecto_portatil.py`
+  (tamaño con enlaces duros, limpiar, buscar movidos y renombrados, rechazar el mismo nombre con otra huella,
+  empaquetar y abrir, paquetes dañados, con archivos de más o rutas fuera) y `tests/test_ui_inicio.py` (la ventana
+  real con los dobles: columna «Tamaño», menú «Proyecto», buscar al abrir, empaquetar y abrir un paquete).
+
+**Pendiente o sin verificar:**
+- La interfaz nueva de Inicio (columna «Tamaño», menú «Proyecto», «Abrir paquete…», el aviso de archivos que faltan al
+  abrir) no se revisó en una captura (sin permiso de grabar la pantalla en el entorno de los agentes); se comprobó con
+  la ventana real que las acciones se envuelven a 900 px con letra «muy grande».
+- Tras «Limpiar intermedios» con el resultado aún en pantalla, el informe vuelve a generarse sin gráficas y la
+  trayectoria y el RINEX ya no se exportan hasta volver a procesar (se avisa al confirmar). La página no lo marca sola.
+- El paquete deja `source_project` (el proyecto estático del que salió una base propia) tal cual: es solo el origen,
+  la coordenada viaja en el proyecto. El CSV de control no viaja como archivo porque el proyecto guarda los puntos.
+- El PPK de puntos se midió solo con los datos de prueba (ITLA–ICEP, 20 min): sin jornada real del Meridian.
+- En Windows (NTFS admite enlaces duros; en FAT/exFAT se copia una vez por proceso) no se ha probado.
+
 ## Sistemas, informes y exportación (§1.3, §5, §1.2.5)
 
 **Hecho y verificado (macOS arm64, Python 3.13.18, pyproj 3.8.0 con PROJ 9.8.1 y EPSG v12.029):**

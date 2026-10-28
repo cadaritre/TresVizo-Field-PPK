@@ -54,9 +54,17 @@ transformaciones van con PROJ (`pyproj`) usando los códigos EPSG de los paquete
 
 ### 1.4 Proyectos
 
-Cada trabajo es un proyecto `.tvppk` (JSON con rutas relativas y sumas SHA-256 de los archivos de entrada): se guarda,
-se abre y se vuelve a procesar con los mismos ajustes. La carpeta de trabajo y los intermedios (RINEX unidos,
-configuración de RTKLIB, `.pos`, `.stat`) quedan junto al proyecto, para que el resultado sea reproducible.
+Cada trabajo es un proyecto `.tvppk` (JSON con rutas relativas, sumas SHA-256 y tamaño de los archivos de entrada): se
+guarda, se abre y se vuelve a procesar con los mismos ajustes. La carpeta de trabajo `<nombre>.trabajo/` queda junto al
+proyecto con lo que el resultado, el informe y la bitácora necesitan: el RINEX del rover y su navegación, `.pos`,
+`.stat` y configuración de RTKLIB de cada línea base, un solo ANTEX por proyecto (`productos/`), las efemérides bajadas,
+los informes y `Bitácora del proceso.txt`. Lo que solo sirve durante el proceso (ventanas y RINEX unidos de las bases,
+lo descomprimido, las órbitas descomprimidas, que se comparten entre líneas base) se borra al terminar. En Inicio:
+tamaño de cada proyecto, «Limpiar intermedios» (deja el proyecto, los informes, la bitácora y las efemérides bajadas;
+volver a procesar da la misma coordenada), «Buscar los archivos en…» (los que faltan, por nombre o tamaño y la misma
+SHA-256; también se ofrece al abrir un proyecto al que le faltan), «Empaquetar proyecto» (ZIP con el proyecto y todas
+sus entradas con rutas relativas, informes, bitácora y efemérides bajadas, sin intermedios, con la SHA-256 de cada
+archivo) y «Abrir paquete…».
 
 ## 2. Funciones esenciales añadidas (las de cualquier programa profesional del ramo)
 

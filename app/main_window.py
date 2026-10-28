@@ -222,6 +222,8 @@ class Application(TkinterDnD.Tk):
         file_menu.add_command(label='PPK de puntos nuevo', command=lambda: self.new_job('PPK de puntos'))
         file_menu.add_separator()
         file_menu.add_command(label='Abrir proyecto…', accelerator='⌘O', command=self.ask_open_project)
+        file_menu.add_command(label='Abrir paquete de proyecto…',
+                              command=lambda: self.page('Inicio').ask_open_package())
         file_menu.add_command(label='Guardar proyecto', accelerator='⌘S', command=self.save_current)
         file_menu.add_command(label='Guardar proyecto como…', accelerator='⇧⌘S',
                               command=lambda: self.save_current(as_new=True))
@@ -288,7 +290,7 @@ class Application(TkinterDnD.Tk):
         if path:
             self.open_project(Path(path))
 
-    def open_project(self, path: Path):
+    def open_project(self, path: Path, find_missing: bool = True):
         from tresvizo_ppk import project as projects
         try:
             project = projects.load(path)
@@ -298,6 +300,16 @@ class Application(TkinterDnD.Tk):
                 self.settings.remove_recent(path)
                 if 'Inicio' in self.pages:
                     self.pages['Inicio'].on_show()
+            return
+        missing = projects.missing_inputs(project) if find_missing else []
+        if missing and messagebox.askyesno(
+                'Faltan archivos de entrada',
+                f'No se encuentran {len(missing)} de los archivos de entrada de «{Path(path).stem}»: se movieron, '
+                'cambió la letra del disco o el proyecto viene de otro equipo.\n\n¿Buscarlos en otra carpeta? Se '
+                'aceptan solo los que tengan la misma huella SHA-256 que la guardada.', parent=self):
+            self.remember(path)
+            self.show('Inicio')
+            self.page('Inicio').relink(Path(path), reopen=True)
             return
         name = 'Georreferenciar punto' if project.kind == 'static' else 'PPK de puntos'
         page = self.page(name)
