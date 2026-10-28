@@ -405,7 +405,7 @@ def test_horizontal_and_vertical_only_constraints():
     assert c.datum == "F1 (planta), F2 (planta), F3 (cota) fijas"
     assert c.constraints == 2 + 2 + 1 and c.passed               # la cota mala de F2 no se usa
     up = ecef_delta_to_enu(truth["F3"], xyz(point(c, "F3")) - truth["F3"])
-    assert abs(up[2]) < 1e-9
+    assert abs(up[2]) < 1e-8                                       # ruido numérico de 1e-9 según la plataforma
     # solo planta en toda la red: el restringido no se puede y se avisa
     only_h = red.adjust_network(lines, [fixed("F1", truth["F1"], vertical=False)])
     assert only_h.constrained is None

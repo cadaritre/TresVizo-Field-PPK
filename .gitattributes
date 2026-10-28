@@ -1,0 +1,5 @@
+# Datos que se comparan, se firman o se entregan byte a byte: sin conversión de fin de línea en ninguna plataforma
+# (en Windows, git los sacaba con CRLF y su SHA-256 dejaba de ser la de las apps; el instalador llevaría lo mismo).
+tests/datos/** -text
+tresvizo_ppk/datos/** -text
+tresvizo_ppk/core/data/** -text
