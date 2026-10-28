@@ -5,6 +5,7 @@ Trimble Business Center y Leica Infinity).
 - `evaluate_points(resultado, tolerancias, control, elecciones, sistema)`: agrupa las ocupaciones del mismo nombre
   (media ponderada o la elegida), compara contra el control y marca cada punto «pasa», «revisar» o «falla».
 - `evaluate_static(resultado, tolerancias, control, sistema)`: cada línea base y el vértice.
+- `evaluate_network(resultado, tolerancias, control, sistema)`: cada línea, cada bucle y cada punto nuevo de la red.
 - `read_control(ruta, orden)`: el CSV de control (PNEZD, PENZD o NXYZD), con el lector de la localización.
 
 No toca el cálculo: es una evaluación de lo que ya salió, que se vuelve a hacer al cambiar las tolerancias, el control
@@ -15,6 +16,8 @@ Por qué estas cifras por omisión (docs/estado.md, «Tolerancias»): del orden 
 - σH máx. = L / (1.2238·√2): con σE = σN, CEP95 = 1.2238 (σN + σE) = L (art. 6 y 8);
 - σV máx. = 2L / 1.96: EPV = 1.96 σV = 2L (art. 7; la vertical del GNSS es del doble de la horizontal);
 - diferencia entre ocupaciones y contra control: L en planta y 2L en la cota;
+- cierre de bucle de la red: L + 1 ppm en planta y 2L + 2 ppm en la cota (de la longitud del bucle; la NT EEP no fija
+  cifra);
 - % de épocas fijas 95 %, cociente 3, PDOP 6 y duración mínima de 30 s (PPK) o 1 h (estático), que no dependen del
   orden. Las σ se truncan al milímetro, para no pasar del orden.
 """
@@ -31,7 +34,7 @@ from .core.geodesy import covariance_ecef_to_enu, ecef_delta_to_enu, ecef_to_geo
 from .core.points import SIGMA_FLOOR
 from .model import (CoordinateChoice, ControlCoordinate, ControlResidual, Ecef, Enu, OccupationGroup, PointQuality,
                     PointsResult, ProcessedPoint, ProjectTolerances, QualityCheck, QualityReport, QualityStatus,
-                    Solution, StaticResult, BaselineQuality, TransformedCoordinate)
+                    Solution, StaticResult, BaselineQuality, TransformedCoordinate, NetworkStaticResult)
 from .report.calculos import ACCURACY_ORDERS
 
 LEVELS = ("pass", "review", "fail")
@@ -76,7 +79,8 @@ def tolerances_for_order(order: str = DEFAULT_ORDER, kind: str = "points") -> Pr
                              max_sigma_v_m=_floor_mm(2.0 * limit / 1.96), min_fixed_percent=95.0, min_ratio=3.0,
                              max_pdop=6.0, min_duration_s=DEFAULT_DURATION_S.get(kind, 30.0),
                              max_repeat_h_m=limit, max_repeat_v_m=2.0 * limit, max_control_h_m=limit,
-                             max_control_v_m=2.0 * limit)
+                             max_control_v_m=2.0 * limit, max_loop_h_m=limit, max_loop_h_ppm=1.0,
+                             max_loop_v_m=2.0 * limit, max_loop_v_ppm=2.0)
 
 
 def default_tolerances(kind: str = "points") -> ProjectTolerances:
@@ -102,7 +106,11 @@ def tolerance_issues(t: ProjectTolerances) -> list[str]:
                                    ("max_repeat_h_m", "diferencia en planta entre ocupaciones", 0.0005, 100.0),
                                    ("max_repeat_v_m", "diferencia en cota entre ocupaciones", 0.0005, 100.0),
                                    ("max_control_h_m", "diferencia en planta contra control", 0.0005, 100.0),
-                                   ("max_control_v_m", "diferencia en cota contra control", 0.0005, 100.0)):
+                                   ("max_control_v_m", "diferencia en cota contra control", 0.0005, 100.0),
+                                   ("max_loop_h_m", "cierre de bucle en planta", 0.0005, 100.0),
+                                   ("max_loop_v_m", "cierre de bucle en cota", 0.0005, 100.0),
+                                   ("max_loop_h_ppm", "ppm del cierre de bucle en planta", 0.0, 1000.0),
+                                   ("max_loop_v_ppm", "ppm del cierre de bucle en cota", 0.0, 1000.0)):
         value = getattr(t, name)
         if value is not None and not (math.isfinite(value) and low <= value <= high):
             found.append(f"La tolerancia «{label}» va de {low:g} a {high:g}.")
@@ -499,4 +507,71 @@ def evaluate_static(result: StaticResult, tolerances: ProjectTolerances | None =
     report.points.append(PointQuality(name=result.point_name, status=status))
     # una línea que el ajuste dejó fuera no cuenta para el proyecto (sale con su estado en la tabla de líneas)
     report.level = worst([status.level] + [q.status.level for q in report.baselines if q.base_id not in excluded])
+    return report
+
+
+# --- Estático de varios puntos (red) ------------------------------------------------------------------------------------
+
+def evaluate_network(result: NetworkStaticResult, tolerances: ProjectTolerances | None = None,
+                     control: list[ControlCoordinate] | None = None, choice: CoordinateChoice | None = None,
+                     control_source: str = "") -> QualityReport:
+    """Cada línea (σ del vector, cociente, PDOP, duración y, si el ajuste la señala, su τ o w), cada bucle (su
+    tolerancia, ya evaluada por `red.py`) y cada punto nuevo (σ final, el ajuste, sus líneas y bucles y el control)."""
+    t = tolerances or default_tolerances("static")
+    report = QualityReport(tolerances=t, control_source=control_source)
+    network = result.network
+    adjustment = (network.constrained or network.minimal) if network is not None else None
+    flagged = {r.vector_id: r for r in (adjustment.residuals if adjustment else []) if r.flagged}
+    in_use = set()
+    if network is not None:
+        in_use = {v.id for v in network.vectors if v.use and (not v.trivial or network.options.include_trivial)}
+    line_status = {}
+    for ln in result.lines:
+        checks = _baseline_checks(ln.baseline, t)
+        r = flagged.get(ln.id)
+        if r is not None:
+            name = "τ" if adjustment.test == "tau" else "w"
+            checks.append(QualityCheck("adjustment", "review", r.max_standardized, adjustment.critical_value,
+                                       f"{name} {r.max_standardized:.1f} > {adjustment.critical_value:.2f} en el "
+                                       "ajuste"))
+        status = status_of(checks)
+        line_status[ln.id] = status
+        report.baselines.append(BaselineQuality(ln.id, status))
+    loops = network.loops if network is not None else []
+    for p in result.points:
+        s = p.sigma_enu
+        f = t.fail_factor
+        checks: list[QualityCheck | None] = [check("sigma_h", math.hypot(s.e, s.n), t.max_sigma_h_m, "max", f),
+                                             check("sigma_v", s.u, t.max_sigma_v_m, "max", f)]
+        mine = [ln for ln in result.lines if ln.id in in_use and p.name in (ln.from_id, ln.to_id)]
+        if mine:
+            checks.append(check("duration", max((ln.baseline.end - ln.baseline.start).total_seconds() for ln in mine),
+                                t.min_duration_s, "min", f))
+        if adjustment is not None and not adjustment.passed:
+            checks.append(QualityCheck("adjustment", "review", adjustment.chi2, adjustment.chi2_upper,
+                                       f"el ajuste no pasa la prueba χ² ({adjustment.chi2:.1f} > "
+                                       f"{adjustment.chi2_upper:.1f})"))
+        if p.adjustment == "minimal":
+            checks.append(QualityCheck("adjustment", "review", text="sin fija en su parte de la red"))
+        bad = [ln.id for ln in mine if line_status[ln.id].level == "fail"]
+        if bad:
+            checks.append(QualityCheck("baseline", "review", text="falla la línea " + ", ".join(bad)))
+        open_loops = [lp for lp in loops if p.name in lp.points and lp.status.level != "pass"]
+        if open_loops:
+            worst_loop = max(open_loops, key=lambda lp: LEVELS.index(lp.status.level))
+            checks.append(QualityCheck("loop", "review", text="bucle " + " → ".join(worst_loop.points)
+                                       + f": {worst_loop.status.reason}"))
+        report.points.append(PointQuality(name=p.name, status=status_of(checks), occupations=p.occupations,
+                                          averaged=p.occupations > 1,
+                                          note=f"{p.occupations} ocupaciones" if p.occupations > 1 else ""))
+    if result.points:
+        residuals = _control([(p.name, p.position) for p in result.points], control or [], t, choice,
+                             result.points[0].position, report)
+        for pq in report.points:
+            r = residuals.get(group_key(pq.name))
+            if r is not None:
+                pq.status = status_of(list(pq.status.checks) + list(r.status.checks))
+    report.level = worst([pq.status.level for pq in report.points]
+                         + [q.status.level for q in report.baselines if q.base_id in in_use]
+                         + [lp.status.level for lp in loops])
     return report
