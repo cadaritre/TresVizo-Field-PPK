@@ -6,11 +6,17 @@
     python scripts/distribuir.py --solo-este-equipo      # macOS: probar con un Python que pide un macOS más nuevo
 
 Salida en dist/installer/:
-- Windows: TresVizo-Field-PPK-<versión>-x64.msi (WiX 4.0.6, por usuario).
+- Windows: TresVizo-Field-PPK-<versión>-x64.msi (WiX 4.0.6, por usuario) y, junto, su «Cómo instalarla»
+           (TresVizo-Field-PPK-<versión>-Windows-como-instalarla.txt: SmartScreen y la SHA-256).
 - macOS:   TresVizo-Field-PPK-<versión>-macos-<arm64|x86_64>.dmg con la app y «Cómo abrirla.txt» (sin firma), para
            macOS 14 (Apple) o 15 (Intel) en adelante: ningún binario puede pedir más (scripts/macos_minimo.py).
 - Linux:   TresVizo-Field-PPK-<versión>-linux-x86_64.tar.gz (carpeta lista para ejecutar).
 Cada uno con su .sha256 y un .json con versiones de dependencias, huellas de las fuentes y la autoprueba.
+
+    python scripts/distribuir.py --notas dist/release   # notas de la versión para el release de GitHub
+
+La app no está firmada con un certificado comercial (decisión del propietario): los textos de primera apertura
+(macOS 14 y 15+, SmartScreen de Windows) y la SHA-256 de cada instalador van en el DMG, junto al MSI y en las notas.
 """
 from __future__ import annotations
 
@@ -36,23 +42,50 @@ NAME = 'TresVizo-Field-PPK'
 APP_BUNDLE = 'TresVizo Field PPK.app'
 DEPENDENCIES = ('numpy', 'pyproj', 'matplotlib', 'reportlab', 'Pillow', 'tkinterdnd2', 'pypdfium2', 'pyinstaller',
                 'pyinstaller-hooks-contrib')
+FIRST_OPEN = ('La app no está firmada con un certificado comercial; la primera vez macOS o Windows piden confirmar que '
+              'quieres abrirla.')
+MAC_STEPS = """1. Abre la app desde Aplicaciones. macOS avisa que no pudo comprobarla; pulsa «Listo» (o «OK»).
+2. Ve a Ajustes del Sistema → Privacidad y seguridad. Abajo, en «Seguridad», aparece
+   «Se bloqueó "TresVizo Field PPK"…». Pulsa «Abrir de todos modos», vuelve a pulsar «Abrir de todos modos»
+   y confirma con tu contraseña o Touch ID.
+   - macOS 15 (Sequoia) o posterior: es la única forma.
+   - macOS 14 (Sonoma): también sirve clic derecho (o Control + clic) sobre la app → Abrir → Abrir.
+3. Desde entonces se abre normalmente. Con una versión nueva, macOS puede volver a pedirlo una vez."""
+WINDOWS_STEPS = """1. Si el navegador avisa que el archivo no se descarga con frecuencia, elige «Conservar» (en Edge: «…» →
+   «Conservar» → «Mostrar más» → «Conservar de todos modos»).
+2. Abre el MSI. Si aparece «Windows protegió tu PC» (SmartScreen), pulsa «Más información» y después
+   «Ejecutar de todas formas».
+3. Sigue los pasos del instalador: se instala para tu cuenta, sin permisos de administrador. Para actualizar,
+   cierra el programa y abre el MSI nuevo; no hace falta desinstalar."""
+MAC_CHECK = """Comprobar que el DMG es el original: su SHA-256 está publicada junto a él (archivo .sha256 y la tabla de las
+notas de la versión). En Terminal:
+    shasum -a 256 ~/Downloads/{file}
+La cifra debe ser exactamente la publicada."""
+WINDOWS_CHECK = """Comprobar que el MSI es el original: su SHA-256 está publicada junto a él (archivo .sha256 y la tabla de las
+notas de la versión). Abre la carpeta Descargas, escribe cmd en la barra de direcciones y pulsa Entrar; luego:
+    certutil -hashfile {file} SHA256
+La cifra debe ser exactamente la publicada (certutil la escribe en minúsculas, igual que el .sha256)."""
 MAC_HELP = """TresVizo Field PPK {version} para macOS
 
 Instalar: arrastra «TresVizo Field PPK» a la carpeta Aplicaciones.
 
-Esta app todavía no está firmada ni notarizada por Apple (hacerlo requiere una cuenta de desarrollador de pago). Por
-eso, la primera vez macOS dice que no puede comprobar al desarrollador. Para abrirla:
+Abrirla la primera vez. """ + FIRST_OPEN + """
 
-1. Abre la app desde Aplicaciones una vez; macOS la bloqueará. Cierra el aviso.
-2. Ve a Ajustes del Sistema → Privacidad y seguridad; abajo aparece «Se bloqueó TresVizo Field PPK…».
-   Pulsa «Abrir de todos modos» y confirma con tu contraseña.
-   (En macOS 14 también funciona: clic derecho sobre la app → Abrir → Abrir.)
-3. Desde entonces se abre normalmente.
+""" + MAC_STEPS + """
 
-Comprueba antes que el archivo es el original: su SHA-256 está publicado junto a la descarga en
-https://github.com/cadaritre/TresVizo-Field-PPK (archivo .sha256).
+""" + MAC_CHECK + """
 
 Tus proyectos, descargas y preferencias quedan fuera de la app: actualizar o borrar la app no los toca.
+"""
+WINDOWS_HELP = """TresVizo Field PPK {version} para Windows 10 y 11 (64 bits)
+
+Instalarla. """ + FIRST_OPEN + """
+
+""" + WINDOWS_STEPS + """
+
+""" + WINDOWS_CHECK + """
+
+Tus proyectos, descargas y preferencias quedan en tus carpetas: actualizar o desinstalar el programa no los toca.
 """
 
 
@@ -141,9 +174,100 @@ def make_dmg(app: Path, output: Path):
         stage.mkdir()
         run('ditto', app, stage/APP_BUNDLE)
         os.symlink('/Applications', stage/'Aplicaciones')
-        (stage/'Cómo abrirla.txt').write_text(MAC_HELP.format(version=VERSION), encoding='utf-8')
+        (stage/'Cómo abrirla.txt').write_text(MAC_HELP.format(version=VERSION, file=output.name), encoding='utf-8')
         run('hdiutil', 'create', '-volname', f'TresVizo Field PPK {VERSION}', '-srcfolder', stage, '-ov',
             '-format', 'UDZO', '-fs', 'HFS+', output)
+
+
+def windows_help_name(version: str = VERSION) -> str:
+    """El «Cómo instalarla» que va junto al MSI (en ASCII: GitHub cambia los acentos del nombre de un archivo)."""
+    return f'{NAME}-{version}-Windows-como-instalarla.txt'
+
+
+def write_windows_help(msi: Path, version: str = VERSION) -> Path:
+    out = msi.with_name(windows_help_name(version))
+    # CRLF y BOM: el Bloc de notas de Windows 10 lo abre bien.
+    out.write_bytes(WINDOWS_HELP.format(version=version, file=msi.name).replace('\n', '\r\n').encode('utf-8-sig'))
+    return out
+
+
+def changelog_section(version: str, text: str) -> str:
+    """Las novedades de la versión en CHANGELOG.md (lo que va bajo «## <versión> …» hasta la siguiente)."""
+    lines, inside = [], False
+    for line in text.splitlines():
+        if line.startswith('## '):
+            if inside:
+                break
+            inside = line[3:].split()[0:1] == [version]
+            continue
+        if inside:
+            lines.append(line)
+    return '\n'.join(lines).strip()
+
+
+INSTALLER_SUFFIXES = ('.msi', '.dmg', '.tar.gz')
+
+
+def release_notes(version: str, folder: Path, changelog: str) -> str:
+    """Las notas de la versión para GitHub: novedades, cómo abrirla la primera vez (macOS 14 y 15+, Windows con
+    SmartScreen) y la SHA-256 de cada instalador de `folder` con cómo comprobarla. Lee los .sha256 que dejó este
+    script (los de la CI) y comprueba que cuadran con el archivo."""
+    folder = Path(folder)
+    rows = []
+    for path in sorted(folder.iterdir()):
+        if not path.is_file() or not path.name.startswith(f'{NAME}-{version}-') or \
+                not path.name.endswith(INSTALLER_SUFFIXES) or 'solo-este-equipo' in path.name:
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        published = path.with_name(path.name+'.sha256')
+        if published.is_file() and published.read_text(encoding='ascii').split()[0] != digest:
+            raise SystemExit(f'{published.name} no cuadra con {path.name}: no se publica.')
+        rows.append((path.name, digest, path.stat().st_size))
+    if not rows:
+        raise SystemExit(f'No hay instaladores de la versión {version} en {folder}.')
+    mac = next((n for n, _, _ in rows if n.endswith('.dmg')), f'{NAME}-{version}-macos-arm64.dmg')
+    win = next((n for n, _, _ in rows if n.endswith('.msi')), f'{NAME}-{version}-x64.msi')
+    news = changelog_section(version, changelog) or '- (Sin notas en CHANGELOG.md.)'
+    table = '\n'.join(f'| `{name}` | {size/1e6:.1f} MB | `{digest}` |' for name, digest, size in rows)
+    return f"""# TresVizo Field PPK {version}
+
+## Novedades
+
+{news}
+
+## Qué archivo bajar
+
+- **Windows 10 y 11 (64 bits):** `{NAME}-{version}-x64.msi`.
+- **macOS 14 o posterior en Mac con Apple (M1 o posterior):** `{NAME}-{version}-macos-arm64.dmg`.
+- **macOS 15 o posterior en Mac con Intel:** `{NAME}-{version}-macos-x86_64.dmg`.
+
+Tus proyectos, descargas y preferencias se conservan al actualizar.
+
+## Abrirla la primera vez
+
+{FIRST_OPEN}
+
+**macOS**
+
+{MAC_STEPS}
+
+**Windows**
+
+{WINDOWS_STEPS}
+
+## SHA-256 de cada archivo
+
+| Archivo | Tamaño | SHA-256 |
+|---|---|---|
+{table}
+
+Para comprobar que el archivo es el original, calcula su SHA-256 y compárala con la de la tabla (o la de su
+`.sha256`); debe ser exactamente la misma:
+
+- macOS, en Terminal: `shasum -a 256 ~/Downloads/{mac}`
+- Windows, en la carpeta Descargas (escribe `cmd` en la barra de direcciones y pulsa Entrar):
+  `certutil -hashfile {win} SHA256`
+"""
 
 
 def check_macos_minimum(app: Path, arch: str, local: bool) -> str:
@@ -188,10 +312,19 @@ def main():
     parser.add_argument('--replace-unpublished', action='store_true',
                         help='Reemplazar artefactos locales que todavía no se han entregado.')
     parser.add_argument('--skip-rtklib', action='store_true', help='Usar los binarios ya compilados.')
+    parser.add_argument('--notas', type=Path, metavar='CARPETA',
+                        help='Solo escribir las notas de la versión (novedades, primera apertura y SHA-256) de los '
+                             'instaladores de CARPETA, para pegarlas en el release de GitHub.')
     parser.add_argument('--solo-este-equipo', action='store_true',
                         help='macOS: armar aunque algún binario pida un macOS más nuevo que el mínimo (un Python de '
                              'Homebrew, por ejemplo). La app declara lo que de verdad pide y el DMG no se entrega.')
     args = parser.parse_args()
+    if args.notas is not None:
+        notes = release_notes(VERSION, args.notas, (ROOT/'CHANGELOG.md').read_text(encoding='utf-8'))
+        out = args.notas/f'{NAME}-{VERSION}-notas.md'
+        out.write_text(notes, encoding='utf-8')
+        print(f'Notas de la versión: {out}')
+        return
     if sys.version_info[:2] != (3, 13):
         parser.error('Compila con Python 3.13.')
     local = args.solo_este_equipo and sys.platform == 'darwin'
@@ -248,6 +381,7 @@ def main():
     if sys.platform == 'win32':
         from scripts.generate_msi import build_msi
         manifest = build_msi(payload, output, arch)
+        write_windows_help(output)
     elif sys.platform == 'darwin':
         make_dmg(app, output)
         manifest = {'file': output.name, 'version': VERSION, 'architecture': arch}

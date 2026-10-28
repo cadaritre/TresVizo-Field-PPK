@@ -122,3 +122,18 @@ def test_signing_script_with_test_key(tmp_path):
     again = subprocess.run([sys.executable, str(ROOT/'scripts/firmar_version.py'), '--nueva-llave', str(key)],
                            capture_output=True, text=True)
     assert again.returncode != 0
+
+
+def test_without_key_only_the_download_page():
+    """Sin llave de publicación (la distribución de hoy) la app no instala nada: abre la página de la versión."""
+    assert updates.PUBLIC_KEY_HEX == ''
+    for system, machine in (('win32', 'AMD64'), ('darwin', 'arm64'), ('darwin', 'x86_64'), ('linux', 'x86_64')):
+        assert not updates.installs_itself('9.1.0', system=system, machine=machine)
+        assert updates.installs_itself('9.1.0', 'ab'*32, system, machine) == (system != 'linux')
+    release = updates.parse_release({**release_json('9.1.0'),
+                                     'html_url': updates.RELEASES_PAGE+'/tag/v9.1.0'})
+    assert updates.download_page(release) == 'https://github.com/cadaritre/TresVizo-Field-PPK/releases/tag/v9.1.0'
+    # Una página que no es de este repositorio no se abre: se usa la de la etiqueta.
+    foreign = updates.parse_release({**release_json('9.1.0'), 'html_url': 'https://otro.example/descarga'})
+    assert updates.download_page(foreign) == updates.RELEASES_PAGE+'/tag/v9.1.0'
+    assert updates.download_page(updates.Release('9.1.0', '', '', '', '', '')) == updates.RELEASES_PAGE

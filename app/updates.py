@@ -1,11 +1,14 @@
 """Actualizaciones desde GitHub Releases (§3.5), solo cuando el usuario lo pide o lo autorizó en Ajustes.
 
 1. Lee la última versión publicada en la API pública de releases de cadaritre/TresVizo-Field-PPK.
-2. Si es más nueva, muestra sus novedades y, a petición, baja el **manifiesto firmado** de esa versión
-   (`TresVizo-Field-PPK-<versión>-manifiesto.json` y su `.sig`): SHA-256 y tamaño de cada instalador, firmado con
-   Ed25519 por la llave de publicación de la app (`scripts/firmar_version.py`).
-3. Verifica la firma con la llave pública incluida aquí; baja el instalador de este sistema, comprueba tamaño y
-   SHA-256 contra el manifiesto y solo entonces lo abre. Sin firma válida no instala nada y lo dice.
+2. Si es más nueva, muestra sus novedades.
+3. **Distribución sin llave de publicación** (`PUBLIC_KEY_HEX` vacía, decisión del propietario del 27-10-2026): la
+   app solo avisa y ofrece abrir la página de descarga de esa versión en GitHub (`download_page`), donde están los
+   instaladores y la SHA-256 de cada uno. No baja ni abre nada por su cuenta.
+4. **Con llave** (el camino firmado, intacto por si algún día la hay): a petición baja el manifiesto firmado de la
+   versión (`TresVizo-Field-PPK-<versión>-manifiesto.json` y su `.sig`: SHA-256 y tamaño de cada instalador, firmado
+   con Ed25519 por `scripts/firmar_version.py`), verifica la firma con la llave pública incluida aquí, baja el
+   instalador de este sistema, comprueba tamaño y SHA-256 contra el manifiesto y solo entonces lo abre.
 
 Sin Tk: la pantalla de Ajustes lo usa en un hilo aparte con progreso y cancelar.
 """
@@ -34,9 +37,10 @@ MANIFEST_FORMAT = 'tresvizo-field-ppk/version'
 TIMEOUT_S = 20
 CHUNK = 64*1024
 
-# Llave pública de publicación (Ed25519, 32 bytes en hexadecimal). MARCADOR: la pone el propietario con la salida de
-# `python scripts/firmar_version.py --nueva-llave RUTA_PRIVADA` (procedimiento en docs/distribucion.md). Mientras esté
-# vacía, la app puede avisar de versiones nuevas pero se niega a instalar nada.
+# Llave pública de publicación (Ed25519, 32 bytes en hexadecimal). Vacía: la distribución va sin llave (decisión del
+# propietario) y la app avisa de la versión nueva y abre su página de descarga. Si algún día se crea una
+# (`python scripts/firmar_version.py --nueva-llave RUTA_PRIVADA`, docs/distribucion.md), con pegarla aquí la app baja,
+# verifica e instala la actualización ella misma.
 PUBLIC_KEY_HEX = ''
 
 
@@ -72,6 +76,25 @@ def installer_name(version: str, system: str = sys.platform, machine: str | None
         arch = {'amd64': 'x86_64', 'aarch64': 'arm64'}.get(machine, machine)
         return f'{NAME}-{version}-macos-{arch}.dmg'
     return None
+
+
+def installs_itself(version: str, public_hex: str | None = None, system: str = sys.platform,
+                    machine: str | None = None) -> bool:
+    """¿La app baja, verifica e instala esta versión ella misma? Solo con llave de publicación y en Windows o macOS;
+    si no, avisa y abre la página de descarga."""
+    public_hex = PUBLIC_KEY_HEX if public_hex is None else public_hex
+    return bool(public_hex) and installer_name(version, system, machine) is not None
+
+
+def download_page(release: 'Release') -> str:
+    """La página de la versión en GitHub, con los instaladores y la SHA-256 de cada uno. Solo se abre una página de
+    este repositorio: si la respuesta trae otra (o ninguna), la de la etiqueta; sin etiqueta, la de las versiones."""
+    page = (release.page or '').strip()
+    if page.startswith(RELEASES_PAGE+'/'):
+        return page
+    if re.fullmatch(r'v?\d+\.\d+\.\d+', release.tag or ''):
+        return f'{RELEASES_PAGE}/tag/{release.tag}'
+    return RELEASES_PAGE
 
 
 def manifest_names(version: str) -> tuple[str, str]:

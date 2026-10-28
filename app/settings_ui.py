@@ -24,6 +24,21 @@ def apply_data_dir(app):
         crs.set_data_dir(Path(app.settings.values.data_dir)/'Sistemas y geoides')
 
 
+DOWNLOAD_STEPS = ('En la página están el instalador de cada sistema y su SHA-256 para comprobarlo. Cierra el '
+                  'programa, abre el instalador nuevo y sigue sus pasos: tus proyectos y ajustes se conservan. La app '
+                  'no está firmada con un certificado comercial; la primera vez macOS o Windows piden confirmar que '
+                  'quieres abrirla.')
+
+
+def updates_note(updates) -> str:
+    """Qué hace «Buscar actualizaciones», según la compilación traiga o no la llave de publicación."""
+    if updates.PUBLIC_KEY_HEX:
+        return ('Las versiones nuevas se publican en github.com/cadaritre/TresVizo-Field-PPK; la app las baja, '
+                'comprueba que sean las publicadas y abre el instalador.')
+    return ('Las versiones nuevas se publican en github.com/cadaritre/TresVizo-Field-PPK; la app te avisa, te muestra '
+            'sus novedades y abre su página de descarga.')
+
+
 class SettingsPage(ttk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent)
@@ -127,10 +142,9 @@ class SettingsPage(ttk.Frame):
         log.pack(anchor='w')
 
     def build_updates(self, body):
+        from app import updates
         from tresvizo_ppk.version import __version__ as installed
-        frame, inner = card(body, 'Actualizaciones', f'Versión instalada: {installed}. Las versiones nuevas se publican '
-                                                     'en github.com/cadaritre/TresVizo-Field-PPK y se instalan solo si '
-                                                     'su firma es válida.')
+        frame, inner = card(body, 'Actualizaciones', f'Versión instalada: {installed}. {updates_note(updates)}')
         frame.pack(fill='x', pady=(16, 0))
         self.check_updates = tk.BooleanVar(value=self.app.settings.values.check_updates)
         ttk.Checkbutton(inner, text='Buscar al abrir el programa (solo consulta GitHub; ninguna otra conexión)',
@@ -178,21 +192,29 @@ class SettingsPage(ttk.Frame):
         notes.pack(fill='x')
         row = ttk.Frame(self.update_body, style='Flat.Card.TFrame')
         row.pack(fill='x', pady=(10, 0))
-        if updates.installer_name(release.version) is None:
-            link = ttk.Button(row, text='Abrir la página de versiones', command=lambda: self.open_page(release.page))
+        if not updates.installs_itself(release.version):
+            # Sin llave de publicación: la app no baja ni abre instaladores; la página de la versión los tiene, con la
+            # SHA-256 de cada uno al lado.
+            page = updates.download_page(release)
+            link = ttk.Button(row, text='Abrir la página de descarga', style='Primary.TButton',
+                              command=lambda: self.open_page(page))
             self.app.icons.bind(link, 'external-link')
             link.pack(side='left')
+            self.update_status.configure(text=f'Hay una versión nueva: {release.version}. Se baja desde su página '
+                                              'en GitHub.')
+            wrap_label(self.update_body, DOWNLOAD_STEPS, style='Card.Subtitle.TLabel', margin=40).pack(
+                fill='x', pady=(10, 0))
         else:
             install = ttk.Button(row, text='Bajar e instalar', style='Primary.TButton',
                                  command=lambda: self.install_release(release))
             self.app.icons.bind(install, 'download')
             install.pack(side='left')
             page = ttk.Button(row, text='Ver en GitHub', style='Card.Link.TButton',
-                              command=lambda: self.open_page(release.page))
+                              command=lambda: self.open_page(updates.download_page(release)))
             self.app.icons.bind(page, 'external-link', 16)
             page.pack(side='left', padx=8)
-        from app.components import ProgressPanel
-        self.update_progress = ProgressPanel(self.update_body, self.app, self.cancel_update)
+            from app.components import ProgressPanel
+            self.update_progress = ProgressPanel(self.update_body, self.app, self.cancel_update)
         self.app.theme.walk(self.update_body)
 
     def open_page(self, url):

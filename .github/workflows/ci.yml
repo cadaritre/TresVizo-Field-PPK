@@ -1,5 +1,8 @@
 # Pruebas en Windows, macOS y Linux, e instaladores (MSI de Windows y DMG de macOS) como artefactos.
-# Gratis en un repositorio público. Sin secretos: los instaladores salen sin firma (ver docs/distribucion.md).
+# Gratis en un repositorio público. Sin secretos: los instaladores no llevan certificado comercial (decisión del
+# propietario). Cada artefacto lleva su .sha256 y el MSI su «como-instalarla» (SmartScreen); las notas de la versión,
+# con la primera apertura y la tabla de SHA-256, se escriben con `python scripts/distribuir.py --notas CARPETA`
+# (ver docs/distribucion.md).
 name: CI
 
 on:

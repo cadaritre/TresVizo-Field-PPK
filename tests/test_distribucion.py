@@ -1,6 +1,7 @@
 """Versión mínima de macOS de la app empaquetada (scripts/macos_minimo.py y la comprobación de scripts/distribuir.py)."""
 from __future__ import annotations
 
+import hashlib
 import plistlib
 import re
 import shutil
@@ -122,3 +123,56 @@ def test_las_licencias_llevan_la_fuente_del_iers(tmp_path):
     distribuir.copy_licenses(tmp_path)
     fuente = (tmp_path/'IERS-convenciones-fuente-iers.py').read_text(encoding='utf-8')
     assert 'IERS Conventions Software License' in fuente and 'def ' in fuente
+
+
+# --- Distribución sin firma: primera apertura y SHA-256 (decisión del propietario, 27-10-2026) ---------------------
+
+def test_textos_de_primera_apertura():
+    mac = distribuir.MAC_HELP.format(version='1.2.3', file='TresVizo-Field-PPK-1.2.3-macos-arm64.dmg')
+    assert 'macOS 15 (Sequoia) o posterior' in mac and 'macOS 14 (Sonoma)' in mac
+    assert 'Abrir de todos modos' in mac and 'Privacidad y seguridad' in mac
+    assert 'shasum -a 256 ~/Downloads/TresVizo-Field-PPK-1.2.3-macos-arm64.dmg' in mac
+    assert 'no está firmada con un certificado comercial' in mac
+    win = distribuir.WINDOWS_HELP.format(version='1.2.3', file='TresVizo-Field-PPK-1.2.3-x64.msi')
+    for words in ('Windows protegió tu PC', 'Más información', 'Ejecutar de todas formas',
+                  'certutil -hashfile TresVizo-Field-PPK-1.2.3-x64.msi SHA256'):
+        assert words in win
+    # Sin culpa ni miedo.
+    for text in (mac, win):
+        assert not re.search(r'peligro|riesgo|malicios|lo sentimos|todavía no', text, re.IGNORECASE)
+
+
+def test_como_instalarla_junto_al_msi(tmp_path):
+    msi = tmp_path/'TresVizo-Field-PPK-1.2.3-x64.msi'
+    msi.write_bytes(b'msi')
+    out = distribuir.write_windows_help(msi, '1.2.3')
+    assert out.name == 'TresVizo-Field-PPK-1.2.3-Windows-como-instalarla.txt' and out.name.isascii()
+    data = out.read_bytes()
+    assert data.startswith(b'\xef\xbb\xbf') and b'\r\n' in data and b'\n\n' not in data.replace(b'\r\n', b'')
+    assert 'Ejecutar de todas formas' in data.decode('utf-8-sig')
+
+
+def test_notas_de_la_version_con_la_sha256(tmp_path):
+    changelog = '# Cambios\n\n## 1.2.3 — 2026-11-02\n- Opciones del DXF.\n\n## 1.2.2 — 2026-10-30\n- Otra cosa.\n'
+    assert distribuir.changelog_section('1.2.3', changelog) == '- Opciones del DXF.'
+    files = {}
+    for name in ('TresVizo-Field-PPK-1.2.3-x64.msi', 'TresVizo-Field-PPK-1.2.3-macos-arm64.dmg',
+                 'TresVizo-Field-PPK-1.2.3-macos-x86_64.dmg'):
+        (tmp_path/name).write_bytes(name.encode()*1000)
+        digest = hashlib.sha256((tmp_path/name).read_bytes()).hexdigest()
+        (tmp_path/(name+'.sha256')).write_text(f'{digest}  {name}\n', encoding='ascii')
+        files[name] = digest
+    (tmp_path/'TresVizo-Field-PPK-1.2.2-x64.msi').write_bytes(b'vieja')
+    (tmp_path/'TresVizo-Field-PPK-1.2.3-macos-arm64-solo-este-equipo.dmg').write_bytes(b'no se entrega')
+    notes = distribuir.release_notes('1.2.3', tmp_path, changelog)
+    for name, digest in files.items():
+        assert f'| `{name}` |' in notes and digest in notes
+    assert '1.2.2-x64' not in notes and 'solo-este-equipo' not in notes and 'Otra cosa' not in notes
+    for words in ('- Opciones del DXF.', 'Windows protegió tu PC', 'Ejecutar de todas formas', 'macOS 15 (Sequoia)',
+                  'shasum -a 256 ~/Downloads/TresVizo-Field-PPK-1.2.3-macos-arm64.dmg',
+                  'certutil -hashfile TresVizo-Field-PPK-1.2.3-x64.msi SHA256'):
+        assert words in notes
+    # Un .sha256 que no cuadra con su archivo no se publica.
+    (tmp_path/'TresVizo-Field-PPK-1.2.3-x64.msi').write_bytes(b'alterado')
+    with pytest.raises(SystemExit, match='no cuadra'):
+        distribuir.release_notes('1.2.3', tmp_path, changelog)
