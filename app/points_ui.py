@@ -21,7 +21,8 @@ from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, AntennaPanel
                            ecef_text, network_catalog, station_label)
 from app.static_ui import RECORDING_TYPES
 from app.export_ui import CUSTOM_CSV_LABEL, POINT_FORMATS, ExportActions, csv_options
-from tresvizo_ppk.export.columnas import PPK_COLUMNS
+from tresvizo_ppk.export.columnas import PPK_COLUMNS, QUALITY_COLUMNS
+from app import calidad_ui
 
 EXPORTS = POINT_FORMATS
 
@@ -47,7 +48,7 @@ class PointsPage(ExportActions, WizardPage):
         elif index == 1:
             self.build_rover(body)
         elif index == 2:
-            OptionsPanel(body, self.app, self.job, self.changed).pack(fill='x')
+            OptionsPanel(body, self.app, self.job, self.changed, self.quality_changed).pack(fill='x')
 
     def build_base(self, body):
         frame, inner = card(body, 'Base', 'Una estación de referencia de una red o tu propio MeridianV grabando como '
@@ -601,7 +602,7 @@ class PointsPage(ExportActions, WizardPage):
                         lambda path: f'Puntos exportados: {path.name}.')
 
     def export_custom_csv(self):
-        options = self.ask_csv_options(PPK_COLUMNS)
+        options = self.ask_csv_options(list(PPK_COLUMNS)+list(QUALITY_COLUMNS))
         if options is not None:
             self.export('csv', '.csv', 'CSV', csv=options)
 
@@ -620,9 +621,37 @@ class PointsPage(ExportActions, WizardPage):
 
     # --- Resultado ----------------------------------------------------------------------------------------------
 
+    def evaluate_quality(self, output):
+        """Las tolerancias, el control y la ocupación elegida de la pantalla contra el resultado: un resultado por
+        nombre con su estado, y su coordenada en el sistema elegido."""
+        from tresvizo_ppk import calidad
+        result, job = output['result'], self.job
+        result.quality = calidad.evaluate_points(result, job.tolerances, job.control_points, job.occupation_choices,
+                                                 output['choice'], job.control_source)
+        known = {id(p): c for p, c in zip(result.points, output['coordinates'])}
+        coordinates = []
+        for pq in result.quality.points:
+            p = pq.point
+            if id(p) in known:
+                coordinates.append(known[id(p)])
+            elif p.position is None:
+                coordinates.append(None)
+            else:
+                coordinate, _ = self.transform(p.position, output['choice'])
+                coordinates.append(coordinate)
+        output['effective'] = list(zip(result.quality.points, coordinates))
+
+    def choose_occupation(self, name, index):
+        self.job.occupation_choices[name] = index
+        self.quality_changed()
+
     def result_view(self, body, output):
         result, prefs = output['result'], self.app.settings.values
-        counts = {s: sum(1 for p in result.points if Solution(p.solution) is s) for s in Solution}
+        quality = result.quality
+        entries = output.get('effective') or [(None, c) for c in output['coordinates']]
+        points = [pq.point for pq, _ in entries] if quality is not None else list(result.points)
+        coordinates = [c for _, c in entries]
+        counts = {s: sum(1 for p in points if Solution(p.solution) is s) for s in Solution}
         fixed, floating = counts[Solution.FIXED], counts[Solution.FLOAT]
         none = counts[Solution.NONE]+counts[Solution.SINGLE]
         # Éxito con todos fijos; advertencia si hay flotantes o sin solución; error solo si no hay ningún fijo.
@@ -637,7 +666,8 @@ class PointsPage(ExportActions, WizardPage):
                    margin=40).pack(fill='x')
         lines = [f'Épocas fijas de la trayectoria: {result.fix_rate*100:.1f} %',
                  f'Base: {station_label(result.base)} ({"oficial" if result.base.official else result.base.source})',
-                 f'{len(result.points)} puntos del CSV']
+                 f'{len(points)} puntos del CSV' + (f' ({len(result.points)} ocupaciones)'
+                                                    if len(points) != len(result.points) else '')]
         q = result.rover_quality
         lines.append(f'Rover: {plural(q.epochs, "época")} · {plural(len(q.gaps), "hueco")} · '
                      f'{plural(len(q.satellites), "satélite")}')
@@ -647,7 +677,7 @@ class PointsPage(ExportActions, WizardPage):
         frame.grid(row=0, column=1, sticky='nsew', padx=(12, 0))
         plan = PlanChart(inner, self.app, height=300)
         plan.pack(fill='both', expand=True)
-        located = [p for p in result.points if p.position is not None]
+        located = [p for p in points if p.position is not None]
         items = []
         if located:
             origin = located[0].position
@@ -660,9 +690,10 @@ class PointsPage(ExportActions, WizardPage):
             if abs(e) < spread*4 and abs(n) < spread*4:
                 items.append({'e': e, 'n': n, 'kind': 'base', 'label': result.base.id})
         plan.set(items)
+        if quality is not None:
+            calidad_ui.summary_card(body, self.app, quality).pack(fill='x', pady=(16, 0))
         frame, inner = card(body, 'Puntos')
         frame.pack(fill='x', pady=(16, 0))
-        coordinates = output['coordinates']
         projected = any(c is not None and c.northing_m is not None for c in coordinates)
         first, second = ('Este', 'Norte') if projected else ('Latitud', 'Longitud')
         height_title = 'Cota' if any(c is not None and c.orthometric_height_m is not None for c in coordinates) else \
@@ -670,18 +701,21 @@ class PointsPage(ExportActions, WizardPage):
         # Lo esencial cabe a 1280 px; la distancia a la base y el aviso de cada punto salen al seleccionarlo.
         columns = [('name', 'Punto', 80), ('code', 'Código', 70), ('a', first, 125), ('b', second, 135),
                    ('h', height_title, 100), ('sh', 'σ H', 70), ('sv', 'σ V', 70), ('epochs', 'Épocas', 65),
-                   ('solution', 'Solución', 110), ('delta', 'Δ campo H/V', 135)]
+                   ('solution', 'Solución', 110), ('status', 'Estado', 105), ('delta', 'Δ campo H/V', 135)]
         tree = ttk.Treeview(inner, columns=[c[0] for c in columns], show='headings',
-                            height=min(14, max(3, len(result.points))), selectmode='browse')
+                            height=min(14, max(3, len(points))), selectmode='browse')
         for key, title, width in columns:
             tree.heading(key, text=title, anchor='w')
             tree.column(key, width=width, minwidth=width*3//4, anchor='w', stretch=True)
-        # Solo se resaltan las filas que piden revisión; la solución siempre va escrita.
+        # Solo se resaltan las filas que piden revisión (por su estado contra las tolerancias, o por su solución si no
+        # hay evaluación); el estado y la solución siempre van escritos.
         tokens = self.app.theme.tokens
         tree.tag_configure('float', foreground=tokens['warning_fg'], background=tokens['warning_bg'])
         for key in ('single', 'none'):
             tree.tag_configure(key, foreground=tokens['error_fg'], background=tokens['error_bg'])
-        for index, (p, c) in enumerate(zip(result.points, coordinates)):
+        calidad_ui.status_tags(tree, self.app)
+        statuses = [pq.status if pq is not None else None for pq, _ in entries]
+        for index, (p, c) in enumerate(zip(points, coordinates)):
             if c is not None and projected and c.northing_m is not None:
                 a, b = format_length(c.easting_m, prefs), format_length(c.northing_m, prefs)
             elif c is not None:
@@ -693,10 +727,13 @@ class PointsPage(ExportActions, WizardPage):
             delta = ('—' if p.delta_from_field_enu is None else
                      f'{format_length(horizontal(p.delta_from_field_enu), prefs)} / '
                      f'{format_length(p.delta_from_field_enu.u, prefs)}')
-            tree.insert('', 'end', iid=str(index), tags=(solution_key(p.solution),), values=(
+            status = statuses[index]
+            tags = calidad_ui.tag_of(status) if status is not None else (solution_key(p.solution),)
+            tree.insert('', 'end', iid=str(index), tags=tags, values=(
                 p.point.name, p.point.code, a, b, h, format_length(horizontal(p.sigma_enu), prefs),
                 format_length(None if p.sigma_enu is None else p.sigma_enu.u, prefs),
-                f'{p.epochs_fixed}/{p.epochs_total}', solution_text(p.solution), delta))
+                f'{p.epochs_fixed}/{p.epochs_total}', solution_text(p.solution), calidad_ui.status_cell(status),
+                delta))
         from app.components import CellTips, fit_columns
         fit_columns(tree, self.app, stretch='name')
         CellTips(tree, self.app)
@@ -704,7 +741,8 @@ class PointsPage(ExportActions, WizardPage):
         scroll = ThinScrollbar(inner, tree.xview, orient='horizontal')
         tree.configure(xscrollcommand=scroll.set)
         scroll.pack(fill='x', pady=(3, 0))
-        point_detail = ttk.Label(inner, text='Selecciona un punto para ver su distancia a la base y sus avisos.',
+        point_detail = ttk.Label(inner, text='Selecciona un punto para ver su estado, su distancia a la base y sus '
+                                             'avisos.',
                                  style='Card.Subtitle.TLabel', justify='left')
         point_detail.pack(fill='x', pady=(6, 0))
 
@@ -712,10 +750,14 @@ class PointsPage(ExportActions, WizardPage):
             chosen = tree.selection()
             if not chosen:
                 return
-            p = result.points[int(chosen[0])]
+            index = int(chosen[0])
+            p = points[index]
             parts = [f'{p.point.name}: a {format_length(p.distance_to_base_m, prefs, 0)} de la base'
                      if p.distance_to_base_m is not None else f'{p.point.name}: sin distancia a la base',
                      f'{p.epochs_fixed} épocas fijas de {p.epochs_total}']
+            status = statuses[index]
+            if status is not None:
+                parts.insert(1, calidad_ui.status_cell(status) + (f' ({status.reason})' if status.reason else ''))
             if p.message:
                 parts.append(p.message)
             point_detail.configure(text=' · '.join(parts))
@@ -724,8 +766,13 @@ class PointsPage(ExportActions, WizardPage):
         frame.pack(fill='x', pady=(16, 0))
         bars = BarChart(inner, self.app)
         bars.pack(fill='x')
-        bars.set([(p.point.name, horizontal(p.sigma_enu) or 0.0, solution_key(p.solution)) for p in result.points],
+        bars.set([(p.point.name, horizontal(p.sigma_enu) or 0.0, solution_key(p.solution)) for p in points],
                  title='σ horizontal (color: solución)', value_text=lambda v: format_length(v, prefs))
+        if quality is not None and quality.groups:
+            calidad_ui.occupations_card(body, self.app, quality, prefs, self.choose_occupation).pack(
+                fill='x', pady=(16, 0))
+        if quality is not None and (quality.control or quality.control_missing):
+            calidad_ui.control_card(body, self.app, quality, prefs).pack(fill='x', pady=(16, 0))
         warnings = list(result.warnings)+list(q.warnings)+output['coordinate_warnings']
         if warnings:
             frame, inner = card(body, 'Avisos')

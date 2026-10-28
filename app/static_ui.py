@@ -10,7 +10,7 @@ from tkinter import ttk
 
 from tresvizo_ppk.model import Ephemeris, Solution
 
-from app import tasks
+from app import calidad_ui, tasks
 from tresvizo_ppk.nombres import display_name
 from app.charts import BarChart, PlanChart, enu_of, enu_sigma
 from app.export_ui import CUSTOM_CSV_LABEL, POINT_FORMATS, ExportActions, csv_options
@@ -48,7 +48,7 @@ class StaticPage(ExportActions, WizardPage):
         elif index == 1:
             self.build_bases(body)
         elif index == 2:
-            OptionsPanel(body, self.app, self.job, self.changed).pack(fill='x')
+            OptionsPanel(body, self.app, self.job, self.changed, self.quality_changed).pack(fill='x')
 
     def build_rover(self, body):
         frame, inner = card(body, 'Grabación del rover',
@@ -425,7 +425,7 @@ class StaticPage(ExportActions, WizardPage):
 
     def export_custom_csv(self):
         export = self.app.backend.export
-        options = self.ask_csv_options(getattr(export, 'STATIC_COLUMNS', []))
+        options = self.ask_csv_options(getattr(export, 'STATIC_CUSTOM_COLUMNS', getattr(export, 'STATIC_COLUMNS', [])))
         if options is not None:
             self.export('csv', '.csv', 'CSV', csv=options)
 
@@ -440,6 +440,13 @@ class StaticPage(ExportActions, WizardPage):
         self.app.set_status('Coordenadas copiadas al portapapeles.')
 
     # --- Resultado ----------------------------------------------------------------------------------------------
+
+    def evaluate_quality(self, output):
+        """El vértice y cada línea base contra las tolerancias y el control de la pantalla."""
+        from tresvizo_ppk import calidad
+        job = self.job
+        output['result'].quality = calidad.evaluate_static(output['result'], job.tolerances, job.control_points,
+                                                           output['choice'], job.control_source)
 
     def result_view(self, body, output):
         result, coordinate, prefs = output['result'], output['coordinate'], self.app.settings.values
@@ -461,7 +468,13 @@ class StaticPage(ExportActions, WizardPage):
         kind = 'success' if passed and not warnings else 'warning' if passed else 'error'
         ttk.Label(inner, text=f'{status} · {plural(len(result.baselines), "línea base", "líneas base")} · '
                               + ', '.join(sorted(solution_text(s) for s in solutions)), style=kind+'.TLabel').pack(
-            anchor='w', pady=(0, 10))
+            anchor='w', pady=(0, 4))
+        quality = result.quality
+        point_status = quality.points[0].status if quality is not None and quality.points else None
+        if point_status is not None:
+            wrap_label(inner, 'Tolerancias del proyecto: ' + calidad_ui.status_cell(point_status)
+                       + (f' — {point_status.reason}' if point_status.reason else ''),
+                       style=calidad_ui.kind_of(point_status.level)+'.TLabel', margin=40).pack(fill='x', pady=(0, 10))
         grid = ttk.Frame(inner, style='Flat.Card.TFrame')
         grid.pack(fill='x')
         rows = coordinate_rows(coordinate, prefs, sigma)
@@ -491,24 +504,35 @@ class StaticPage(ExportActions, WizardPage):
         frame.pack(fill='x', pady=(16, 0))
         # Estación en dos líneas: la clave y, debajo, el nombre completo (nunca «UQRO · Queréta»). Si aun así la
         # columna no alcanza, los nombres completos salen debajo de la tabla.
-        tree = ttk.Treeview(inner, columns=('base', 'length', 'solution', 'ratio', 'rms', 'sigma', 'epochs', 'sats'),
+        tree = ttk.Treeview(inner, columns=('base', 'length', 'solution', 'ratio', 'rms', 'sigma', 'epochs', 'sats',
+                                            'status'),
                             show='headings', height=max(1, len(result.baselines)), selectmode='none',
                             style='TwoLine.Treeview')
         for key, title, width in [('base', 'Estación', 190), ('length', 'Longitud', 120), ('solution', 'Solución', 120),
                                   ('ratio', 'Cociente', 80), ('rms', 'RMS', 90), ('sigma', 'σ H / V', 150),
-                                  ('epochs', 'Épocas', 80), ('sats', 'Satélites', 80)]:
+                                  ('epochs', 'Épocas', 80), ('sats', 'Satélites', 80), ('status', 'Estado', 105)]:
             tree.heading(key, text=title, anchor='w')
             tree.column(key, width=width, minwidth=60, anchor='w', stretch=key == 'base')
+        calidad_ui.status_tags(tree, self.app)
+        statuses = {q.base_id: q.status for q in (quality.baselines if quality is not None else [])}
         for b in result.baselines:
             sh, sv = enu_sigma(b.base.position, b.covariance_ecef)
-            tree.insert('', 'end', values=(baseline_station_text(b.base), format_length(b.length_m, prefs),
+            bstatus = statuses.get(b.base.id or b.base.name)
+            tree.insert('', 'end', tags=calidad_ui.tag_of(bstatus), values=(baseline_station_text(b.base),
+                                                                            format_length(b.length_m, prefs),
                                            solution_text(b.solution), '—' if b.ratio is None else f'{b.ratio:.1f}',
                                            '—' if b.rms_m is None else format_length(b.rms_m, prefs),
-                                           f'{format_length(sh, prefs)} / {format_length(sv, prefs)}', b.epochs_used, len(b.satellites)))
+                                           f'{format_length(sh, prefs)} / {format_length(sv, prefs)}', b.epochs_used,
+                                           len(b.satellites), calidad_ui.status_cell(bstatus)))
         from app.components import CellTips, fit_columns, text_width
         fit_columns(tree, self.app, stretch='base')
         CellTips(tree, self.app)
         tree.pack(fill='x')
+        reasons = [f'{q.base_id}: {calidad_ui.status_cell(q.status)} — {q.status.reason}'
+                   for q in (quality.baselines if quality is not None else []) if q.status.reason]
+        if reasons:
+            wrap_label(inner, '\n'.join(reasons), style='Card.Subtitle.TLabel', margin=40).pack(side='bottom', fill='x',
+                                                                                                pady=(8, 0))
         self.station_names = wrap_label(inner, '\n'.join(
             f'{b.base.id}: {b.base.name}' + (f' · {b.base.network_name}' if b.base.network_name else '')
             for b in result.baselines), style='Card.Subtitle.TLabel', margin=40, wraplength=400)
@@ -547,6 +571,8 @@ class StaticPage(ExportActions, WizardPage):
             bars.set([(f'{key} horizontal', math.hypot(r.e, r.n), 'chart1') for key, r in adj.residuals_enu.items()]
                      + [(f'{key} vertical', abs(r.u), 'chart3') for key, r in adj.residuals_enu.items()],
                      title='Residuos por línea base', value_text=lambda v: format_length(v, prefs))
+        if quality is not None and (quality.control or quality.control_missing):
+            calidad_ui.control_card(body, self.app, quality, prefs).pack(fill='x', pady=(16, 0))
         q = result.rover_quality
         frame, inner = card(body, 'Calidad de los datos del rover')
         frame.pack(fill='x', pady=(16, 0))

@@ -767,7 +767,7 @@ class AntennaPanel(ttk.Frame):
 class OptionsPanel(ttk.Frame):
     """Ajustes del proceso (§1.1.3) y sistema de coordenadas del resultado."""
 
-    def __init__(self, parent, app, job, changed):
+    def __init__(self, parent, app, job, changed, quality_changed=None):
         super().__init__(parent)
         self.app, self.job, self.changed = app, job, changed
         o = job.options
@@ -845,6 +845,11 @@ class OptionsPanel(ttk.Frame):
         frame.pack(fill='x', pady=(16, 0))
         self.chooser = CoordinateChooser(body, app, job.coordinates, changed=self.apply)
         self.chooser.pack(fill='x')
+        # Tolerancias y control: cambiarlos vuelve a evaluar el resultado, sin volver a procesar
+        from app.calidad_ui import options_cards
+        from app.wizard import StaticJob
+        options_cards(self, app, job, 'static' if isinstance(job, StaticJob) else 'points',
+                      quality_changed or changed)
         frame, body = card(self, None)
         frame.pack(fill='x', pady=(16, 0))
         advanced = Collapsible(body, app, 'Opciones avanzadas de RTKLIB')
@@ -1079,6 +1084,27 @@ class WizardPage(ttk.Frame):
             self.show_alert('info', 'Cambiaste los datos o los ajustes: vuelve a procesar para tener el resultado '
                                     'al día.', key='stale')
         self.refresh()
+
+    def quality_changed(self):
+        """Las tolerancias, el control o la ocupación elegida cambiaron: el proyecto queda por guardar y el resultado
+        se vuelve a evaluar (sin volver a procesar)."""
+        if not self.dirty:
+            self.dirty = True
+            self.update_title()
+        if self.output is not None:
+            self.build_result(self.output)
+        self.refresh()
+
+    def evaluate_quality(self, output):  # pragma: no cover - lo implementan las páginas
+        pass
+
+    def quality_project(self, project):
+        """El proyecto (una copia) con el control de calidad de la pantalla, aunque no se haya guardado."""
+        from app.wizard import quality_to_project
+        quality_to_project(self.job, project)
+        if hasattr(self.job, 'occupation_choices'):
+            project.occupation_choices = dict(self.job.occupation_choices)
+        return project
 
     def show_alert(self, kind, text, key=None):
         for child in self.alerts.winfo_children():
@@ -1651,6 +1677,13 @@ class WizardPage(ttk.Frame):
     def build_result(self, output):
         for child in self.result_body.winfo_children():
             child.destroy()
+        try:
+            self.evaluate_quality(output)
+        except Exception as exc:  # noqa: BLE001 - la evaluación no tumba el resultado
+            kind, message = tasks.classify(exc)
+            if kind == 'program':
+                raise
+            self.show_alert('warning', f'No se pudo evaluar el control de calidad: {message}', key='quality')
         actions = ttk.Frame(self.result_body)
         actions.pack(fill='x', pady=(0, 14))
         report = ttk.Button(actions, text='Ver informe', style='Primary.TButton', command=self.view_report)
@@ -1684,7 +1717,7 @@ class WizardPage(ttk.Frame):
         if report is None or self.output is None:
             return
         out = self.report_path()
-        project, user, output = deepcopy(self.project), self.app.settings.profile(), self.output
+        project, user, output = self.quality_project(deepcopy(self.project)), self.app.settings.profile(), self.output
         self.app.set_status('Armando el informe…')
 
         def done(path):

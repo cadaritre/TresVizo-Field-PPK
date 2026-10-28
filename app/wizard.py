@@ -9,8 +9,8 @@ import math
 from pathlib import Path
 import re
 
-from tresvizo_ppk.model import (OFFICIAL_EPOCH, OFFICIAL_FRAME, CoordinateChoice, Ecef, Ephemeris, ProcessingOptions,
-                                Project, Station)
+from tresvizo_ppk.model import (OFFICIAL_EPOCH, OFFICIAL_FRAME, ControlCoordinate, CoordinateChoice, Ecef, Ephemeris,
+                                ProcessingOptions, Project, ProjectTolerances, Station)
 
 MAX_BASES = 3
 RINEX_SOURCE = 'Aproximada (encabezado RINEX)'
@@ -243,6 +243,28 @@ def number_issues(number: str, place: str = '') -> list[Issue]:
     return found
 
 
+def default_tolerances(kind: str) -> ProjectTolerances:
+    from tresvizo_ppk.calidad import default_tolerances as defaults
+    return defaults(kind)
+
+
+def quality_to_project(job, project: Project) -> None:
+    project.tolerances = replace(job.tolerances)
+    project.control_points = list(job.control_points)
+    project.control_source = job.control_source
+
+
+def quality_from_project(project: Project, kind: str) -> dict:
+    """Lo del control de calidad del proyecto para el asistente (las tolerancias de omisión si no las trae)."""
+    return {'tolerances': replace(project.tolerances) if project.tolerances else default_tolerances(kind),
+            'control_points': list(project.control_points), 'control_source': project.control_source}
+
+
+def tolerance_issues(tolerances: ProjectTolerances) -> list[Issue]:
+    from tresvizo_ppk.calidad import tolerance_issues as issues
+    return [Issue('tolerances', text) for text in issues(tolerances)]
+
+
 # --- Estático: georreferenciar un punto ------------------------------------------------------------------------------
 
 @dataclass
@@ -276,6 +298,10 @@ class StaticJob:
     precise_download: bool = False
     number: str = ''                         # número o clave del proyecto (sale en el informe)
     place: str = ''                          # lugar de la firma del informe («Aguascalientes, Ags.»)
+    # control de calidad: tolerancias del proyecto y coordenadas de control importadas
+    tolerances: ProjectTolerances = field(default_factory=lambda: default_tolerances('static'))
+    control_points: list[ControlCoordinate] = field(default_factory=list)
+    control_source: str = ''
     # Del rover leído (no se guardan: salen de sus archivos): para no ofrecer como base la estación del propio rover.
     rover_marker: str = ''
     rover_position: Ecef | None = None
@@ -332,7 +358,8 @@ class StaticJob:
                                             'con dos o tres el resultado se puede verificar.', 'warning'))
             return found
         if step == 2:
-            return options_issues(self.options, self.precise_download)+number_issues(self.number, self.place)
+            return (options_issues(self.options, self.precise_download)+number_issues(self.number, self.place)
+                    +tolerance_issues(self.tolerances))
         return []
 
     def first_invalid_step(self) -> int | None:
@@ -371,6 +398,7 @@ class StaticJob:
         project.options = self.options
         project.coordinates = self.coordinates
         project.bases = self.stations()
+        quality_to_project(self, project)
         return project
 
     @classmethod
@@ -382,7 +410,8 @@ class StaticJob:
         return cls(rover_files=files.get('rover', []), point_name=project.point_name,
                    point_code=project.point_code, point_description=project.point_description,
                    pole_height=f'{project.pole_height_m:.3f}', bases=bases, options=project.options,
-                   coordinates=project.coordinates, number=project.number, place=project.place)
+                   coordinates=project.coordinates, number=project.number, place=project.place,
+                   **quality_from_project(project, 'static'))
 
 
 # --- PPK de puntos --------------------------------------------------------------------------------------------------
@@ -418,6 +447,11 @@ class PointsJob:
     precise_download: bool = False
     number: str = ''
     place: str = ''                          # lugar de la firma del informe
+    # control de calidad: tolerancias, control y qué resultado se queda cada nombre repetido (0 media, k ocupación k)
+    tolerances: ProjectTolerances = field(default_factory=lambda: default_tolerances('points'))
+    control_points: list[ControlCoordinate] = field(default_factory=list)
+    control_source: str = ''
+    occupation_choices: dict[str, int] = field(default_factory=dict)
 
     STEPS = ('Base', 'Rover y puntos', 'Ajustes', 'Proceso', 'Resultado')
 
@@ -504,7 +538,8 @@ class PointsJob:
                 found.append(Issue('csv', 'El archivo de puntos debe ser el CSV de TresVizo Field.'))
             return found
         if step == 2:
-            return options_issues(self.options, self.precise_download)+number_issues(self.number, self.place)
+            return (options_issues(self.options, self.precise_download)+number_issues(self.number, self.place)
+                    +tolerance_issues(self.tolerances))
         return []
 
     def frame_issue(self, frame: str, epoch: float) -> Issue:
@@ -574,6 +609,8 @@ class PointsJob:
         project.pole_height_m = self.base_height_m() or 0.0
         project.source_project = (relative(self.own_project, folder) if folder and self.own_project and
                                   self.base_kind == 'own' and self.own_source == 'project' else '')
+        quality_to_project(self, project)
+        project.occupation_choices = dict(self.occupation_choices)
         return project
 
     @classmethod
@@ -583,7 +620,8 @@ class PointsJob:
         base_files = next((paths for role, paths in files.items() if role.startswith('base:')), [])
         job = cls(base_kind=project.base_kind, rover_files=files.get('rover', []),
                   csv_file=(files.get('csv') or [None])[0], options=project.options, coordinates=project.coordinates,
-                  number=project.number, place=project.place)
+                  number=project.number, place=project.place, **quality_from_project(project, 'points'),
+                  occupation_choices=dict(project.occupation_choices))
         if project.base_kind == 'rgna':
             job.base = BaseEntry(files=base_files, station=station, name=station.name if station else '')
         else:

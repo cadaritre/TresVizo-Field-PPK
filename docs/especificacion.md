@@ -71,6 +71,23 @@ configuración de RTKLIB, `.pos`, `.stat`) quedan junto al proyecto, para que el
   y estado de la solución en el tiempo, DOP, trayectoria con los puntos.
 - **Bitácora del proceso** (versión de RTKLIB, configuración completa, avisos) dentro del proyecto y en un anexo del
   informe.
+- **Tolerancias del proyecto, control y ocupaciones repetidas** (como los criterios de TBC e Infinity;
+  `tresvizo_ppk/calidad.py`). En las opciones del asistente: σH y σV máximas, % mínimo de épocas fijas (PPK), cociente
+  mínimo, PDOP máxima, duración mínima (ocupación o sesión) y diferencia máxima entre ocupaciones y contra control.
+  Por omisión salen del **orden de exactitud** L de la tabla 1 de la NT EEP (5 cm): σH ≤ L/(1.2238·√2) (el CEP95 del
+  art. 6 no pasa de L con σE = σN), σV ≤ 2L/1.96 (EPV del art. 7 de 2L), L en planta y 2L en cota entre ocupaciones y
+  contra control; 95 % de épocas fijas, cociente 3, PDOP 6 y 30 s (PPK) o 1 h (estático), que no dependen del orden.
+  Las σ se truncan al milímetro. Cualquier cifra se escribe a mano o se deja vacía (no se evalúa). Cada punto y cada
+  línea base sale **pasa**, **revisar** (fuera de la tolerancia) o **falla** (más de 2 veces, ajustable), con la razón
+  en una línea («σV 0.034 > 0.020»); se compara la cifra impresa. En la tabla de resultados con símbolo y color, en el
+  informe (resumen y sección «Control de calidad») y en la exportación (CSV simple, a medida y LandXML en `desc`; el
+  CSV de TresVizo Field no cambia). Cambiar las tolerancias, el control o la ocupación elegida vuelve a evaluar sin
+  volver a procesar, y se guarda en el proyecto. **Control:** un CSV PNEZD, PENZD o NXYZD (con encabezado se lee por
+  columna) en el sistema del resultado, unido por nombre: ΔN, ΔE y de cota (medido − control) y sección «Control» del
+  informe. **Ocupaciones repetidas** (mismo nombre en el CSV de campo, sin distinguir mayúsculas): media ponderada
+  1/σ² de las fijas (las flotantes solo si no hay fijas), cuya σ no baja de la mínima de un punto fijo del motor; cada
+  ocupación menos la media y la mayor diferencia contra la tolerancia; el resultado del punto es la media, marcada
+  «promedio de N ocupaciones», o la ocupación que elija el usuario.
 - **Instalador** para Windows (MSI, como TresVizo Med) y para macOS (`.app` en `.dmg`), armados en GitHub Actions.
 
 ## 3. Datos externos (todos con su fuente, licencia y fecha)
