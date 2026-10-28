@@ -48,7 +48,8 @@ class PointsPage(ExportActions, WizardPage):
         elif index == 1:
             self.build_rover(body)
         elif index == 2:
-            OptionsPanel(body, self.app, self.job, self.changed, self.quality_changed).pack(fill='x')
+            OptionsPanel(body, self.app, self.job, self.changed, self.quality_changed,
+                         self.presentation_changed).pack(fill='x')
 
     def build_base(self, body):
         frame, inner = card(body, 'Base', 'Una estación de referencia de una red o tu propio MeridianV grabando como '
@@ -542,19 +543,25 @@ class PointsPage(ExportActions, WizardPage):
                                                                         stages.stage(3), cancel))
         result = core.process_points(rover, (station, base_obs), points, options, workdir, stages.stage(4), cancel)
         final = stages.stage(5)
+        output = {'result': result, **self.convert(result, job.coordinates, final)}
+        final(1.0, 'Listo.')
+        return output
+
+    def convert(self, result, choice, progress=None):
+        """Los puntos en el sistema elegido, de la solución ya calculada (al procesar y al cambiar de sistema, zona,
+        geoide o localización sin volver a procesar)."""
         coordinates, warnings = [], []
         for index, point in enumerate(result.points):
-            final(index/max(1, len(result.points)), 'Pasando los puntos al sistema elegido…')
+            if progress:
+                progress(index/max(1, len(result.points)), 'Pasando los puntos al sistema elegido…')
             if point.position is None:
                 coordinates.append(None)
                 continue
-            coordinate, warning = self.transform(point.position, job.coordinates)
+            coordinate, warning = self.transform(point.position, choice)
             coordinates.append(coordinate)
             if warning and warning not in warnings:
                 warnings.append(warning)
-        final(1.0, 'Listo.')
-        return {'result': result, 'coordinates': coordinates, 'coordinate_warnings': warnings,
-                'choice': job.coordinates}
+        return {'coordinates': coordinates, 'coordinate_warnings': warnings, 'choice': choice}
 
     def session_window(self, callback):
         """Con el CSV ya leído, el día y las horas salen de las ocupaciones (sin leer la grabación)."""

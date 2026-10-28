@@ -48,7 +48,8 @@ class StaticPage(ExportActions, WizardPage):
         elif index == 1:
             self.build_bases(body)
         elif index == 2:
-            OptionsPanel(body, self.app, self.job, self.changed, self.quality_changed).pack(fill='x')
+            OptionsPanel(body, self.app, self.job, self.changed, self.quality_changed,
+                         self.presentation_changed).pack(fill='x')
 
     def build_rover(self, body):
         frame, inner = card(body, 'Grabación del rover',
@@ -345,7 +346,7 @@ class StaticPage(ExportActions, WizardPage):
         return lines
 
     def work(self, job, project, workdir, progress, cancel):
-        core, crs = self.app.backend.core, self.app.backend.crs
+        core = self.app.backend.core
         stations = job.stations()
         stages = tasks.Stages(progress, [3]+[2]*len(stations)+[1, 8, 1])
         rover = core.prepare_observations(job.rover_files, workdir/'rover', pole_height_m=job.pole_height_m(),
@@ -364,19 +365,25 @@ class StaticPage(ExportActions, WizardPage):
         result = core.process_static(rover, bases, options, workdir, stages.stage(2+len(stations)), cancel,
                                      point_name=job.point_name.strip())
         final = stages.stage(3+len(stations))
-        final(0.2, 'Pasando la coordenada al sistema elegido…')
-        coordinate, warning = self.transform(result.position, job.coordinates)
+        output = {'result': result, **self.convert(result, job.coordinates, final)}
+        final(1.0, 'Listo.')
+        return output
+
+    def convert(self, result, choice, progress=None):
+        """La coordenada y su σ en el sistema elegido, de la solución ya calculada (al procesar y al cambiar de
+        sistema, zona, geoide o localización sin volver a procesar)."""
+        if progress:
+            progress(0.2, 'Pasando la coordenada al sistema elegido…')
+        coordinate, warning = self.transform(result.position, choice)
         sigma = None
         if coordinate is not None:
             try:
                 covariance = result.adjustment.covariance_ecef if result.adjustment else None
-                sigma = crs.transform_sigma(result.position, result.sigma_enu, job.coordinates, covariance)
+                sigma = self.app.backend.crs.transform_sigma(result.position, result.sigma_enu, choice, covariance)
             except Exception as exc:  # noqa: BLE001
                 if tasks.classify(exc)[0] == 'program':
                     raise
-        final(1.0, 'Listo.')
-        return {'result': result, 'coordinate': coordinate, 'sigma': sigma, 'coordinate_warning': warning,
-                'choice': job.coordinates}
+        return {'coordinate': coordinate, 'sigma': sigma, 'coordinate_warning': warning, 'choice': choice}
 
     def after_process(self, output):
         result = output['result']

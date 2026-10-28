@@ -767,9 +767,12 @@ class AntennaPanel(ttk.Frame):
 class OptionsPanel(ttk.Frame):
     """Ajustes del proceso (§1.1.3) y sistema de coordenadas del resultado."""
 
-    def __init__(self, parent, app, job, changed, quality_changed=None):
+    def __init__(self, parent, app, job, changed, quality_changed=None, presentation_changed=None):
         super().__init__(parent)
         self.app, self.job, self.changed = app, job, changed
+        # El sistema, la zona, el geoide, la localización, el número y el lugar no cambian la solución (está en el
+        # marco de la base): cambiarlos vuelve a convertir el resultado, sin volver a procesar.
+        self.presentation_changed = presentation_changed or changed
         o = job.options
         frame, body = card(self, 'Proyecto', 'Número o clave que sale en el encabezado del informe y lugar del bloque '
                                              'de firma (los dos opcionales).')
@@ -793,8 +796,8 @@ class OptionsPanel(ttk.Frame):
                 self.number_field.grid(row=0, column=0, columnspan=2, padx=0, pady=0)
                 self.place_field.grid(row=1, column=0, columnspan=2, padx=0, pady=(12, 0))
         body.bind('<Configure>', arrange, add='+')
-        self.number.trace_add('write', lambda *a: self.apply())
-        self.place.trace_add('write', lambda *a: self.apply())
+        self.number.trace_add('write', lambda *a: self.apply_presentation())
+        self.place.trace_add('write', lambda *a: self.apply_presentation())
         frame, body = card(self, 'Satélites', 'Por omisión: máscara de 15°, todas las constelaciones y frecuencias '
                                               'que tengan el rover y la base.')
         frame.pack(fill='x')
@@ -841,9 +844,10 @@ class OptionsPanel(ttk.Frame):
         self.precise_files.set(o.precise_files)
         frame, body = card(self, 'Sistema de coordenadas del resultado',
                            'El cálculo se hace en el marco y la época oficiales de la red de las bases; aquí eliges '
-                           'cómo se muestra y se exporta.')
+                           'cómo se muestra, se informa y se exporta. Cambiarlo, o la localización, convierte el '
+                           'resultado sin volver a procesar.')
         frame.pack(fill='x', pady=(16, 0))
-        self.chooser = CoordinateChooser(body, app, job.coordinates, changed=self.apply)
+        self.chooser = CoordinateChooser(body, app, job.coordinates, changed=self.apply_presentation)
         self.chooser.pack(fill='x')
         # Tolerancias y control: cambiarlos vuelve a evaluar el resultado, sin volver a procesar
         from app.calidad_ui import options_cards
@@ -900,6 +904,13 @@ class OptionsPanel(ttk.Frame):
         self.job.options.precise_files = list(paths)
         self.precise_files.set(paths)
         self.changed()
+
+    def apply_presentation(self):
+        """Lo que solo cambia cómo se presenta el resultado (no el cálculo)."""
+        self.job.number = self.number.get()
+        self.job.place = self.place.get()
+        self.job.coordinates = self.chooser.get()
+        self.presentation_changed()
 
     def apply(self):
         from app.wizard import parse_number
@@ -1095,13 +1106,35 @@ class WizardPage(ttk.Frame):
             self.build_result(self.output)
         self.refresh()
 
+    def presentation_changed(self):
+        """El sistema, la zona, el geoide, la localización, el número o el lugar cambiaron: el proyecto queda por
+        guardar y el resultado (coordenadas, σ, control de calidad, informe y exportación) se vuelve a convertir del
+        ya calculado, sin llamar al motor. La solución está en el marco de la base; el sistema solo cambia cómo se
+        presenta (como en TBC o Infinity)."""
+        if not self.dirty:
+            self.dirty = True
+            self.update_title()
+        if self.output is not None:
+            # Un diccionario nuevo: un informe o una exportación en curso siguen con el que tenían.
+            self.output = {**self.output, **self.convert(self.output['result'], self.job.coordinates)}
+            self.build_result(self.output)
+            self.app.set_status('Resultado convertido al sistema nuevo, sin volver a procesar.')
+        self.refresh()
+
+    def convert(self, result, choice, progress=None) -> dict:  # pragma: no cover - lo implementan las páginas
+        """Las partes del resultado que dependen del sistema (`choice` incluida), a partir de la solución."""
+        return {'choice': choice}
+
     def evaluate_quality(self, output):  # pragma: no cover - lo implementan las páginas
         pass
 
     def quality_project(self, project):
-        """El proyecto (una copia) con el control de calidad de la pantalla, aunque no se haya guardado."""
+        """El proyecto (una copia) con lo de la pantalla que no obliga a volver a procesar, aunque no se haya
+        guardado: el control de calidad, el sistema del resultado (con su localización), el número y el lugar."""
         from app.wizard import quality_to_project
         quality_to_project(self.job, project)
+        project.coordinates = deepcopy(self.job.coordinates)
+        project.number, project.place = self.job.number, self.job.place
         if hasattr(self.job, 'occupation_choices'):
             project.occupation_choices = dict(self.job.occupation_choices)
         return project
