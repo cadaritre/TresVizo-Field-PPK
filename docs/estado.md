@@ -122,7 +122,20 @@
   país; lista perezosa; todo el índice visible e instalable; detalle completo. Redes y estaciones: redes de
   `cors_networks()` con su marco y época, estaciones, guía de `station_download_guide()` con el enlace a la página de
   la red (la descarga directa solo aparece si `can_download_station()` lo permite; hoy la RGNA no).
-- Actualizaciones desde GitHub Releases (`app/updates.py`) con manifiesto firmado Ed25519 y `scripts/firmar_version.py`.
+- Actualizaciones desde GitHub Releases (`app/updates.py`). Distribución sin llave ni certificado comercial (decisión
+  del propietario, 27-10-2026): la app avisa de la versión nueva con sus novedades y «Abrir la página de descarga» abre
+  la de esa versión en GitHub (solo de este repositorio); no baja ni abre instaladores ni habla de llaves. El camino
+  firmado (manifiesto Ed25519, `scripts/firmar_version.py`) queda intacto y probado con una llave de prueba. Primera
+  apertura: «Cómo abrirla.txt» del DMG (macOS 14 y 15+), `…-Windows-como-instalarla.txt` junto al MSI (SmartScreen) y
+  `distribuir.py --notas` con las notas de la versión (novedades, primera apertura, tabla de SHA-256 comprobada contra
+  cada `.sha256`, `shasum` y `certutil`); lo mismo en el README y `docs/distribucion.md`.
+- Cambiar el sistema, la zona, el geoide o la localización (y el número o el lugar) vuelve a convertir el resultado ya
+  calculado sin volver a procesar: coordenadas, σ, control de calidad, informe y exportación (`convert` de cada página,
+  el mismo código que al procesar). Probado con la ventana real y el motor de dobles: estático de UTM 13N a 14N y a una
+  localización, PPK de 13N a 14N sin geoide, sin llamar al motor y con las mismas coordenadas y σ que procesando de
+  cero (`tests/test_ui_reconvertir.py`). Las opciones del motor, antenas, alturas y bases siguen pidiendo procesar.
+- «Opciones de DXF» en la exportación del estático y del PPK: «Nombres de los puntos» con el texto de las apps, altura
+  del texto (0.5 m por omisión) y la cota como rótulo, recordadas en las preferencias.
 - Proyectos `.tvppk` con rutas relativas, SHA-256, aviso de archivos cambiados, número de proyecto y coordenada final.
 - Robustez (27-10-2026, paquete 1 de la auditoría):
   - **Reabrir mientras se procesa.** Pregunta si se cancela el proceso y espera a que termine. Cada proyecto en
@@ -143,9 +156,12 @@
   Python de Homebrew: solo abre en macOS 26, así que no se entrega (`docs/distribucion.md`).
 
 **Pendiente o sin verificar:**
-- **Llave de publicación de las actualizaciones:** `PUBLIC_KEY_HEX` en `app/updates.py` está vacía (marcador); el
-  propietario la crea con `scripts/firmar_version.py --nueva-llave` (ver `docs/distribucion.md`). Hasta entonces la app
-  avisa de versiones nuevas pero no instala.
+- Los avisos de primera apertura (Gatekeeper en macOS 14 y 15, SmartScreen y el aviso de descarga de Edge) se
+  escribieron con los textos de esos sistemas, pero no se han visto con un instalador bajado de una release real (aún
+  no hay ninguna publicada); hay que revisarlos con la primera.
+- El diálogo «Opciones de DXF» no se revisó en una captura de pantalla (sin permiso de grabar la pantalla); se probó
+  con la ventana real. Las apps solo tienen «Nombres de los puntos» en su hoja: la altura del texto (su opción
+  `dxfTextHeightMeters`, sin control en su hoja) y el rótulo de la cota son de la oficina.
 - La CI ya corre: pruebas en Ubuntu, Windows y macOS y el MSI de Windows salen bien. El DMG de x86_64 espera su primera
   corrida en `macos-15-intel` (el `macos-13` de antes ya no existe en GitHub). Mínimo de macOS declarado y comprobado
   en el armado: 14 en Apple, 15 en Intel (lo fija pyproj 3.8.0). No se probó en Windows real el ciclo del MSI ni los
@@ -153,7 +169,6 @@
 - Al soltar una grabación grande se convierte para leer sus datos y se vuelve a convertir al procesar (la copia de la
   lectura se borra); un lector solo de encabezado en el motor evitaría el doble trabajo.
 - PPK de puntos de punta a punta con datos reales del MeridianV y su CSV: probado solo con los dobles.
-- Instaladores sin firma de código (Authenticode / Developer ID y notarización).
 - Sin lector de pantalla certificado (Tk no expone un árbol de accesibilidad completo); el teclado sí se revisó.
 
 ## Sistemas, informes y exportación (§1.3, §5, §1.2.5)
@@ -244,10 +259,9 @@
   repositorios); la prueba arma el archivo con la especificación de `ProjectArchive.swift` y `BACKUP_ZIP_FORMAT.md`
   (contenido como cadena con claves ordenadas y su SHA-256). Falta exportar un proyecto con localización desde iOS y
   desde Android y comprobar que se lee y da las mismas coordenadas locales que en campo.
-- Localización: en el asistente, cambiarla (o cambiar el sistema) invalida el resultado y hay que volver a procesar, como
-  cualquier cambio de sistema; lo profesional es volver a convertir las coordenadas sin repetir el proceso (es de
-  `app/wizard_ui.py`). Con ella en uso el sistema queda fijo en el selector (es su cuadrícula base); el geoide sí se
-  cambia y manda el de ahora (§9.3 de las apps). La hoja no se revisó en una captura de pantalla (sin permiso de
+- Localización: en el asistente, aplicarla, cambiarla o quitarla vuelve a convertir el resultado sin volver a procesar
+  (como el cambio de sistema). Con ella en uso el sistema queda fijo en el selector (es su cuadrícula base); el geoide
+  sí se cambia y manda el de ahora (§9.3 de las apps). La hoja no se revisó en una captura de pantalla (sin permiso de
   grabar la pantalla); se comprobó su tamaño (1100 × 780 como mucho, cabe en 1280 × 720 con desplazamiento).
 - Localización: la σ de la cota local es la del GNSS (el ajuste vertical absorbe el error del geoide; sus residuos lo
   miden en la sección del informe) y la NT EEP no da EPV de una cota local.
@@ -264,8 +278,6 @@
   (3) La σN es la «precisión declarada» de la ficha del geoide (0.10 m GGM25, 0.20 m GGM10); no está confirmado que
   el INEGI la publique como 1σ. (4) El art. 12 de la NT EEP pide circuitos cerrados con ajuste para la nivelación
   GNSS: el informe da la EPV de cada punto y no los comprueba (lo dice).
-- El lugar de la firma (`Project.place`) se guarda en el proyecto pero el asistente todavía no lo pide: el informe
-  deja la raya para escribirlo a mano.
 
 ## Control de calidad: tolerancias, control y ocupaciones repetidas (§2; `tresvizo_ppk/calidad.py`)
 
