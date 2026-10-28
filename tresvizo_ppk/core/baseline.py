@@ -183,8 +183,12 @@ class RunResult:
 def process_baseline(rover: ObservationSet, station: Station, base: ObservationSet, options: ProcessingOptions,
                      workdir: Path, *, mode: str = "static", rover_antenna_delta_u: float | None = None,
                      progress: tools.Progress | None = None, cancel: threading.Event | None = None,
-                     log: list[str] | None = None, label: str = "") -> tuple[BaselineSolution, RunResult]:
-    """Procesa la línea base estática rover–base y devuelve su `BaselineSolution` y el detalle del proceso."""
+                     log: list[str] | None = None, label: str = "",
+                     antex_path: Path | None = None) -> tuple[BaselineSolution, RunResult]:
+    """Procesa la línea base estática rover–base y devuelve su `BaselineSolution` y el detalle del proceso.
+
+    `antex_path`: el ANTEX que comparten todas las líneas base del proyecto (`intermedios.Products`); sin él se
+    escribe uno en `workdir`."""
     log = log if log is not None else []
     workdir.mkdir(parents=True, exist_ok=True)
     warnings: list[str] = []
@@ -202,7 +206,7 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
     if (end - start).total_seconds() <= 0:
         raise UserError(f"La base {station.id} no tiene datos en el horario del rover "
                         f"({rover.start:%Y-%m-%d %H:%M}–{rover.end:%H:%M} UTC).")
-    antex_path = antex.ensure_antex(workdir)
+    antex_path = antex_path or antex.ensure_antex(workdir)
     base_xyz = np.array([station.position.x, station.position.y, station.position.z])
 
     # Antenas y alturas

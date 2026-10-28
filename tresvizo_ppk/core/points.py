@@ -18,7 +18,7 @@ import numpy as np
 from ..errors import UserError
 from ..model import (Ecef, Enu, Ephemeris, FieldPoint, ObservationSet, PointsResult, ProcessedPoint,
                      ProcessingOptions, Solution, Station)
-from . import antex, dop, networks, quality, rtklib, tools
+from . import antex, dop, intermedios, networks, quality, rtklib, tools
 from .baseline import Q_TO_SOLUTION, approx_position, base_antenna, strategies
 from .geodesy import (covariance_ecef_to_enu, ecef_delta_to_enu, ecef_to_geodetic, enu_rotation, gps_to_utc,
                       utc_to_gps)
@@ -35,6 +35,24 @@ MAX_TRAJECTORY_POINTS = 20000  # para la gráfica: se diezma si hay más
 def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], points: list[FieldPoint],
                    options: ProcessingOptions, workdir: Path, progress: tools.Progress | None = None,
                    cancel: threading.Event | None = None) -> PointsResult:
+    """La trayectoria usa los productos del proyecto (`intermedios.Products`) y al terminar se borra lo que solo
+    sirvió para procesar (ventana y RINEX unido de la base, lo descomprimido)."""
+    station, base_obs = base
+    workdir.mkdir(parents=True, exist_ok=True)
+    trimmed: list[ObservationSet] = []
+    try:
+        with intermedios.Products(workdir, cancel) as products:
+            result = _process(rover, base, points, options, workdir, products, trimmed, progress, cancel)
+    finally:
+        intermedios.discard(workdir, keep=[rover], drop=[base_obs] + trimmed)
+    intermedios.write_log(workdir, f"PPK de puntos con la base {station.id}", result.log, result.warnings)
+    return result
+
+
+def _process(rover: ObservationSet, base: tuple[Station, ObservationSet], points: list[FieldPoint],
+             options: ProcessingOptions, workdir: Path, products: intermedios.Products,
+             trimmed: list[ObservationSet], progress: tools.Progress | None,
+             cancel: threading.Event | None) -> PointsResult:
     station, base_obs = base
     if not points:
         raise UserError("No hay puntos que posprocesar.")
@@ -58,6 +76,7 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
         warnings.append(f"Base {station.id}: {station.source}.")
     warnings.extend(quality.overlap_warnings(rover, base_obs, station.id))
     base_trim = trim(base_obs, rover.start, rover.end, workdir / "base", cancel=cancel)
+    trimmed.append(base_trim)
     base_quality = quality.assess(base_trim, cancel=cancel)
     warnings.extend(f"Base {station.id}: {w}" for w in base_quality.warnings)
     nav = list(dict.fromkeys(list(rover.nav) + list(base_trim.nav)))
@@ -76,7 +95,7 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
     if rover_choice.model is None and rover.receiver_model:
         warnings.append("PCO de la antena del rover sin medir: se procesa sin modelo de centro de fase.")
     base_xyz = np.array([station.position.x, station.position.y, station.position.z])
-    antex_path = antex.ensure_antex(workdir)
+    antex_path = products.antex()
     approx = approx_position(rover, nav, workdir, cancel=cancel, log=log)
     length = float(np.linalg.norm(approx - base_xyz))
     strategy = strategies(length, options, "kinematic")[0]
@@ -95,7 +114,8 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
     pos = workdir / "trayectoria.pos"
     log.append(f"Trayectoria cinemática ({'combinada adelante/atrás' if options.combined else 'adelante'}): "
                f"{strategy.text}; base a {length / 1000:.1f} km del inicio.")
-    rtklib.run_rnx2rtkp(conf, pos, rover.obs[0], base_trim.obs[0], nav, [Path(p) for p in options.precise_files],
+    precise_files = products.precise([Path(p) for p in options.precise_files])
+    rtklib.run_rnx2rtkp(conf, pos, rover.obs[0], base_trim.obs[0], nav, precise_files,
                         workdir=workdir, start_gpst=utc_to_gps(start).replace(tzinfo=None),
                         end_gpst=utc_to_gps(end).replace(tzinfo=None), interval_s=options.interval_s,
                         progress=lambda f, m: step(0.1 + 0.8 * f, m), cancel=cancel, log=log, label="Trayectoria: ",

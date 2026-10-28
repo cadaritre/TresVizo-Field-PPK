@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import threading
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import numpy as np
 
 from ..errors import Cancelled, UserError
 from ..model import (Ecef, Enu, Ephemeris, ObservationSet, ProcessingOptions, StaticResult, Station)
-from . import adjust, antex, dop, networks, precise, quality, rtklib, tools
+from . import adjust, antex, dop, intermedios, networks, precise, quality, rtklib, tools
 from .baseline import process_baseline
 from .geodesy import covariance_ecef_to_enu
 from .observations import trim
@@ -23,6 +24,8 @@ def _station_label(station: Station) -> str:
 def process_static(rover: ObservationSet, bases: list[tuple[Station, ObservationSet]], options: ProcessingOptions,
                    workdir: Path, progress: tools.Progress | None = None,
                    cancel: threading.Event | None = None, point_name: str = "") -> StaticResult:
+    """Las líneas base comparten un solo juego de productos (ANTEX, órbitas y relojes) y al terminar se borra lo que
+    solo sirvió para procesar (ventanas y RINEX unidos de las bases, lo descomprimido): ver `intermedios`."""
     if not bases:
         raise UserError("Elige al menos una estación base.")
     if len(bases) > 3:
@@ -33,6 +36,19 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
     if not (rover.start and rover.end):
         raise UserError("No se conoce el horario del rover.")
     workdir.mkdir(parents=True, exist_ok=True)
+    trimmed: list[ObservationSet] = []
+    try:
+        with intermedios.Products(workdir, cancel) as products:
+            result = _process(rover, bases, options, workdir, products, trimmed, progress, cancel, point_name)
+    finally:
+        intermedios.discard(workdir, keep=[rover], drop=[obs for _, obs in bases] + trimmed)
+    intermedios.write_log(workdir, f"Georreferenciar punto {result.point_name}", result.log, result.warnings)
+    return result
+
+
+def _process(rover: ObservationSet, bases: list[tuple[Station, ObservationSet]], options: ProcessingOptions,
+             workdir: Path, products: intermedios.Products, trimmed: list[ObservationSet],
+             progress: tools.Progress | None, cancel: threading.Event | None, point_name: str) -> StaticResult:
     step = progress or (lambda f, m: None)
     log: list[str] = [f"Motor: {tools.RTKLIB_VERSION}.", f"ANTEX: {antex.antex_name()} (IGS, subconjunto incluido).",
                       f"Rover: {rover.marker}, {rover.receiver}, antena {rover.antenna_type or '—'} "
@@ -54,6 +70,12 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
     used: list[tuple[Station, ObservationSet]] = []
     failed: list[tuple[Station, UserError]] = []
     base_quality = {}
+    # un solo ANTEX y un solo juego de órbitas para todas las líneas base (antes, uno por línea)
+    run_options = options
+    if options.precise_files:
+        step(0.02, "Preparando las órbitas y relojes precisos…")
+        run_options = replace(options, precise_files=products.precise([Path(p) for p in options.precise_files]))
+    antex_path = products.antex()
     n = len(bases)
     for k, (station, base_obs) in enumerate(bases):
         tools.check(cancel)
@@ -66,14 +88,15 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
             warnings.append(f"Base {sid}: {station.source}.")
         warnings.extend(quality.overlap_warnings(rover, base_obs, sid))
         base_trim = trim(base_obs, rover.start, rover.end, workdir / sid, cancel=cancel)
+        trimmed.append(base_trim)
         q = quality.assess(base_trim, cancel=cancel)
         base_quality[sid] = q
         warnings.extend(f"Base {sid}: {w}" for w in q.warnings)
         warnings.extend(f"Base {sid}: {w}" for w in base_obs.warnings if w not in warnings)
         try:
-            solution, run = process_baseline(rover, station, base_trim, options, workdir / sid,
+            solution, run = process_baseline(rover, station, base_trim, run_options, workdir / sid,
                                              progress=lambda f, m: step(frac0 + 0.05 * span + 0.95 * span * f, m),
-                                             cancel=cancel, log=log, label=sid)
+                                             cancel=cancel, log=log, label=sid, antex_path=antex_path)
         except Cancelled:
             raise
         except UserError as error:

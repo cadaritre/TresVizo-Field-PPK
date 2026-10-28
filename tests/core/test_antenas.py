@@ -203,7 +203,10 @@ def test_other_brand_base_and_imported_antex_change_the_solution(tmp_path):
     assert catalog.baselines[0].engine == "RTKLIB"
     conf = chc.baselines[0].config_file.read_text(encoding="latin-1")
     assert "ant2-anttype      =CHCI80 NONE" in conf
-    atx = next(chc.baselines[0].config_file.parent.glob("*.atx")).read_text(encoding="latin-1")
+    # el ANTEX que nombra la configuración (uno por proyecto, en productos/, para todas las líneas base)
+    atx_path = Path(next(line.split("=", 1)[1] for line in conf.splitlines() if line.startswith("file-rcvantfile")))
+    assert atx_path.parent.name == "productos"
+    atx = atx_path.read_text(encoding="latin-1")
     assert "CHCI80          NONE                                        TYPE / SERIAL NO" in atx
     base_info = {r.role: r for r in chc.antennas}["Base ICEP"]
     assert base_info.source == "IGS (igs20_2437)" and base_info.model_type == "CHCI80"
