@@ -2,6 +2,7 @@
 
 - `static_report(result, project, user, out_pdf)`: informe de posproceso de línea base (estático, §5.1).
 - `points_report(result, project, user, out_pdf)`: informe de PPK de la jornada (§5.2).
+- `network_report(result, project, user, out_pdf)`: informe de ajuste de red del estático de varios puntos.
 
 Las coordenadas salen en el sistema, datum y geoide del proyecto (`project.coordinates`, con `crs.api.transform`) y en
 el marco oficial. Las gráficas se arman con lo que escribió RTKLIB (`.pos` y `.stat` de cada solución). Un error que el
@@ -12,9 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ..errors import UserError
-from ..model import PointsResult, Project, StaticResult, UserProfile
+from ..model import NetworkStaticResult, PointsResult, Project, StaticResult, UserProfile
 from .estatico import static_report as _static
 from .puntos import points_report as _points
+from .red import network_report as _network
 
 
 def _check_out(out_pdf: str | Path) -> Path:
@@ -41,6 +43,15 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     out = _check_out(out_pdf)
     try:
         return _points(result, project, user, out)
+    except PermissionError:
+        raise UserError(f"No se pudo guardar «{out.name}»: el archivo está abierto en otro programa o la carpeta no "
+                        "permite escribir.") from None
+
+
+def network_report(result: NetworkStaticResult, project: Project, user: UserProfile, out_pdf: str | Path) -> Path:
+    out = _check_out(out_pdf)
+    try:
+        return _network(result, project, user, out)
     except PermissionError:
         raise UserError(f"No se pudo guardar «{out.name}»: el archivo está abierto en otro programa o la carpeta no "
                         "permite escribir.") from None

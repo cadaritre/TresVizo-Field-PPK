@@ -86,6 +86,11 @@ def _tolerance_rows(q: QualityReport, kind: str) -> list[tuple[str, str]]:
               "no se evalúa" if t.min_duration_s is None else calidad.duration_text(t.min_duration_s))]
     if kind == "points":
         rows += [("Entre ocupaciones repetidas (planta / cota)", f"{m(t.max_repeat_h_m)} / {m(t.max_repeat_v_m)}")]
+    if kind == "network":
+        def loop(fixed, ppm):
+            return "no se evalúa" if fixed is None else f"{num(fixed, 3, 'm')} + {num(ppm, 1)} ppm"
+        rows += [("Cierre de bucle en planta", loop(t.max_loop_h_m, t.max_loop_h_ppm)),
+                 ("Cierre de bucle en cota", loop(t.max_loop_v_m, t.max_loop_v_ppm))]
     rows += [("Contra control (planta / cota)", f"{m(t.max_control_h_m)} / {m(t.max_control_v_m)}"),
              ("Falla", f"al pasar de {num(t.fail_factor, 1)} veces la tolerancia")]
     return rows
@@ -104,9 +109,11 @@ def section(r: Report, q: QualityReport, kind: str) -> None:
     if q.baselines:
         r.h2("Líneas base")
         rows = [[b.base_id, level_text(b.status), b.status.reason or "dentro de tolerancia"] for b in q.baselines]
-        r.table(["Base", "Estado", "Razón"], rows, widths=[55, 60, CONTENT_WIDTH - 115],
+        first = 120 if kind == "network" else 55
+        r.table(["Línea" if kind == "network" else "Base", "Estado", "Razón"], rows,
+                widths=[first, 60, CONTENT_WIDTH - first - 60],
                 highlight={i: LEVEL_BG[b.status.level] for i, b in enumerate(q.baselines)})
-    r.h2("Puntos" if kind == "points" else "Vértice")
+    r.h2("Vértice" if kind == "static" else "Puntos")
     rows = []
     for p in q.points:
         reason = p.status.reason or "dentro de tolerancia"
