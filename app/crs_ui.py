@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from dataclasses import replace
 from tkinter import messagebox, ttk
 
 from tresvizo_ppk.model import CoordinateChoice
@@ -55,6 +56,25 @@ class CoordinateChooser(ttk.Frame):
         self.note.grid(row=4, column=0, columnspan=2, sticky='w', pady=(6, 0))
         self.bind('<Configure>', lambda e: self.note.configure(wraplength=max(200, e.width-20)), add='+')
         self.choice = choice
+        self.candidates = []            # los medidos vistos en los resultados (siguen tras volver a procesar)
+        self.local_row = None
+        # La localización es de un proyecto: solo dentro de un asistente (no en el sistema por omisión de Ajustes).
+        if self._page() is not None:
+            from app import localizacion_ui
+            if localizacion_ui.available(app):
+                self.local_row = ttk.Frame(self, style='Flat.Card.TFrame' if style_prefix else 'TFrame')
+                self.local_row.grid(row=5, column=0, columnspan=2, sticky='ew', pady=(12, 0))
+                self.local_row.columnconfigure(0, weight=1)
+                ttk.Label(self.local_row, text='Localización (coordenadas locales del cliente)',
+                          style=label_style).grid(row=0, column=0, sticky='w')
+                self.local_status = ttk.Label(self.local_row, text='', justify='left',
+                                              style=style_prefix+'Subtitle.TLabel' if style_prefix else
+                                              'Subtitle.TLabel')
+                self.local_status.grid(row=1, column=0, sticky='ew', pady=(2, 0))
+                self.local_button = ttk.Button(self.local_row, text='Localización…', command=self.edit_localization)
+                self.local_button.grid(row=0, column=1, rowspan=2, sticky='e', padx=(12, 0))
+                self.local_row.bind('<Configure>', lambda e: self.local_status.configure(
+                    wraplength=max(200, e.width-180)), add='+')
         self.reload()
 
     def reload(self):
@@ -91,6 +111,7 @@ class CoordinateChooser(ttk.Frame):
         geoid = next((g for g in self.geoids if g.id == choice.geoid_id), None)
         self.geoid_var.set(geoid.title if geoid else NO_GEOID)
         self._note(system)
+        self._show_localization()
 
     def _zones(self, system):
         if system is not None and system.kind == 'family':
@@ -114,6 +135,9 @@ class CoordinateChooser(ttk.Frame):
         self.note.configure(text=' · '.join(parts))
 
     def on_change(self, event=None):
+        if self.choice.localization is not None and event is not None and event.widget is not self.geoid_box:
+            self.set(self.choice)           # el sistema no cambia con la localización en uso
+            return
         index = self.system_box.current()
         system = self.systems[index] if 0 <= index < len(self.systems) else None
         if event is not None and event.widget is self.system_box:
@@ -124,6 +148,7 @@ class CoordinateChooser(ttk.Frame):
                 self.geoid_var.set(next(g.title for g in self.geoids if g.id == system.geoid_model_id))
         self.choice = self.get()
         self._note(system)
+        self._show_localization()
         self.changed()
 
     def get(self) -> CoordinateChoice:
@@ -136,7 +161,56 @@ class CoordinateChooser(ttk.Frame):
             return self.choice
         return CoordinateChoice(crs_id=system.code, zone='' if zone in (AUTO_ZONE, '—', '') else zone,
                                 geoid_id=geoid.id if geoid else None,
-                                label=display_name(system.name))
+                                label=display_name(system.name), localization=self.choice.localization,
+                                localization_history=list(self.choice.localization_history))
+
+    # --- Localización ---------------------------------------------------------------------------------------------
+
+    def _page(self):
+        """La página del asistente que contiene este selector (la que tiene el proyecto y los resultados)."""
+        widget = self.master
+        while widget is not None:
+            if getattr(type(widget), 'JOB', None) is not None:
+                return widget
+            widget = getattr(widget, 'master', None)
+        return None
+
+    def _show_localization(self):
+        if self.local_row is None:
+            return
+        from app import localizacion_ui
+        text, kind = localizacion_ui.status_text(self.app, self.choice)
+        self.local_status.configure(text=text, style=(('Card.' if self.style_prefix else '')
+                                                      + ('Subtitle.TLabel' if kind == 'info' else 'Strong.TLabel'))
+                                    if kind != 'error' else 'error.TLabel')
+        localized = self.choice.localization is not None
+        # Con la localización en uso, la cuadrícula es la suya: el sistema no se cambia sin quitarla antes.
+        for box in (self.system_box, self.zone_box):
+            if localized:
+                box.state(['disabled'])
+            elif box is self.system_box or self.zone_box.cget('values') not in (('—',), '—'):
+                box.state(['!disabled', 'readonly'])
+        if localized:
+            self.note.configure(text=self.note.cget('text') + (' · ' if self.note.cget('text') else '')
+                                + 'Con la localización en uso el sistema queda fijo (es su cuadrícula base): para '
+                                  'cambiarlo, quita antes la localización. El geoide sí se cambia: manda el de ahora.')
+
+    def edit_localization(self):
+        from app import localizacion_ui
+        page = self._page()
+        pages = list(getattr(self.app, 'pages', {}).values())
+        if page is not None and page not in pages:
+            pages.insert(0, page)
+        base = self.get()
+        found = localizacion_ui.candidates_from_outputs(self.app, base, pages)
+        keys = {(m.name, m.latitude_deg, m.longitude_deg) for m in found}
+        self.candidates = found + [m for m in self.candidates if (m.name, m.latitude_deg, m.longitude_deg) not in keys]
+        new = localizacion_ui.edit(self.app, base, self.candidates)
+        if new is None:
+            return
+        self.choice = new
+        self.set(new)
+        self.changed()
 
 
 class CrsPage(ttk.Frame):

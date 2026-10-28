@@ -198,6 +198,30 @@
   RINEX de la sesión»; el estático pide código y descripción del vértice (opcionales, guardados en el proyecto).
   Pruebas con los dobles en `tests/test_ui_export.py`. El diálogo no se revisó en una captura de pantalla (este equipo
   no da permiso de grabar la pantalla a la terminal).
+- **Localización de proyecto (calibración local)** (27-10-2026, paquete 9 de la auditoría; `crs/localizacion.py`,
+  `report/localizacion.py`, `app/localizacion_ui.py`), **la de las apps TresVizo Field** (`docs/localizacion.md` de las
+  apps, su árbitro `localization_reference.py` y `LocalizationSolver.swift`, seguido operación por operación): cuadrícula
+  base del sistema (o transversa de Mercator local de Krüger en uno geográfico), altura base elipsoidal u ortométrica
+  con el geoide de ahora, semejanza de Helmert de cuatro parámetros, rígida o traslación, plano inclinado o
+  desplazamiento, residuos de todos los pares, residuo sin el par y sospechoso (§9.1), σ0, precisión de escala y giro,
+  los mismos umbrales, avisos y textos (también `scaleUnexpected` y `scaleFixedAwayFromGround` con la escala esperada a
+  nivel del terreno). **Los 21 vectores de las apps** (`tests/datos/apps/localization_vectors.json`) pasan con sus
+  tolerancias (1e-6 m, 1e-11 en a y b, 1e-5 ppm y 1e-5″; los 16 resueltos y los 4 errores con su código), la
+  conversión de sus seis puntos a UTM 13N y a la transversa local da < 1e-6 m (pide 1 mm), el caso por el sistema del
+  proyecto (EPSG:32613) y el de geográficas dan sus parámetros a 0.01 ppm y 0.01″, la escala esperada +483.61 ppm de su
+  prueba, y las formas cerradas coinciden con mínimos cuadrados genéricos a 1e-9. Un caso de cuatro pares resuelto a
+  mano (residuos, σ0, plano, residuo sin el par). Se importa la localización de un proyecto de las apps (`.mvz` de
+  «Compartir proyecto» o respaldo `.zip` con «Incluir proyectos», con la suma de verificación de cada `.mvz`) y se aplica
+  igual (su cuadrícula base tal cual); el registro se lee y se escribe con las claves del contrato §5 (también lo que
+  escribe Android: UUID en minúsculas, milisegundos, nulos omitidos). Se calcula en la oficina desde pares: los puntos
+  del PPK y el vértice del estático en pantalla, los medidos de un CSV de TresVizo Field o los puntos de un proyecto de
+  las apps, con el control escrito o de un CSV PNEZD o NXYZD/PENZD (por nombre); tabla de residuos con marcar H y V,
+  quitar y agregar pares. Con la localización en uso el resultado, el informe (sección «Localización» con parámetros,
+  residuos, sospechoso y avisos) y la exportación salen en locales como las apps: «CS name» «Local · sobre …», «CS code»
+  `LOCAL`, cota local, la declaración entera en los metadatos del GeoJSON y el KML y en la capa `LOCALIZACION` del DXF,
+  sin `.prj`; WGS 84 (marco de la base) siempre en latitud y longitud. Se guarda en el proyecto `.tvppk` con el
+  historial de las quitadas. 25 pruebas en `tests/test_localizacion.py` y 3 de la interfaz real en
+  `tests/test_ui_localizacion.py`.
 
 **Pendiente o sin verificar:**
 - Exportación para CAD: el DXF y el LandXML no se han abierto en AutoCAD ni en Civil 3D (no hay dónde); se leyeron con
@@ -214,8 +238,20 @@
   RGNA (los `.pos`/`.stat` que escribe de verdad `rnx2rtkp`; el lector sigue el formato de `rtkpos.c`/`solution.c`).
 - La convención de `ProcessedPoint.delta_from_field_enu` no está escrita en el contrato: el informe y la exportación
   calculan «posproceso − campo» de las dos posiciones cuando están, y solo usan ese campo si falta la de campo.
-- Sistemas propios (de mina, LDP) y localizaciones de las apps no entran (no hay dónde elegirlos en un proyecto
-  `.tvppk`); los vectores `localDesigns` de `crs_reference.json` no se prueban.
+- Sistemas propios (de mina, LDP, «Mis sistemas» de las apps) no entran todavía: los vectores `localDesigns` de
+  `crs_reference.json` no se prueban, y una localización guardada como sistema (`crs-templates.json` del respaldo) no
+  se importa; la de un proyecto sí.
+- Localización: **no se ha probado con un `.mvz` ni un respaldo escritos de verdad por las apps** (no hay ninguno en sus
+  repositorios); la prueba arma el archivo con la especificación de `ProjectArchive.swift` y `BACKUP_ZIP_FORMAT.md`
+  (contenido como cadena con claves ordenadas y su SHA-256). Falta exportar un proyecto con localización desde iOS y
+  desde Android y comprobar que se lee y da las mismas coordenadas locales que en campo.
+- Localización: en el asistente, cambiarla (o cambiar el sistema) invalida el resultado y hay que volver a procesar, como
+  cualquier cambio de sistema; lo profesional es volver a convertir las coordenadas sin repetir el proceso (es de
+  `app/wizard_ui.py`). Con ella en uso el sistema queda fijo en el selector (es su cuadrícula base); el geoide sí se
+  cambia y manda el de ahora (§9.3 de las apps). La hoja no se revisó en una captura de pantalla (sin permiso de
+  grabar la pantalla); se comprobó su tamaño (1100 × 780 como mucho, cabe en 1280 × 720 con desplazamiento).
+- Localización: la σ de la cota local es la del GNSS (el ajuste vertical absorbe el error del geoide; sus residuos lo
+  miden en la sección del informe) y la NT EEP no da EPV de una cota local.
 - Las rejillas NTv2 de IBGE siguen retenidas en el índice; el código las instala y aplica (probado con la sintética).
 - Letra del PDF: Segoe UI en Windows (como TresVizo Med), Arial en macOS, DejaVu Sans en Linux (la de matplotlib si el
   sistema no trae ninguna). En Windows real no se ha generado un PDF todavía.

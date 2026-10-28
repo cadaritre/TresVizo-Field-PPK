@@ -23,7 +23,7 @@ from pathlib import Path
 from ..errors import Cancelled, UserError
 from ..model import CoordinateChoice, Ecef, Enu, Matrix3, TransformedCoordinate
 from ..datos import biblioteca, indice
-from . import motor, mvgeoid
+from . import localizacion, motor, mvgeoid   # noqa: F401 (la localización: `crs.localizacion` para la interfaz)
 from .definicion import Definition, DefinitionError, epoch_text, merge, read_package
 
 # Familias de sistemas con zona automática (por la longitud del punto) o elegida en `CoordinateChoice.zone`.
