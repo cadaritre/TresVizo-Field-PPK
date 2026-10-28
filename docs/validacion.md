@@ -506,6 +506,31 @@ precisas: **756 líneas base**. Reproducir (`--salida DATOS/validacion/v2/oos105
 - El este de la flotante corta sigue algo optimista (RMS 1.41): con los cuatro días, la σ de la flotante de menos de
   la duración mínima vale para decidir, no para entregar coordenadas de centímetro.
 
+### Sesgo en el este contra el PPP y σ0 de la red
+
+El ajuste de red con las líneas del 15-07 (`core/red.py`) cierra los bucles a menos de 0.05 ppm pero cada línea
+difiere del PPP de 24 h unos milímetros en el este (−6 a −19 mm según el agente de la red). Pruebas:
+- **Es un campo por estación y por día, no un sesgo por línea:** con las fijas de 4 h y 24 h de cada día, un
+  desplazamiento en el este por estación explica el error de todas las líneas con un residuo RMS de 0.4–0.5 mm
+  (15-07: 22 líneas y 16 estaciones; 18-02: 17 y 12). Esos desplazamientos van de −7 a +7 mm y **cambian de un día a
+  otro** (UQRO +7.1, +7.2, +2.3 y +1.9 mm el 18-02, 15-07, 15-04 y 20-10; ISLP +0.2, +4.5, +4.8, +1.1): no son de la
+  antena ni del monumento (todas TRM115000.00), sino del PPP flotante de 24 h de cada estación, cuyo este es su
+  componente más débil (±5 mm). Un error del procesador que dependiera de la línea (rotación de la Tierra, wind-up,
+  PCO del satélite) no cerraría los bucles ni cambiaría de signo por estación.
+- **La libre de ionosfera de RTKLIB** con las mismas sesiones de 24 h (UGTO con UQRO, ISLP e INEG, 15-07 y 18-02)
+  difiere del procesador propio −5.5, −1.3 y +0.5 mm y −4.3, +3.9 y +3.1 mm en el este: sin un signo común, dentro
+  del ruido de su flotante. Solo UGTO–UQRO difiere igual los dos días (−5 mm): pendiente con una referencia de otro
+  programa (CSRS-PPP o las soluciones semanales de SIRGAS).
+- Conclusión: **el sesgo es de la referencia PPP**, no del motor; no se cambió nada. La carga oceánica (sin aplicar)
+  da 1–2 mm tierra adentro.
+
+**σ0 = 0.36 de la red:** la σ de cada línea es para su error contra la verdad (lo que el usuario recibe con una base
+o como coordenada final) e incluye lo que es común a todas las líneas de una estación en la sesión (troposfera de la
+estación, órbitas, la antena): por eso contra el PPP su RMS de error/σ queda en 0.85–1.04. En un bucle esa parte
+común se cancela y los cierres miden solo lo que es de cada línea, mucho menor: σ0 < 1 en la red es lo esperado y no
+quiere decir que la σ de la línea sea pesimista. Para la red vale su σ0 (cierres y prueba w); para la coordenada
+entregada, la σ de la línea sin escalar por ese σ0 (escalarla la haría optimista: la vertical ya queda en 1.0).
+
 ### Lo que ahora se sostiene
 
 Con los cuatro días (20-10, 15-07, 18-02 y 15-04; tres temporadas), 16 líneas de 30 a 240 km y receptores Trimble
