@@ -11,7 +11,7 @@ import numpy as np
 
 from ..errors import Cancelled, UserError
 from ..model import (Ecef, Enu, Ephemeris, ObservationSet, ProcessingOptions, StaticResult, Station)
-from . import adjust, antex, dop, intermedios, networks, precise, quality, rtklib, tools
+from . import adjust, antex, dop, intermedios, networks, precise, quality, rtklib, sesion, tools
 from .baseline import process_baseline
 from .geodesy import covariance_ecef_to_enu
 from .observations import trim
@@ -60,6 +60,8 @@ def _process(rover: ObservationSet, bases: list[tuple[Station, ObservationSet]],
                       f"«{options.ionosphere}», ambigüedades «{options.ambiguity_mode}», cociente mínimo "
                       f"{options.min_ratio:g}, {'combinado adelante/atrás' if options.combined else 'solo adelante'}, "
                       f"efemérides {'precisas' if options.ephemeris == Ephemeris.PRECISE else 'difundidas'}."]
+    log += sesion.describe(options)           # ventana de tiempo y satélites fuera (editor de sesión)
+    sesion.constellations(options)            # error del usuario si quitó todos los sistemas, antes de procesar
     warnings: list[str] = list(rover.warnings)
     if options.ephemeris == Ephemeris.PRECISE:
         log.append("Órbitas precisas: " + precise.describe([Path(p) for p in options.precise_files]))
@@ -199,7 +201,9 @@ def _process(rover: ObservationSet, bases: list[tuple[Station, ObservationSet]],
                         bases=[s for s, _ in bases], baselines=baselines, adjustment=adjustment, position=position,
                         sigma_enu=sigma, log=log, warnings=_unique(warnings), base_quality=base_quality,
                         ephemeris=options.ephemeris, precise_files=precise_names,
-                        rtklib_version=tools.RTKLIB_VERSION)
+                        rtklib_version=tools.RTKLIB_VERSION,
+                        time_window=options.time_window if sesion.is_trimmed(options.time_window) else None,
+                        excluded_sats=sesion.normalize_excluded(options.excluded_sats))
 
 
 def _baseline_pdop(solution) -> float | None:

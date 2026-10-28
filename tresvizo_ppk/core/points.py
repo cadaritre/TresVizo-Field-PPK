@@ -18,7 +18,7 @@ import numpy as np
 from ..errors import UserError
 from ..model import (Ecef, Enu, Ephemeris, FieldPoint, ObservationSet, PointsResult, ProcessedPoint,
                      ProcessingOptions, Solution, Station)
-from . import antex, dop, intermedios, networks, quality, rtklib, tools
+from . import antex, dop, intermedios, networks, quality, rtklib, sesion, tools
 from .baseline import Q_TO_SOLUTION, approx_position, base_antenna, strategies
 from .geodesy import (covariance_ecef_to_enu, ecef_delta_to_enu, ecef_to_geodetic, enu_rotation, gps_to_utc,
                       utc_to_gps)
@@ -65,6 +65,8 @@ def _process(rover: ObservationSet, base: tuple[Station, ObservationSet], points
                       f"({station.position.frame}, época {station.position.epoch:g}).",
                       f"Rover: {rover.marker}, {rover.receiver}, {rover.start:%Y-%m-%d %H:%M:%S}–"
                       f"{rover.end:%H:%M:%S} UTC, intervalo {rover.interval_s or 0:g} s."]
+    log += sesion.describe(options)           # ventana de tiempo y satélites fuera (editor de sesión)
+    constellations = sesion.constellations(options)
     warnings: list[str] = list(rover.warnings)
     if options.ephemeris == Ephemeris.PRECISE and not options.precise_files:
         raise UserError("Se pidieron efemérides precisas pero no hay archivos SP3: bájalos primero.")
@@ -86,6 +88,7 @@ def _process(rover: ObservationSet, base: tuple[Station, ObservationSet], points
     end = min(rover.end, base_trim.end or rover.end)
     if end <= start:
         raise UserError(f"La base {station.id} no tiene datos en el horario del rover.")
+    start, end = sesion.clamp(start, end, options.time_window, what=f"común con la base {station.id}")
 
     # Antenas: el rover se procesa en su ARP (altura 0) y cada punto se baja con su propia altura.
     rover_choice = antex.choose(rover.antenna_type, rover.radome or "NONE", "Rover")
@@ -103,7 +106,7 @@ def _process(rover: ObservationSet, base: tuple[Station, ObservationSet], points
                                                               "off") else "fix-and-hold"
     cfg = rtklib.base_config(
         mode="kinematic", options=options, frequencies=options.frequencies, ionosphere=strategy.ionoopt,
-        troposphere=strategy.tropopt, navsys=rtklib.navsys_mask(options.constellations), ambiguity=ar,
+        troposphere=strategy.tropopt, navsys=rtklib.navsys_mask(constellations), ambiguity=ar,
         glonass_ar="off", precise=options.ephemeris == Ephemeris.PRECISE, antex=antex_path,
         rover=rtklib.AntennaSetup(rover_choice.rtklib_name, (0.0, 0.0, 0.0)),
         base=rtklib.AntennaSetup(base_choice.rtklib_name, (0.0, 0.0, base_h)), base_xyz=tuple(base_xyz),
@@ -131,6 +134,11 @@ def _process(rover: ObservationSet, base: tuple[Station, ObservationSet], points
     step(0.92, "Promediando los puntos…")
     pdops = dop.pdop_by_epoch(Path(str(pos) + ".stat"))      # para la tolerancia de PDOP del proyecto
     processed = [_process_point(p, epochs, times, base_xyz, station, rover, pdops) for p in points]
+    if sesion.is_trimmed(options.time_window):
+        for p in processed:
+            if p.epochs_total == 0 and (p.point.end < start or p.point.start > end):
+                p.message = (f"la ocupación queda fuera de la ventana de tiempo de la sesión "
+                             f"({sesion.window_text(options.time_window)}).")
     for p in processed:
         if p.message:
             warnings.append(f"{p.point.name}: {p.message}")
@@ -147,7 +155,9 @@ def _process(rover: ObservationSet, base: tuple[Station, ObservationSet], points
                         stat_file=Path(str(pos) + ".stat"), config_file=conf, ephemeris=options.ephemeris,
                         precise_files=[Path(p).name for p in options.precise_files]
                         if options.ephemeris == Ephemeris.PRECISE else [],
-                        rtklib_version=tools.RTKLIB_VERSION, trajectory=trajectory)
+                        rtklib_version=tools.RTKLIB_VERSION, trajectory=trajectory,
+                        time_window=options.time_window if sesion.is_trimmed(options.time_window) else None,
+                        excluded_sats=sesion.normalize_excluded(options.excluded_sats))
 
 
 def _height_for(point: FieldPoint, rover: ObservationSet) -> tuple[float | None, str]:

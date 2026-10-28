@@ -33,6 +33,7 @@ modelo calibrado (`larga.procesador.ERROR_FLOOR`).
 """
 from __future__ import annotations
 
+import inspect
 import math
 import statistics
 import threading
@@ -44,7 +45,7 @@ import numpy as np
 
 from ..errors import UserError
 from ..model import BaselineSolution, Ecef, Enu, Ephemeris, ObservationSet, ProcessingOptions, Solution, Station
-from . import antex, rtklib, tools
+from . import antex, rtklib, sesion, tools
 from .geodesy import (azimuth_zenith, covariance_ecef_to_enu, covariance_enu_to_ecef, ecef_delta_to_enu,
                       gps_to_utc, utc_to_gps)
 
@@ -206,6 +207,8 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
     if (end - start).total_seconds() <= 0:
         raise UserError(f"La base {station.id} no tiene datos en el horario del rover "
                         f"({rover.start:%Y-%m-%d %H:%M}–{rover.end:%H:%M} UTC).")
+    # editor de sesión: la ventana de tiempo recorta la sesión común (RTKLIB con -ts/-te, el propio con su inicio y fin)
+    start, end = sesion.clamp(start, end, options.time_window, what=f"común con la base {station.id}")
     antex_path = antex_path or antex.ensure_antex(workdir)
     base_xyz = np.array([station.position.x, station.position.y, station.position.z])
 
@@ -259,7 +262,7 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
         name = f"{label or station.id}_{strategy.key}"
         cfg = rtklib.base_config(
             mode=mode, options=options, frequencies=options.frequencies, ionosphere=strategy.ionoopt,
-            troposphere=strategy.tropopt, navsys=rtklib.navsys_mask(options.constellations),
+            troposphere=strategy.tropopt, navsys=rtklib.navsys_mask(sesion.constellations(options)),
             ambiguity=strategy.ambiguity if mode == "static" else _kinematic_ar(options),
             glonass_ar=glonass_ar(rover, base), precise=precise, antex=antex_path, rover=rover_setup,
             base=base_setup, base_xyz=tuple(base_xyz), interval_s=base.interval_s,
@@ -297,6 +300,11 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
         log.append(f"  {length / 1000:.1f} km: línea larga, solución libre de ionosfera.")
     if own is not None:
         control = runs[-1]
+        excluded = sesion.excluded_satellites(options)
+        if excluded and not own_takes_exclusions():
+            warnings.append(f"Línea base {station.id}: el procesador de líneas largas todavía no deja fuera "
+                            f"satélites sueltos; {', '.join(excluded)} siguen en su solución (la comprobación de "
+                            "RTKLIB sí los quitó). Los sistemas completos y la ventana de tiempo sí se respetan.")
         solution = summarize_own(own, rover, station, base_xyz, options, control, warnings, notes)
         _cross_check(solution, control, rover, station, base_xyz, options, log)
         return solution, control
@@ -304,10 +312,24 @@ def process_baseline(rover: ObservationSet, station: Station, base: ObservationS
     return solution, chosen
 
 
+def own_takes_exclusions() -> bool:
+    """El procesador propio acepta satélites sueltos fuera (`excluded_sats`). La ventana de tiempo y los sistemas
+    fuera ya le llegan con su inicio, su fin y `systems`."""
+    from .larga import procesador
+    return "excluded_sats" in inspect.signature(procesador.process).parameters
+
+
 def own_applies(length_m: float, options: ProcessingOptions, mode: str = "static") -> bool:
     """El procesador propio se usa en estático, «auto», doble frecuencia, desde `OWN_BASELINE_M`."""
     return (mode == "static" and (options.ionosphere or "auto").lower() == "auto" and options.frequencies >= 2
-            and length_m >= OWN_BASELINE_M and any(c in options.constellations for c in SYSTEM_CODES))
+            and length_m >= OWN_BASELINE_M and any(c in _kept(options) for c in SYSTEM_CODES))
+
+
+def _kept(options: ProcessingOptions) -> tuple[str, ...]:
+    try:
+        return sesion.constellations(options)
+    except UserError:
+        return ()
 
 
 def _process_own(rover, station, base, options, base_xyz, approx, rover_choice, base_choice, rover_h, base_h,
@@ -319,7 +341,8 @@ def _process_own(rover, station, base, options, base_xyz, approx, rover_choice, 
     def full(choice):
         return larga_antena.receiver_antenna(choice.model.type, choice.model.radome) if choice.model else None
 
-    systems = "".join(code for name, code in SYSTEM_CODES.items() if name in options.constellations)
+    constellations = sesion.constellations(options)            # sin los sistemas que el editor de sesión quitó
+    systems = "".join(code for name, code in SYSTEM_CODES.items() if name in constellations)
     rover_ep = procesador.Endpoint(rover.obs[0], np.array(approx, dtype=float), rover_h, full(rover_choice),
                                    rover.marker)
     base_ep = procesador.Endpoint(base.obs[0], base_xyz, base_h, full(base_choice), station.id)
@@ -328,9 +351,13 @@ def _process_own(rover, station, base, options, base_xyz, approx, rover_choice, 
     if any(p.suffix.lower() in (".gz", ".z", ".zip") for p in precise):
         from . import compress
         precise = compress.unpack(precise, workdir / "orbitas_descomprimidas")
+    extra = {}
+    excluded = sesion.excluded_satellites(options)
+    if excluded and own_takes_exclusions():
+        extra["excluded_sats"] = excluded           # satélites sueltos fuera (editor de sesión)
     result = procesador.process(rover_ep, base_ep, nav, precise, mask_deg=options.elevation_mask_deg,
                                 start=gps_seconds(start_g), end=gps_seconds(end_g), interval_s=options.interval_s,
-                                systems=systems, progress=progress, cancel=cancel)
+                                systems=systems, progress=progress, cancel=cancel, **extra)
     log.append(f"Línea base {station.id}: procesador propio de líneas largas.")
     log.extend(f"  {line}" for line in result.log)
     log.extend(f"  {line}" for line in result.notes)

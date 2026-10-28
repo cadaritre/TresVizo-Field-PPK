@@ -128,6 +128,8 @@ def _assess_file(header: RinexHeader, quality: DataQuality, cancel, progress) ->
     sats: set[str] = set()
     signals: dict[str, set[str]] = defaultdict(set)
     slips: dict[str, int] = defaultdict(int)
+    slip_times: dict[str, list[datetime]] = defaultdict(list)
+    tracks: dict[str, list[list[datetime]]] = defaultdict(list)    # satélite → [[inicio, fin], …] (línea de tiempo)
     arcs: dict[str, _Arc] = {}
     accumulator = _Accumulator()
     glonass_k = dict(header.glonass_slots)
@@ -152,6 +154,11 @@ def _assess_file(header: RinexHeader, quality: DataQuality, cancel, progress) ->
                 signals[system].add(code if v3 else code)
             arc = arcs.get(sat)
             gap_limit = (interval or 30.0) * ARC_GAP_FACTOR
+            spans = tracks[sat]
+            if spans and (block.time - spans[-1][1]).total_seconds() <= gap_limit:
+                spans[-1][1] = block.time
+            else:
+                spans.append([block.time, block.time])
             if arc is None or arc.last_time is None or (block.time - arc.last_time).total_seconds() > gap_limit:
                 if arc is not None:
                     accumulator.add_arc(arc.mp)
@@ -180,6 +187,7 @@ def _assess_file(header: RinexHeader, quality: DataQuality, cancel, progress) ->
                 slip = True
             if slip and arc.gf is not None:
                 slips[sat] += 1
+                slip_times[sat].append(block.time)
                 accumulator.add_arc(arc.mp)
                 arc.mp = {}
                 arc.mw_mean, arc.mw_n = mw, 1
@@ -212,6 +220,10 @@ def _assess_file(header: RinexHeader, quality: DataQuality, cancel, progress) ->
                        for sys_, codes in sorted(signals.items(), key=lambda kv: "GRECJSI".find(kv[0]))}
     quality.cycle_slips = {sat: slips[sat] for sat in quality.satellites if slips.get(sat)}
     quality.multipath_m = {k: round(v, 4) for k, v in accumulator.rms().items()}
+    utc = lambda t: rinex_time_to_utc(t, header.time_system)  # noqa: E731
+    quality.tracks = {sat: [(utc(a), utc(b)) for a, b in tracks[sat]] for sat in quality.satellites if tracks.get(sat)}
+    quality.slip_times = {sat: [utc(t) for t in slip_times[sat]] for sat in quality.satellites if slip_times.get(sat)}
+    quality.interval_s = interval
 
     # Avisos
     if quality.epochs == 0:

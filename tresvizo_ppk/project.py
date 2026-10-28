@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
 from .model import (HEIGHT_METHODS, AntennaSelection, ControlCoordinate, CoordinateChoice, Ecef, Enu, Ephemeris,
-                    ProcessingOptions, Project, ProjectTolerances, Station)
+                    ProcessingOptions, Project, ProjectTolerances, Station, TimeWindow)
 
 SUFFIX = ".tvppk"
 FORMAT = "tresvizo-field-ppk/proyecto"
@@ -185,7 +185,10 @@ def _options(o: ProcessingOptions, folder: Path) -> dict:
             "precise_files": [relative(p, folder) for p in o.precise_files], "ambiguity_mode": o.ambiguity_mode,
             "combined": o.combined, "min_ratio": o.min_ratio, "interval_s": o.interval_s,
             "antex_files": [relative(p, folder) for p in o.antex_files],
-            "antennas": {role: asdict(sel) for role, sel in o.antennas.items()}}
+            "antennas": {role: asdict(sel) for role, sel in o.antennas.items()},
+            "time_window": None if o.time_window is None else {"start": _time(o.time_window.start),
+                                                               "end": _time(o.time_window.end)},
+            "excluded_sats": list(o.excluded_sats)}
 
 
 def _parse_antenna(d) -> AntennaSelection | None:
@@ -221,8 +224,45 @@ def _parse_options(d: dict, folder: Path) -> ProcessingOptions:
     if "antennas" in values:
         raw = values["antennas"] if isinstance(values["antennas"], dict) else {}
         values["antennas"] = {str(k): sel for k, v in raw.items() if (sel := _parse_antenna(v)) is not None}
+    if "time_window" in values:
+        values["time_window"] = _parse_window(values["time_window"])
+    if "excluded_sats" in values:
+        values["excluded_sats"] = _parse_excluded(values["excluded_sats"])
     options = ProcessingOptions(**{**default.__dict__, **values})
     return options
+
+
+def _parse_window(d) -> TimeWindow | None:
+    """La ventana del editor de sesión; una ilegible o vacía queda como «toda la sesión»."""
+    if not isinstance(d, dict):
+        return None
+    try:
+        start, end = _parse_time(d.get("start")), _parse_time(d.get("end"))
+    except (TypeError, ValueError):
+        return None
+    if start is None and end is None:
+        return None
+    if start is not None and end is not None and end <= start:
+        return None
+    return TimeWindow(start, end)
+
+
+def _parse_excluded(items) -> list[str]:
+    from .core import sesion
+    from .errors import UserError
+    if not isinstance(items, list):
+        return []
+    try:
+        return sesion.normalize_excluded([str(i) for i in items])
+    except UserError:
+        # un proyecto editado a mano con algo ilegible: se queda lo que sí se entiende
+        kept = []
+        for item in items:
+            try:
+                kept += sesion.normalize_excluded([str(item)])
+            except UserError:
+                continue
+        return sesion.normalize_excluded(kept)
 
 
 def _localization(record) -> dict | None:

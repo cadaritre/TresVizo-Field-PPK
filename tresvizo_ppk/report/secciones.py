@@ -188,6 +188,16 @@ def options_section(r: Report, options: ProcessingOptions, ephemeris_used: set[E
         ("Intervalo", "el de los datos" if options.interval_s is None else f"{options.interval_s:g} s"),
         ("Efemérides", eph),
     ]
+    # editor de sesión: qué se recortó y qué se dejó fuera (siempre a la vista, como en TBC)
+    from ..core import sesion
+    window = sesion.window_text(options.time_window)
+    pairs.append(("Ventana de tiempo", window if not sesion.is_trimmed(options.time_window)
+                  else f"{window} (recortada en el editor de sesión)"))
+    try:
+        excluded = sesion.excluded_text(options.excluded_sats)
+    except UserError:
+        excluded = ", ".join(options.excluded_sats)
+    pairs.append(("Satélites fuera del cálculo", excluded))
     if options.precise_files:
         pairs.append(("Productos precisos", ", ".join(Path(p).name for p in options.precise_files)))
     r.fields(pairs, columns=1, label_width=150)

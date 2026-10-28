@@ -81,7 +81,8 @@ def base_config(*, mode: str, options, frequencies: int, ionosphere: str, tropos
     s("pos1-posopt4", bool(precise))                         # satélites en eclipse
     s("pos1-posopt5", "off")
     s("pos1-posopt6", "off")
-    s("pos1-exclsats", "")
+    # satélites sueltos que el editor de sesión dejó fuera («G13 R05»); los sistemas completos salen de `navsys`
+    s("pos1-exclsats", _exclsats(options))
     s("pos1-navsys", navsys)
     s("pos2-armode", ambiguity)
     s("pos2-gloarmode", glonass_ar)
@@ -183,6 +184,13 @@ def base_config(*, mode: str, options, frequencies: int, ionosphere: str, tropos
     s("file-solstatfile", "")
     s("file-tracefile", "")
     return cfg
+
+
+def _exclsats(options) -> str:
+    if options is None:
+        return ""
+    from . import sesion
+    return sesion.rtklib_exclsats(options)
 
 
 def navsys_mask(constellations) -> int:
