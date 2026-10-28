@@ -177,8 +177,8 @@ def process_network(rovers: dict[str, ObservationSet], occupations: list[Network
                     line_choices: dict[str, str] | None = None,
                     tolerances: ProjectTolerances | None = None) -> NetworkStaticResult:
     """Estático de varios puntos: cada ocupación contra cada estación y contra las ocupaciones simultáneas de otros
-    receptores, y el ajuste de red. La antena de cada receptor es «rover:<clave>» (o «rover») de `options.antennas`;
-    la altura, la de cada ocupación."""
+    receptores, y el ajuste de red. La antena (y la altura medida) de cada receptor es «rover:<clave>» (o «rover»)
+    de `options.antennas`; la altura de una ocupación del CSV gana sobre la de la grabación."""
     for key, obs in rovers.items():
         for station, base_obs in bases:
             if _same_recording(obs, base_obs):
@@ -189,7 +189,7 @@ def process_network(rovers: dict[str, ObservationSet], occupations: list[Network
         selection = options.antennas.get(f"rover:{key}") or options.antennas.get("rover")
         local = replace(options, antennas={**options.antennas, "rover": selection} if selection else
                         {k: v for k, v in options.antennas.items() if k != "rover"})
-        applied[key], _ = _apply_rover(obs, local, use_height=False)
+        applied[key], _ = _apply_rover(obs, local)
     chosen, extra_warnings = _apply_bases(bases, options)
     bases = [(station, obs) for station, obs, _ in chosen]
     from .baseline import base_antenna

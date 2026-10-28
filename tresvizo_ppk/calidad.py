@@ -44,7 +44,7 @@ LEVEL_SYMBOL = {"pass": "✓", "review": "▲", "fail": "✕", "na": "–"}
 PDF_SYMBOL = {"pass": "√", "review": "▲", "fail": "×", "na": "–"}
 ORDERS = tuple(name for _, name in ACCURACY_ORDERS)
 DEFAULT_ORDER = "5 centímetros"
-DEFAULT_DURATION_S = {"points": 30.0, "static": 3600.0}
+DEFAULT_DURATION_S = {"points": 30.0, "static": 3600.0, "network": 3600.0}
 CONTROL_ORDERS = ("pnezd", "penzd", "nxyzd")
 EPS = 1e-9
 

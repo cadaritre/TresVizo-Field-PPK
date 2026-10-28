@@ -390,3 +390,52 @@
 - La comparación vive en memoria (la del último «Volver a procesar» desde el editor); no se guarda en el proyecto ni
   sale en el informe, que dice solo qué se recortó y qué se quitó.
 - Arrastrar las marcas va al píxel (unos segundos en sesiones largas); el segundo exacto se escribe en los campos.
+
+## Red estática: estático de varios puntos y ajuste de red (paquete 10 de la auditoría, 27-10-2026)
+
+**Hecho y verificado:**
+- `core/red.py`, el ajuste de red 3D de vectores GNSS con su covarianza completa:
+  - mínimamente restringido (un punto fijo o restricciones internas) y restringido (fijas duras o ponderadas, en
+    planta, cota o las dos);
+  - χ², σ0, prueba τ de Pope o w de Baarda, residuos ordenados con su número de redundancia, y escala de
+    covarianzas como TBC;
+  - elipses absolutas y relativas al 95 %;
+  - comprobación del control: señala la fija que no concuerda con las demás.
+- Líneas triviales: en cada sesión simultánea se quedan las más cortas que unen a los receptores. Dos líneas son de
+  la misma sesión si comparten más de la mitad de la más larga.
+- Cierres de bucle entre sesiones independientes, contra mm + ppm del proyecto. `calidad.tolerances_for_order` los
+  escala con el orden: L + 1 ppm en planta y 2L + 2 ppm en cota (la NT EEP no fija cifra).
+- Verificación de `core/red.py`:
+  - triángulo resuelto a mano, igual al ajuste de un punto de `adjust.py` y a las ecuaciones de condición, al 1e-9;
+  - el resultado no depende del datum;
+  - Monte Carlo de 400 redes: σ0² ≈ 1, elipses y cota al 95 % ±3 %, rechazo de la χ² ≈ 5 %.
+- Proyecto «network» de punta a punta:
+  - motor `core/static_network.py`: receptores con su grabación entera o con las ocupaciones (de 10 min o más) del
+    CSV de TresVizo Field; líneas estación→ocupación y entre ocupaciones simultáneas;
+  - reajuste sin volver a procesar al cambiar fijas, líneas u opciones;
+  - informe de ajuste de red (`report/red.py`), con orden de exactitud NT EEP y la declaración del INEGI solo con
+    fijas oficiales de la RGNA y el geoide vigente;
+  - exportación a los seis formatos (`export_network`);
+  - página «Red estática» en la interfaz;
+  - el proyecto `.tvppk` lo guarda todo.
+- RGNA del 15-07-2026 (`scripts/red_rgna.py`):
+  - **Red fija (16 líneas de 100–183 km, todas fijas):** 7 bucles de 0.9–4.4 mm en planta y 0.4–14.1 mm en cota;
+    σ0 = 0.36 en el mínimamente restringido. Forma de la red contra el PPP de 24 h: RMS 5.8/2.8/9.6 mm (E/N/U).
+    INEG sale con −686 mm en cota (el PPP dice −693).
+  - **Con `--proyecto` (el motor elige las líneas):** 25 líneas en 100 s, 10 triviales, 10 bucles que pasan. Con
+    INEG de comprobación, el restringido pasa y los puntos quedan a −6…−19 mm en E, +3…+11 en N y −10…+2 en U de la
+    oficial más el movimiento de las estaciones.
+
+**Pendiente o no verificado:**
+- La pantalla «Red estática» no se miró en una captura: el permiso de pantalla se negó en esta sesión. Sí la
+  ejercen las pruebas de Tk con dobles: construcción, proceso, tablas, reajuste, guardar y reabrir.
+- Falta probarla con una jornada real de MeridianV con CSV de campo y varios receptores. Lo de la RGNA son
+  estaciones CORS haciendo de receptores.
+- Las líneas de más de 300 km quedan flotantes (procesador de líneas largas validado hasta ~180 km). En la red de
+  prueba salen triviales o con σ grandes; el usuario puede dejarlas fuera.
+- No se procesan líneas entre estaciones de la red (CORS–CORS). La comprobación del control sale de las líneas a
+  los puntos nuevos.
+- Sin preanálisis de la red (después de la 1.0, como en la auditoría).
+- El icono de la página es `chart-scatter`. El `network` de Lucide pide bajar su paquete (`scripts/crear_iconos.py`).
+- En la NT EEP, el art. 12 (circuitos cerrados con ajuste para la nivelación GNSS) queda cubierto por los bucles y
+  el ajuste, pero el informe no tiene una sección propia de nivelación.
