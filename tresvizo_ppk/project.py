@@ -14,13 +14,14 @@ from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from .model import (HEIGHT_METHODS, AntennaSelection, ControlCoordinate, CoordinateChoice, Ecef, Enu, Ephemeris,
-                    ProcessingOptions, Project, ProjectTolerances, Station, TimeWindow)
+from .model import (FIX_MODES, HEIGHT_METHODS, MINIMAL_DATUMS, NETWORK_TESTS, SCALE_MODES, AntennaSelection,
+                    ControlCoordinate, CoordinateChoice, Ecef, Enu, Ephemeris, NetworkFixChoice, NetworkOptions,
+                    NetworkRover, ProcessingOptions, Project, ProjectTolerances, Station, TimeWindow)
 
 SUFFIX = ".tvppk"
 FORMAT = "tresvizo-field-ppk/proyecto"
 FORMAT_VERSION = 1
-KINDS = ("static", "points")
+KINDS = ("static", "points", "network")
 
 
 class ProjectError(Exception):
@@ -336,6 +337,72 @@ def _parse_choices(d) -> dict[str, int]:
     return out
 
 
+def _parse_rovers(items) -> list[NetworkRover]:
+    """Los receptores de la red; uno sin clave o repetido se descarta (sus archivos quedan en las entradas)."""
+    out, seen = [], set()
+    for d in items if isinstance(items, list) else []:
+        if not isinstance(d, dict) or not str(d.get("key", "")).strip() or str(d["key"]) in seen:
+            continue
+        try:
+            height = d.get("pole_height_m")
+            out.append(NetworkRover(key=str(d["key"]), point_name=str(d.get("point_name", "")),
+                                    pole_height_m=None if height is None else float(height),
+                                    code=str(d.get("code", "")), description=str(d.get("description", "")),
+                                    label=str(d.get("label", ""))))
+            seen.add(str(d["key"]))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _parse_fix(items) -> list[NetworkFixChoice]:
+    out, seen = [], set()
+    for d in items if isinstance(items, list) else []:
+        if not isinstance(d, dict) or not str(d.get("point_id", "")).strip() or str(d["point_id"]) in seen:
+            continue
+        mode = d.get("mode") if d.get("mode") in FIX_MODES else "fixed"
+        out.append(NetworkFixChoice(str(d["point_id"]), mode, bool(d.get("horizontal", True)),
+                                    bool(d.get("vertical", True))))
+        seen.add(str(d["point_id"]))
+    return out
+
+
+def _parse_network_options(d) -> NetworkOptions:
+    """Las opciones del ajuste; lo que no se entiende queda en el de omisión."""
+    o = NetworkOptions()
+    if not isinstance(d, dict):
+        return o
+    for f in fields(NetworkOptions):
+        if f.name not in d:
+            continue
+        value = d[f.name]
+        try:
+            if f.name == "test" and value in NETWORK_TESTS or f.name == "scale_covariances" and value in SCALE_MODES \
+                    or f.name == "minimal_datum" and value in MINIMAL_DATUMS:
+                setattr(o, f.name, value)
+            elif f.name in ("minimal_point",):
+                setattr(o, f.name, str(value))
+            elif f.name == "relative_pairs" and value in ("connected", "all"):
+                o.relative_pairs = value
+            elif f.name == "include_trivial":
+                o.include_trivial = bool(value)
+            elif f.name in ("alpha", "w_critical", "scale_value", "session_overlap"):
+                number = float(value)
+                ranges = {"alpha": (0.0, 0.5), "w_critical": (0.0, 100.0), "scale_value": (0.0, 1e6),
+                          "session_overlap": (0.0, 1.0)}
+                low, high = ranges[f.name]
+                if low < number <= high:
+                    setattr(o, f.name, number)
+        except (TypeError, ValueError):
+            continue
+    return o
+
+
+def _parse_line_choices(d) -> dict[str, str]:
+    return {str(k): str(v) for k, v in (d.items() if isinstance(d, dict) else [])
+            if v in ("off", "independent", "trivial")}
+
+
 def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
     return {"formato": FORMAT, "version": FORMAT_VERSION, "app_version": app_version,
             "kind": project.kind, "name": project.name, "number": project.number, "place": project.place, "point_name": project.point_name,
@@ -355,7 +422,9 @@ def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
             "created": _time(project.created), "processed": _time(project.processed),
             "tolerances": _tolerances(project.tolerances),
             "control_points": [asdict(c) for c in project.control_points],
-            "control_source": project.control_source, "occupation_choices": dict(project.occupation_choices)}
+            "control_source": project.control_source, "occupation_choices": dict(project.occupation_choices),
+            "rovers": [asdict(r) for r in project.rovers], "network_fix": [asdict(f) for f in project.network_fix],
+            "network_options": asdict(project.network_options), "line_choices": dict(project.line_choices)}
 
 
 def from_dict(data: dict, folder: Path) -> Project:
@@ -398,7 +467,10 @@ def from_dict(data: dict, folder: Path) -> Project:
                        tolerances=_parse_tolerances(data.get("tolerances")),
                        control_points=_parse_control(data.get("control_points")),
                        control_source=str(data.get("control_source", "")),
-                       occupation_choices=_parse_choices(data.get("occupation_choices")))
+                       occupation_choices=_parse_choices(data.get("occupation_choices")),
+                       rovers=_parse_rovers(data.get("rovers")), network_fix=_parse_fix(data.get("network_fix")),
+                       network_options=_parse_network_options(data.get("network_options")),
+                       line_choices=_parse_line_choices(data.get("line_choices")))
     except (KeyError, TypeError, ValueError) as exc:
         raise ProjectError("El proyecto está dañado o incompleto; no se pudo leer.") from exc
 
