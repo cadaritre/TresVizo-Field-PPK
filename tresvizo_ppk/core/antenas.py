@@ -122,7 +122,7 @@ def apply_rover(rover: ObservationSet, options: ProcessingOptions, *, use_height
 def apply_base(station: Station, obs: ObservationSet, options: ProcessingOptions
                ) -> tuple[Station, ObservationSet, str, list[str]]:
     """La estación y sus observaciones con la antena y la altura elegidas para «base:<clave>» (si las hay)."""
-    selection = options.antennas.get(f"base:{station.id}")
+    selection = options.antennas.get(f"base:{station.id}") or options.antennas.get("base")
     warnings: list[str] = []
     official = bool(station.network and station.official)
     current_type = station.antenna_type if official and station.antenna_type else (obs.antenna_type or

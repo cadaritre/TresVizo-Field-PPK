@@ -302,9 +302,10 @@ class BasePanel(ttk.Frame):
     """Una estación: sus archivos (arrastrar y soltar) y su estación del catálogo."""
 
     def __init__(self, parent, app, entry: BaseEntry, title, changed, on_remove=None, kinds_hint='', guide=None,
-                 inspect=None):
+                 inspect=None, options=None, role=None, distance=None):
         super().__init__(parent, style='Card.TFrame', padding=18)
         self.app, self.entry, self.changed, self.inspect = app, entry, changed, inspect
+        self.antenna = None
         head = ttk.Frame(self, style='Flat.Card.TFrame')
         head.pack(fill='x')
         app.icons.label(head, 'radio-tower', 20, token='primary', background='surface', style='Card.TLabel').pack(
@@ -327,13 +328,29 @@ class BasePanel(ttk.Frame):
         self.files.pack(fill='x')
         self.rinex = ttk.Label(self, text='', style='Card.Subtitle.TLabel', justify='left')
         self.bind('<Configure>', lambda e: self.rinex.configure(wraplength=max(200, e.width-40)), add='+')
-        self.picker = StationPicker(self, app, entry, changed)
+        self.picker = StationPicker(self, app, entry, self.station_changed if options is not None else changed)
         self.picker.pack(fill='x', pady=(12, 0))
+        if options is not None:
+            # Antena y radomo de la estación: por omisión los del catálogo de su red; se pueden cambiar o importar.
+            key = role or (lambda: f'base:{entry.station.id}' if entry.station else '')
+            self.antenna = AntennaPanel(self, app, options, key, changed,
+                                        distance=(lambda: distance(entry)) if distance else None)
+            self.antenna.pack(fill='x', pady=(12, 0))
+            self.station_data()
         self.files.set(entry.files)
         if not entry.files:
             self.files.pack_forget()
         else:
             self.read_files()
+
+    def station_data(self):
+        s = self.entry.station
+        if self.antenna is not None:
+            self.antenna.set_data(s.antenna_type if s else '', s.radome if s else 'NONE')
+
+    def station_changed(self):
+        self.station_data()
+        self.changed()
 
     def read_files(self):
         """Lo que trae el RINEX de la estación (clave, receptor, antena, altura) se muestra con su origen y la
@@ -367,6 +384,384 @@ class BasePanel(ttk.Frame):
         elif not self.entry.files:
             self.files.pack_forget()
         self.changed()
+
+
+# --- Antena y altura (§1.1.1) --------------------------------------------------------------------------------------
+
+ANTEX_TYPES = [('Calibración de antena ANTEX', '*.atx *.ATX'), ('Todos los archivos', '*')]
+FROM_DATA = 'La de los datos'
+HEIGHT_METHOD_TEXT = (('arp', 'Vertical a la ARP'), ('mount', 'Vertical a la rosca o al gancho'),
+                      ('slant', 'Inclinada al borde de la antena'))
+UNMODELED_ERROR_KM = 5.0
+
+
+def antenna_catalog(app, antex_files, callback):
+    """(tipo, radomo, fuente) de las antenas con modelo, leídas en segundo plano; las del ANTEX incluido una vez."""
+    core = app.backend.core
+    if core is None or not callable(getattr(core, 'antenna_catalog', None)):
+        callback([])
+        return
+    key = tuple(str(p) for p in antex_files)
+    cache = getattr(app, 'antenna_cache', None)
+    if cache is not None and cache[0] == key:
+        callback(cache[1])
+        return
+
+    def done(found):
+        app.antenna_cache = (key, list(found))
+        callback(app.antenna_cache[1])
+    tasks.run(app, lambda p, c: core.antenna_catalog(list(antex_files)), on_done=done,
+              on_error=lambda kind, message, detail: callback([]))
+
+
+class AntennaPanel(ttk.Frame):
+    """Antena, radomo y altura de un extremo («rover» o «base:<clave>»), guardados en `options.antennas`.
+
+    Por omisión, la antena de los datos (encabezado RINEX, producto Meridian o catálogo de la red). Se elige de la
+    lista con búsqueda (los nombres de la IGS son largos y parecidos) o se importa un `.atx` (calibración individual
+    de laboratorio, del NGS…), que se guarda en el proyecto y gana sobre el incluido. Si la antena no tiene modelo de
+    centro de fase, aviso rojo con más de 5 km de línea base y amarillo si es más corta.
+
+    Con `height_var` (el campo de altura de la página), el método de medida: vertical a la ARP, a la rosca o al gancho
+    (con su desplazamiento a la ARP; el del case en los Meridian) o inclinada al borde: √(s² − r²) − d, con r y d de
+    la tabla de la antena (con su fuente) o escritos por el usuario."""
+
+    def __init__(self, parent, app, options, role, changed, *, height_var=None, distance=None):
+        super().__init__(parent, style='Flat.Card.TFrame')
+        self.app, self.options, self.changed_cb = app, options, changed
+        self._role = role                    # texto o función (la clave de la base puede cambiar)
+        self.height_var, self.distance = height_var, distance
+        self.data = {'antenna_type': '', 'radome': 'NONE', 'case_offset': None, 'recording': False}
+        self.catalog: list[tuple[str, str, str]] = []
+        self.types: dict[str, list[tuple[str, str]]] = {}
+        self._loading = False
+        self._quiet = False                  # cambios hechos por el programa (datos leídos): no son del usuario
+        sel = self.selection()
+        self.columnconfigure(0, weight=3)
+        self.columnconfigure(1, weight=1)
+        ttk.Label(self, text='Antena', style='Card.Strong.TLabel').grid(row=0, column=0, sticky='w', pady=(0, 4))
+        ttk.Label(self, text='Radomo', style='Card.Strong.TLabel').grid(row=0, column=1, sticky='w', padx=(12, 0),
+                                                                       pady=(0, 4))
+        self.type_var = tk.StringVar(value=sel.antenna_type if sel and sel.antenna_type else FROM_DATA)
+        self.type_box = ttk.Combobox(self, textvariable=self.type_var)
+        self.type_box.grid(row=1, column=0, sticky='ew')
+        self.type_box.bind('<<ComboboxSelected>>', lambda e: self.pick_type())
+        self.type_box.bind('<KeyRelease>', self.filter)
+        self.type_box.bind('<Return>', lambda e: self.pick_type())
+        self.type_box.bind('<FocusOut>', lambda e: self.pick_type(quiet=True))
+        self.dome_var = tk.StringVar(value=sel.radome if sel and sel.radome else FROM_DATA)
+        self.dome_box = ttk.Combobox(self, textvariable=self.dome_var, width=10)
+        self.dome_box.grid(row=1, column=1, sticky='ew', padx=(12, 0))
+        self.dome_box.bind('<<ComboboxSelected>>', lambda e: self.pick_dome())
+        self.dome_box.bind('<Return>', lambda e: self.pick_dome())
+        self.dome_box.bind('<FocusOut>', lambda e: self.pick_dome())
+        actions = ttk.Frame(self, style='Flat.Card.TFrame')
+        actions.grid(row=2, column=0, columnspan=2, sticky='w', pady=(4, 0))
+        importer = ttk.Button(actions, text='Importar calibración (.atx)…', style='Card.Link.TButton',
+                              command=self.import_antex)
+        app.icons.bind(importer, 'file-up', 16)
+        importer.pack(side='left')
+        self.imported = ttk.Label(actions, text='', style='Card.Subtitle.TLabel')
+        self.imported.pack(side='left', padx=(12, 0))
+        self.forget = ttk.Button(actions, text='Quitar importados', style='Card.Link.TButton',
+                                 command=self.remove_imported)
+        self.status = wrap_label(self, style='Card.Subtitle.TLabel', margin=24)
+        self.status.grid(row=3, column=0, columnspan=2, sticky='ew', pady=(8, 0))
+        self.method_var = tk.StringVar(value=sel.height_method if sel else '')
+        self.mount_var = tk.StringVar(value='' if not sel or sel.mount_offset_m is None else f'{sel.mount_offset_m:.4f}')
+        self.radius_var = tk.StringVar(value='' if not sel or sel.slant_radius_m is None else
+                                       f'{sel.slant_radius_m:.4f}')
+        self.offset_var = tk.StringVar(value='' if not sel or sel.slant_offset_m is None else
+                                       f'{sel.slant_offset_m:.4f}')
+        self.dims_source = sel.dimensions_source if sel else ''
+        if height_var is not None:
+            self.build_height()
+        self.show_imported()
+        self.load()
+
+    # --- estado ---------------------------------------------------------------------------------------------
+
+    @property
+    def role(self) -> str:
+        return self._role() if callable(self._role) else self._role
+
+    def selection(self):
+        return self.options.antennas.get(self.role) if self.role else None
+
+    def set_data(self, antenna_type='', radome='NONE', *, case_offset=None, recording=False):
+        """Lo que traen los datos (RINEX, Meridian o catálogo): la antena por omisión y la rosca → ARP."""
+        self.data = {'antenna_type': antenna_type or '', 'radome': radome or 'NONE', 'case_offset': case_offset,
+                     'recording': recording}
+        self._quiet = True
+        try:
+            if self.height_var is not None and not self.method_var.get():
+                self.method_var.set('mount' if recording else 'arp')
+            self.show_method()
+            self.store()
+        finally:
+            self._quiet = False
+
+    def chosen(self) -> tuple[str, str]:
+        kind = self.type_var.get().strip()
+        dome = self.dome_var.get().strip().upper()
+        kind = self.data['antenna_type'] if not kind or kind == FROM_DATA else kind.split('·')[0].strip()
+        dome = self.data['radome'] if not dome or dome == FROM_DATA.upper() else dome
+        return kind, dome or 'NONE'
+
+    def store(self):
+        """Guarda la elección en `options.antennas[role]` (o la quita si todo es lo de los datos)."""
+        role = self.role
+        if not role:
+            return
+        from tresvizo_ppk.model import AntennaSelection
+        kind = self.type_var.get().strip()
+        dome = self.dome_var.get().strip().upper()
+        sel = AntennaSelection(antenna_type='' if kind in ('', FROM_DATA) else kind.split('·')[0].strip(),
+                               radome='' if dome in ('', FROM_DATA.upper()) else dome)
+        if self.height_var is not None:
+            from app.wizard import parse_number
+
+            def number(var):
+                try:
+                    return parse_number(var.get()) if var.get().strip() else None
+                except ValueError:
+                    return None
+            sel.height_method = self.method_var.get() or ('mount' if self.data['recording'] else 'arp')
+            sel.measured_m = number(self.height_var)
+            if sel.height_method == 'mount':
+                sel.mount_offset_m = number(self.mount_var)
+            elif sel.height_method == 'slant':
+                sel.slant_radius_m, sel.slant_offset_m = number(self.radius_var), number(self.offset_var)
+                sel.dimensions_source = self.dims_source
+        default = (not sel.antenna_type and not sel.radome and sel.measured_m is None)
+        last = getattr(self, '_last_role', None)
+        if last and last != role:
+            self.options.antennas.pop(last, None)      # la base cambió de clave: no dejar la elección vieja
+        self._last_role = role
+        if default:
+            self.options.antennas.pop(role, None)
+        elif self.options.antennas.get(role) != sel:
+            self.options.antennas[role] = sel
+        self.refresh()
+
+    def edited(self):
+        self.store()
+        self.changed_cb()
+
+    # --- catálogo -------------------------------------------------------------------------------------------
+
+    def load(self):
+        self._loading = True
+        antenna_catalog(self.app, self.options.antex_files, self.loaded)
+
+    def loaded(self, catalog):
+        if not self.winfo_exists():
+            return
+        self._loading = False
+        self.catalog = list(catalog)
+        self.types = {}
+        for kind, dome, source in self.catalog:
+            self.types.setdefault(kind.upper(), []).append((dome, source))
+        self.labels = [FROM_DATA] + sorted({f'{k} · {self.types[k.upper()][0][1]}' for k, _, _ in self.catalog})
+        self.type_box.configure(values=self.labels)
+        self.refresh()
+
+    def filter(self, event):
+        if event.keysym in ('Up', 'Down', 'Return', 'Escape', 'Tab'):
+            return
+        words = self.type_var.get().casefold().replace('·', ' ').split()
+        values = [label for label in getattr(self, 'labels', []) if all(w in label.casefold() for w in words)]
+        self.type_box.configure(values=values[:400] or [FROM_DATA])
+
+    def pick_type(self, quiet=False):
+        text = self.type_var.get().strip()
+        kind = text.split('·')[0].strip()
+        if text and text != FROM_DATA:
+            self.type_var.set(kind.upper())
+        domes = [d for d, _ in self.types.get(kind.upper(), [])]
+        self.dome_box.configure(values=[FROM_DATA] + sorted(set(domes) | {'NONE'}))
+        if self.height_var is not None and self.method_var.get() == 'slant' and \
+                self.dims_source != 'escritos por el usuario':
+            self.fill_dimensions(force=True)
+        self.edited()
+
+    def pick_dome(self):
+        text = self.dome_var.get().strip()
+        if text and text != FROM_DATA:
+            self.dome_var.set(text.upper()[:4])
+        self.edited()
+
+    def import_antex(self):
+        path = filedialog.askopenfilename(parent=self.app, title='Importar calibración de antena (ANTEX)',
+                                          filetypes=ANTEX_TYPES)
+        if not path:
+            return
+        core = self.app.backend.core
+        try:
+            found = core.read_antex(Path(path))
+        except Exception as exc:  # noqa: BLE001 - el motivo va al usuario
+            kind, message = tasks.classify(exc)
+            self.app.show_error(kind, message, '', 'Importar calibración de antena')
+            return
+        files = [p for p in self.options.antex_files if Path(p).resolve() != Path(path).resolve()]
+        self.options.antex_files[:] = [*files, Path(path)]
+        self.app.antenna_cache = None
+        if len(found) == 1:
+            self.type_var.set(found[0][0])
+            self.dome_var.set(found[0][1])
+        self.show_imported()
+        self.load()
+        self.edited()
+
+    def remove_imported(self):
+        self.options.antex_files[:] = []
+        self.app.antenna_cache = None
+        self.show_imported()
+        self.load()
+        self.edited()
+
+    def show_imported(self):
+        names = [Path(p).name for p in self.options.antex_files]
+        self.imported.configure(text=('Importados (ganan sobre el incluido): ' + ', '.join(names)) if names else '')
+        if names and not self.forget.winfo_manager():
+            self.forget.pack(side='left', padx=(12, 0))
+        elif not names:
+            self.forget.pack_forget()
+
+    def refresh(self):
+        """El modelo que se aplicaría y su aviso (rojo sin modelo a más de 5 km, amarillo si es más corta)."""
+        kind, dome = self.chosen()
+        if self.height_var is not None:
+            self.show_height()
+        if self._loading:
+            self.status.configure(text='Leyendo los modelos de antena…', style='Card.Subtitle.TLabel')
+            return
+        if not kind:
+            self.status.configure(text='Los datos no declaran la antena: elígela de la lista para aplicar su modelo '
+                                       'de centro de fase.', style='warning.TLabel')
+            return
+        entries = dict(self.types.get(kind.upper(), []))
+        km = self.distance() / 1000 if callable(self.distance) and self.distance() is not None else None
+        if dome.upper() in entries:
+            self.status.configure(text=f'Modelo {kind} {dome} · {entries[dome.upper()]}', style='Card.Subtitle.TLabel')
+        elif 'NONE' in entries:
+            self.status.configure(text=f'{kind} con radomo {dome} no está en ningún ANTEX: se usa {kind} NONE · '
+                                       f'{entries["NONE"]} (diferencia típica de 1 a 3 mm en la vertical).',
+                                  style='warning.TLabel')
+        elif km is not None and km > UNMODELED_ERROR_KM:
+            self.status.configure(text=f'{kind} {dome} no tiene modelo de centro de fase y la línea base mide '
+                                       f'{km:.1f} km: la vertical puede tener un error de varios centímetros. Elige '
+                                       'la antena correcta o importa su calibración (.atx).', style='error.TLabel')
+        else:
+            self.status.configure(text=f'{kind} {dome} no tiene modelo de centro de fase: se procesa con PCO/PCV 0. '
+                                       'En una línea corta con antenas iguales se cancela en parte; si pasa de 5 km, '
+                                       'el error es de centímetros en la vertical.', style='warning.TLabel')
+
+    # --- altura ---------------------------------------------------------------------------------------------
+
+    def build_height(self):
+        from app.components import FlowFrame, LabeledEntry
+        ttk.Label(self, text='Cómo se midió la altura', style='Card.Strong.TLabel').grid(row=4, column=0, columnspan=2,
+                                                                                     sticky='w', pady=(12, 4))
+        row = FlowFrame(self, style='Flat.Card.TFrame', gap=18)
+        row.grid(row=5, column=0, columnspan=2, sticky='ew')
+        for value, text in HEIGHT_METHOD_TEXT:
+            row.add(ttk.Radiobutton(row, text=text, value=value, variable=self.method_var, style='Card.TRadiobutton',
+                                    command=self.method_changed))
+        self.fields = ttk.Frame(self, style='Flat.Card.TFrame')
+        self.fields.grid(row=6, column=0, columnspan=2, sticky='ew', pady=(8, 0))
+        self.fields.columnconfigure((0, 1), weight=1, uniform='antenna')
+        self.mount_field = LabeledEntry(self.fields, 'De la rosca o el gancho a la ARP (m)', self.mount_var,
+                                        'En los Meridian, el del case (lo pone el programa); en las antenas del ANTEX '
+                                        'la ARP suele ser la base de la rosca (0).')
+        self.radius_field = LabeledEntry(self.fields, 'Radio r de la antena (m)', self.radius_var,
+                                         'Del eje al borde donde se apoya la cinta.')
+        self.offset_field = LabeledEntry(self.fields, 'Desfase d del borde a la ARP (m)', self.offset_var,
+                                         'Lo que ese borde está arriba de la ARP (negativo si está abajo).')
+        self.source_label = wrap_label(self.fields, style='Card.Subtitle.TLabel', margin=8)
+        self.result_label = ttk.Label(self, text='', style='Card.TLabel', justify='left')
+        self.result_label.grid(row=7, column=0, columnspan=2, sticky='w', pady=(8, 0))
+        self.mount_var.trace_add('write', lambda *a: self.store() if self._quiet else self.edited())
+        for var in (self.radius_var, self.offset_var):
+            var.trace_add('write', lambda *a: self.store() if self._quiet else self.dimensions_edited())
+        self.height_var.trace_add('write', lambda *a: self.store())
+        self._quiet = True
+        try:
+            self.show_method()
+        finally:
+            self._quiet = False
+
+    def dimensions_edited(self):
+        """r o d escritos a mano: la fuente es la de la tabla solo si siguen siendo los de la tabla."""
+        core = self.app.backend.core
+        kind, _ = self.chosen()
+        dims = core.slant_dimensions(kind) if core is not None and callable(getattr(core, 'slant_dimensions', None)) \
+            else None
+        same = dims is not None and self.radius_var.get().strip() == f'{dims["radius_m"]:.4f}' and \
+            self.offset_var.get().strip() == f'{dims["offset_m"]:.4f}'
+        self.dims_source = dims['source'] if same else 'escritos por el usuario'
+        self.edited()
+
+    def method_changed(self):
+        if self.method_var.get() == 'slant':
+            self.fill_dimensions()
+        self.show_method()
+        self.edited()
+
+    def fill_dimensions(self, force=False):
+        """r y d de la tabla de la antena (con su fuente), si están y el usuario no escribió otros."""
+        core = self.app.backend.core
+        kind, _ = self.chosen()
+        dims = core.slant_dimensions(kind) if core is not None and callable(getattr(core, 'slant_dimensions', None)) \
+            else None
+        if dims and (force or not (self.radius_var.get().strip() or self.offset_var.get().strip())):
+            self.dims_source = dims['source']
+            self._quiet = True
+            try:
+                self.radius_var.set(f'{dims["radius_m"]:.4f}')
+                self.offset_var.set(f'{dims["offset_m"]:.4f}')
+            finally:
+                self._quiet = False
+        elif not dims and not self.dims_source:
+            self.dims_source = ''
+
+    def show_method(self):
+        if not hasattr(self, 'fields'):
+            return
+        method = self.method_var.get() or 'arp'
+        for widget in (self.mount_field, self.radius_field, self.offset_field, self.source_label):
+            widget.grid_forget()
+        if method == 'mount':
+            if not self.mount_var.get().strip() and self.data['case_offset'] is not None:
+                self.mount_var.set(f'{self.data["case_offset"]:.4f}')
+            self.mount_field.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
+        elif method == 'slant':
+            self.radius_field.grid(row=0, column=0, sticky='nsew', padx=(0, 12))
+            self.offset_field.grid(row=0, column=1, sticky='nsew', padx=(12, 0))
+            self.source_label.grid(row=1, column=0, columnspan=2, sticky='w', pady=(6, 0))
+
+    def show_height(self):
+        """La altura vertical a la ARP que va a usar el proceso, o qué falta para calcularla."""
+        if not hasattr(self, 'result_label'):
+            return
+        method = self.method_var.get() or 'arp'
+        sel = self.selection()
+        if method == 'slant':
+            self.source_label.configure(text=(f'Fuente de r y d: {self.dims_source}' if self.dims_source else
+                                              'r y d escritos a mano (la antena no está en la tabla: tómalos de la '
+                                              'hoja del fabricante).'))
+        core = self.app.backend.core
+        if sel is None or sel.measured_m is None or core is None or not callable(getattr(core, 'vertical_height',
+                                                                                        None)):
+            self.result_label.configure(text='')
+            return
+        try:
+            height = core.vertical_height(sel, self.data['case_offset'] if self.data['case_offset'] is not None
+                                          else 0.0)
+        except Exception as exc:  # noqa: BLE001 - el motivo (UserError) se muestra junto al campo
+            self.result_label.configure(text=str(exc), style='error.TLabel')
+            return
+        self.result_label.configure(text=f'Altura vertical a la ARP: {height:.4f} m', style='Card.TLabel')
 
 
 class OptionsPanel(ttk.Frame):

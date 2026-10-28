@@ -18,8 +18,8 @@ from app.components import DropZone, FileList, LabeledEntry, Tooltip, card, late
 from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import MAX_BASES, ROVER_STATION_M, BaseEntry, StaticJob, classify
-from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text,
-                           station_label)
+from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, AntennaPanel, BasePanel, OptionsPanel, WizardPage,
+                           ecef_text, station_label)
 
 RECORDING_TYPES = [('Grabación del receptor o RINEX', '*.bin *.part *.obs *.nav *.rnx *.crx *.??o *.??d *.??n *.Z '
                     '*.gz *.zip'), ('Todos los archivos', '*')]
@@ -80,6 +80,13 @@ class StaticPage(ExportActions, WizardPage):
         self.point_fields = (name, height, code, description)
         inner.bind('<Configure>', lambda e: self.arrange_point(e.width), add='+')
         self.arrange_point(900)
+        frame, inner = card(body, 'Antena y altura',
+                            'La antena del rover (por omisión, la de la grabación o el RINEX) y cómo se midió la altura '
+                            'de arriba.')
+        frame.pack(fill='x', pady=(16, 0))
+        self.rover_antenna = AntennaPanel(inner, self.app, self.job.options, 'rover', self.changed,
+                                          height_var=self.height_var, distance=self.longest_baseline)
+        self.rover_antenna.pack(fill='x')
         self.set_rover(self.job.rover_files, notify=False)
         self.name_var.trace_add('write', lambda *a: self.edit(point_name=self.name_var.get()))
         self.height_var.trace_add('write', lambda *a: self.edit(pole_height=self.height_var.get()))
@@ -122,6 +129,8 @@ class StaticPage(ExportActions, WizardPage):
         self.autofill(self.name_var, self.name_field, getattr(obs, 'point_name', '') or obs.marker,
                       self.origin_text(obs, 'point_name', origin))
         pole = self.pole_from(obs)
+        self.rover_antenna.set_data(obs.antenna_type, obs.radome, case_offset=obs.case_offset_m,
+                                    recording=recording or pole is not None)
         if recording or pole is not None:
             self.height_field.title.configure(text='Altura del bastón o trípode (m)')
             self.height_field.hint.configure(text=self.POLE_HINT)
@@ -133,6 +142,14 @@ class StaticPage(ExportActions, WizardPage):
             self.autofill(self.height_var, self.height_field, f'{obs.antenna_height_m:.4f}',
                           self.origin_text(obs, 'antenna_height_m', origin))
         self.refresh()      # la estación del propio rover ya se reconoce en el paso de las bases
+
+    def longest_baseline(self, entry=None) -> float | None:
+        """Distancia aproximada del rover a una estación (o a la más lejana), para el aviso de antena sin modelo."""
+        from app.wizard import distance_m
+        position = self.job.rover_position
+        stations = [entry.station] if entry is not None else [b.station for b in self.job.bases]
+        found = [distance_m(position, s.position) for s in stations if s is not None and position is not None]
+        return max(found) if found else None
 
     def edit(self, **values):
         for key, value in values.items():
@@ -284,7 +301,8 @@ class StaticPage(ExportActions, WizardPage):
         for index, entry in enumerate(self.job.bases):
             remove = (lambda i=index: self.remove_base(i)) if len(self.job.bases) > 1 else None
             BasePanel(self.base_panels, self.app, entry, f'Estación {index+1}', self.changed, remove,
-                      guide=self.network_guide, inspect=self.inspect).pack(fill='x', pady=(16, 0))
+                      guide=self.network_guide, inspect=self.inspect, options=self.job.options,
+                      distance=self.longest_baseline).pack(fill='x', pady=(16, 0))
         self.add_base_button.state(['disabled'] if len(self.job.bases) >= MAX_BASES else ['!disabled'])
         self.app.theme.walk(self.base_panels)
 

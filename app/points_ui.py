@@ -17,8 +17,8 @@ from app.components import DropZone, FileList, LabeledEntry, ThinScrollbar, card
 from app.formatting import dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
 from app.wizard import COMMON_FRAMES, PointsJob, classify, distance_m, epoch_text
-from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, BasePanel, OptionsPanel, WizardPage, ecef_text,
-                           network_catalog, station_label)
+from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, AntennaPanel, BasePanel, OptionsPanel, WizardPage,
+                           ecef_text, network_catalog, station_label)
 from app.static_ui import RECORDING_TYPES
 from app.export_ui import CUSTOM_CSV_LABEL, POINT_FORMATS, ExportActions, csv_options
 from tresvizo_ppk.export.columnas import PPK_COLUMNS
@@ -62,7 +62,8 @@ class PointsPage(ExportActions, WizardPage):
         guide.pack(fill='x', pady=(16, 0))
         wrap_label(g, NETWORK_GUIDE, style='Card.Subtitle.TLabel', margin=40).pack(fill='x')
         self.rgna_panel = BasePanel(self.rgna_frame, self.app, self.job.base, 'Estación de referencia', self.changed,
-                                    guide=self.network_guide, inspect=self.inspect)
+                                    guide=self.network_guide, inspect=self.inspect, options=self.job.options,
+                                    role='base')
         self.rgna_panel.pack(fill='x', pady=(16, 0))
         self.own_frame = ttk.Frame(body)
         self.build_own(self.own_frame)
@@ -88,6 +89,9 @@ class PointsPage(ExportActions, WizardPage):
         self.own_height_field.grid(row=0, column=1, sticky='nsew', padx=(12, 0))
         self.own_name.trace_add('write', lambda *a: self.edit(own_name=self.own_name.get()))
         self.own_height.trace_add('write', lambda *a: self.edit(own_height=self.own_height.get()))
+        self.own_antenna = AntennaPanel(inner, self.app, self.job.options, 'base', self.changed,
+                                        height_var=self.own_height)
+        self.own_antenna.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(16, 0))
         frame, inner = card(parent, 'Coordenada de la base',
                             'Por omisión, la aproximada que trae la grabación. Para ligar los puntos a una red, '
                             'georreferencia antes la base con «Georreferenciar punto» y elige ese proyecto.')
@@ -249,6 +253,8 @@ class PointsPage(ExportActions, WizardPage):
         self.autofill(self.own_name, self.own_name_field, getattr(obs, 'point_name', '') or obs.marker,
                       self.origin_text(obs, 'point_name', origin))
         pole = self.pole_from(obs)
+        self.own_antenna.set_data(obs.antenna_type, obs.radome, case_offset=obs.case_offset_m,
+                                  recording=origin.startswith('de la sesión') or pole is not None)
         if origin.startswith('de la sesión') or pole is not None:
             self.own_height_field.title.configure(text='Altura del bastón o trípode (m)')
             self.own_height_field.hint.configure(text='Vertical, del punto a la rosca del receptor.')
@@ -407,6 +413,8 @@ class PointsPage(ExportActions, WizardPage):
         self.rover_list = FileList(inner, self.app, self.set_rover)
         self.rover_info = ttk.Label(inner, text='', style='Card.Subtitle.TLabel', justify='left')
         inner.bind('<Configure>', lambda e: self.rover_info.configure(wraplength=max(200, e.width-20)), add='+')
+        self.rover_antenna = AntennaPanel(inner, self.app, self.job.options, 'rover', self.changed)
+        self.rover_antenna.pack(fill='x', pady=(12, 0))
         self.set_rover(self.job.rover_files, notify=False)
         frame, inner = card(body, 'Puntos de TresVizo Field',
                             'El CSV que exportó la app de esa jornada: nombre, código, inicio y fin de cada ocupación y '
@@ -443,6 +451,8 @@ class PointsPage(ExportActions, WizardPage):
         self.rover_info.pack_forget()
         if paths:
             def shown(obs, files=list(paths)):
+                # la altura del rover es la de cada punto del CSV; de aquí solo cuenta la antena
+                self.rover_antenna.set_data(obs.antenna_type, obs.radome)
                 approx = self.approx_text(obs)
                 self.rover_info.configure(text=f'{self.obs_summary(obs)} · {self.origin_of(files)}'
                                                + (f'\n{approx}' if approx else ''))

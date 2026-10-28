@@ -197,6 +197,22 @@ def _text_issues(field_name: str, text: str, what: str, limit: int) -> list[Issu
     return []
 
 
+def antenna_issues(options: ProcessingOptions, role: str, field_name: str) -> list[Issue]:
+    """La altura inclinada necesita el radio y el desfase de la antena, y ser mayor que el radio."""
+    sel = options.antennas.get(role)
+    if sel is None or sel.height_method != 'slant' or sel.measured_m is None:
+        return []
+    r, d = sel.slant_radius_m, sel.slant_offset_m
+    if r is None or not 0 < r < 1:
+        return [Issue(field_name, 'Altura inclinada: escribe el radio r de la antena (del eje al borde, en metros).')]
+    if d is None or abs(d) > 1:
+        return [Issue(field_name, 'Altura inclinada: escribe el desfase d del borde a la ARP (en metros).')]
+    if sel.measured_m <= r:
+        return [Issue(field_name, f'La altura inclinada ({sel.measured_m:.3f} m) tiene que ser mayor que el radio de '
+                                  f'la antena ({r:.3f} m).')]
+    return []
+
+
 def options_issues(options: ProcessingOptions, precise_download: bool) -> list[Issue]:
     found = []
     if not 0 <= options.elevation_mask_deg <= 30:
@@ -284,7 +300,8 @@ class StaticJob:
             return found+_name_issues('point_name', self.point_name, 'del punto') + \
                 _height_issues('pole_height', self.pole_height, 'del bastón o trípode') + \
                 _text_issues('point_code', self.point_code, 'El código', 40) + \
-                _text_issues('point_description', self.point_description, 'La descripción', 200)
+                _text_issues('point_description', self.point_description, 'La descripción', 200) + \
+                antenna_issues(self.options, 'rover', 'pole_height')
         if step == 1:
             found = []
             if not self.bases:
@@ -338,6 +355,8 @@ class StaticJob:
                 files['base:'+base.station.id] = list(base.files)
         if self.options.precise_files:
             files['precise'] = list(self.options.precise_files)
+        if self.options.antex_files:
+            files['antex'] = list(self.options.antex_files)
         return files
 
     def to_project(self, project: Project | None = None) -> Project:
@@ -443,6 +462,7 @@ class PointsJob:
             found = _files_issues('base', self.base.files, 'la grabación de la base o su RINEX', ROVER_KINDS)
             found += _name_issues('own_name', self.own_name, 'de la base')
             found += _height_issues('own_height', self.own_height, 'de la base')
+            found += antenna_issues(self.options, 'base', 'own_height')
             if self.own_source == 'rinex':
                 if self.base.files and self.rinex_position is None:
                     found.append(Issue('own_coord', 'La grabación de la base no trae posición aproximada: elige un '
@@ -537,6 +557,8 @@ class PointsJob:
             files['csv'] = [self.csv_file]
         if self.options.precise_files:
             files['precise'] = list(self.options.precise_files)
+        if self.options.antex_files:
+            files['antex'] = list(self.options.antex_files)
         return files
 
     def to_project(self, project: Project | None = None, folder: Path | None = None) -> Project:

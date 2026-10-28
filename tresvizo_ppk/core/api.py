@@ -211,5 +211,41 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
     return result
 
 
+# --- Antenas (§1.1.1) ------------------------------------------------------------------------------------------------
+
+def antenna_catalog(antex_files: list[Path] | None = None) -> list[tuple[str, str, str]]:
+    """(tipo, radomo, fuente) de todas las antenas de receptor con modelo: las de los ANTEX importados primero (ganan),
+    las del incluido (IGS y NGS) y las de los paquetes de red."""
+    return [(m.type, m.radome, m.source) for m in antex.catalog(antex_files or [])]
+
+
+def read_antex(path: Path) -> list[tuple[str, str, str]]:
+    """Valida un ANTEX que importa el usuario y da sus antenas (tipo, radomo, fuente); UserError si no sirve."""
+    try:
+        return [(m.type, m.radome, m.source) for m in antex.read_antex_file(Path(path))]
+    except antex.AntexError as error:
+        raise UserError(str(error)) from error
+
+
+def antenna_status(antenna_type: str, radome: str, length_m: float | None = None,
+                   antex_files: list[Path] | None = None, role: str = ""):
+    """El modelo que se aplicaría a esa antena (`model.AntennaInfo`: modelo, fuente, nivel del aviso)."""
+    with antex.session(antex_files or []):
+        return antenas.info(role or "Antena", antenna_type, radome, height_m=None, height_text_="", length_m=length_m)
+
+
+def slant_dimensions(antenna_type: str) -> dict | None:
+    """Radio y desfase de la antena para la altura inclinada, con su fuente, si están en la tabla."""
+    return antenas.slant_dimensions(antenna_type)
+
+
+def vertical_height(selection, mount_offset_m: float | None = None) -> float:
+    """Altura vertical a la ARP según el método de medida; UserError con el motivo si los datos no alcanzan."""
+    try:
+        return antenas.vertical_height(selection, mount_offset_m=mount_offset_m)
+    except ValueError as error:
+        raise UserError(str(error)) from error
+
+
 def engine_version() -> str:
     return tools.RTKLIB_VERSION
