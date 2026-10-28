@@ -33,6 +33,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -175,8 +176,18 @@ def make_dmg(app: Path, output: Path):
         run('ditto', app, stage/APP_BUNDLE)
         os.symlink('/Applications', stage/'Aplicaciones')
         (stage/'Cómo abrirla.txt').write_text(MAC_HELP.format(version=VERSION, file=output.name), encoding='utf-8')
-        run('hdiutil', 'create', '-volname', f'TresVizo Field PPK {VERSION}', '-srcfolder', stage, '-ov',
-            '-format', 'UDZO', '-fs', 'HFS+', output)
+        # «hdiutil: create failed - Resource busy» sale de vez en cuando (en la CI de GitHub, mientras el sistema aún
+        # revisa los archivos recién copiados) y al reintentar pasa: hasta cinco intentos con espera creciente.
+        for attempt in range(1, 6):
+            try:
+                run('hdiutil', 'create', '-volname', f'TresVizo Field PPK {VERSION}', '-srcfolder', stage, '-ov',
+                    '-format', 'UDZO', '-fs', 'HFS+', output)
+                return
+            except subprocess.CalledProcessError:
+                if attempt == 5:
+                    raise
+                print(f'hdiutil falló (intento {attempt} de 5); se reintenta en {10*attempt} s', flush=True)
+                time.sleep(10*attempt)
 
 
 def windows_help_name(version: str = VERSION) -> str:

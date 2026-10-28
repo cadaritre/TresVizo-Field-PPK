@@ -176,3 +176,25 @@ def test_notas_de_la_version_con_la_sha256(tmp_path):
     (tmp_path/'TresVizo-Field-PPK-1.2.3-x64.msi').write_bytes(b'alterado')
     with pytest.raises(SystemExit, match='no cuadra'):
         distribuir.release_notes('1.2.3', tmp_path, changelog)
+
+
+def test_dmg_reintenta_si_hdiutil_esta_ocupado(tmp_path, monkeypatch):
+    """«hdiutil: create failed - Resource busy» (visto en la CI de GitHub) se reintenta; al quinto fallo se rinde."""
+    calls = []
+
+    def fake_run(*args, **kwargs):
+        calls.append(args[0])
+        if args[0] == 'hdiutil' and calls.count('hdiutil') < 3:
+            raise subprocess.CalledProcessError(1, args)
+
+    monkeypatch.setattr(distribuir, 'run', fake_run)
+    monkeypatch.setattr(distribuir.time, 'sleep', lambda s: None)
+    distribuir.make_dmg(tmp_path/'App.app', tmp_path/'salida.dmg')
+    assert calls.count('hdiutil') == 3
+
+    calls.clear()
+    monkeypatch.setattr(distribuir, 'run', lambda *a, **k: (calls.append(a[0]), (_ for _ in ()).throw(
+        subprocess.CalledProcessError(1, a)) if a[0] == 'hdiutil' else None))
+    with pytest.raises(subprocess.CalledProcessError):
+        distribuir.make_dmg(tmp_path/'App.app', tmp_path/'salida.dmg')
+    assert calls.count('hdiutil') == 5
