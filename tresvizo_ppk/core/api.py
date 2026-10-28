@@ -12,13 +12,16 @@ from __future__ import annotations
 
 import math
 import threading
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 from ..errors import UserError
-from ..model import (DataQuality, Ecef, FieldPoint, ObservationSet, PointsResult, ProcessingOptions, StaticResult,
-                     Station)
-from . import antenas, antex, basecoord, field_csv, networks, observations, points, precise, quality, static, tools
+from ..model import (DataQuality, Ecef, FieldPoint, NetworkFixChoice, NetworkOccupation, NetworkOptions,
+                     NetworkStaticResult, ObservationSet, PointsResult, ProcessingOptions, ProjectTolerances,
+                     StaticResult, Station)
+from . import (antenas, antex, basecoord, field_csv, networks, observations, points, precise, quality, static,
+               static_network, tools)
 
 Progress = tools.Progress
 
@@ -152,6 +155,74 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
         extra_warnings += antenas.own_processor_gaps(result.antennas, result.baselines)
     result.warnings = _antenna_warnings(result.antennas, extra_warnings) + list(getattr(result, "warnings", []))
     return result
+
+
+# --- Estático de varios puntos (red) ----------------------------------------------------------------------------------
+
+def network_occupations(receiver: str, csv_path: Path, rover: ObservationSet | None = None):
+    """Las ocupaciones estáticas (de al menos 10 min) del CSV de TresVizo Field de un receptor y los avisos de las
+    filas que no sirven (`static_network.occupations_from_field`)."""
+    parsed = field_csv.read_field_csv(Path(csv_path))
+    occupations, notes = static_network.occupations_from_field(parsed, receiver, rover)
+    if not occupations:
+        raise UserError("El CSV no tiene ocupaciones estáticas (de al menos 10 minutos): para puntos cortos usa «PPK "
+                        "de puntos».")
+    return occupations, notes
+
+
+def process_network(rovers: dict[str, ObservationSet], occupations: list[NetworkOccupation],
+                    bases: list[tuple[Station, ObservationSet]], options: ProcessingOptions, workdir: Path,
+                    progress: Progress | None = None, cancel: threading.Event | None = None, *,
+                    fix: list[NetworkFixChoice] | None = None, network_options: NetworkOptions | None = None,
+                    line_choices: dict[str, str] | None = None,
+                    tolerances: ProjectTolerances | None = None) -> NetworkStaticResult:
+    """Estático de varios puntos: cada ocupación contra cada estación y contra las ocupaciones simultáneas de otros
+    receptores, y el ajuste de red. La antena de cada receptor es «rover:<clave>» (o «rover») de `options.antennas`;
+    la altura, la de cada ocupación."""
+    for key, obs in rovers.items():
+        for station, base_obs in bases:
+            if _same_recording(obs, base_obs):
+                raise UserError(f"La estación {station.id} usa los mismos archivos que el receptor {key}: una línea "
+                                "base necesita dos receptores distintos.")
+    applied = {}
+    for key, obs in rovers.items():
+        selection = options.antennas.get(f"rover:{key}") or options.antennas.get("rover")
+        local = replace(options, antennas={**options.antennas, "rover": selection} if selection else
+                        {k: v for k, v in options.antennas.items() if k != "rover"})
+        applied[key], _ = _apply_rover(obs, local, use_height=False)
+    chosen, extra_warnings = _apply_bases(bases, options)
+    bases = [(station, obs) for station, obs, _ in chosen]
+    from .baseline import base_antenna
+    needed = antenas.needed_keys([(o.antenna_type, o.radome) for o in applied.values()] +
+                                 [base_antenna(station, obs, [])[:2] for station, obs in bases])
+    with antex.session(options.antex_files, needed):
+        result = static_network.process_network(applied, occupations, bases, options, Path(workdir),
+                                                fix=fix, network_options=network_options, line_choices=line_choices,
+                                                tolerances=tolerances, progress=progress, cancel=cancel)
+        for line in result.lines:
+            if line.baseline.length_m < MIN_BASELINE_M:
+                raise UserError(f"La línea {line.id} mide {line.baseline.length_m:.2f} m: los dos extremos son el "
+                                "mismo punto. Quita esa estación o cambia el nombre del punto.")
+        longest = max((ln.baseline.length_m for ln in result.lines), default=None)
+        infos = [antenas.info(f"Receptor {key}", o.antenna_type, o.radome, height_m=None,
+                              height_text_="la de cada ocupación", length_m=longest,
+                              meridian=bool(o.receiver_model)) for key, o in applied.items()]
+        for station, obs, text in chosen:
+            kind, dome, height = base_antenna(station, obs, [])
+            lengths = [ln.baseline.length_m for ln in result.lines if ln.from_id == station.id]
+            infos.append(antenas.info(f"Base {station.id}", kind, dome, height_m=height, height_text_=text,
+                                      length_m=max(lengths) if lengths else None,
+                                      meridian=bool(obs.receiver_model)))
+        result.antennas = infos
+    result.warnings = _antenna_warnings(result.antennas, extra_warnings) + list(result.warnings)
+    return result
+
+
+def readjust_network(result: NetworkStaticResult, fix: list[NetworkFixChoice] | None = None,
+                     network_options: NetworkOptions | None = None, line_choices: dict[str, str] | None = None,
+                     tolerances: ProjectTolerances | None = None) -> NetworkStaticResult:
+    """Otra elección de fijas, de líneas o de opciones del ajuste, sin volver a procesar."""
+    return static_network.readjust(result, fix, network_options, line_choices, tolerances)
 
 
 def _apply_rover(rover: ObservationSet, options: ProcessingOptions, use_height: bool = True):

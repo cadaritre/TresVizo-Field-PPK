@@ -14,6 +14,12 @@ red con eso, sin RTKLIB.
 Uso:
     python scripts/red_rgna.py --datos DIR_RGNA_20260715 --precisas DIR_SP3_CLK --referencia oos_ref_196.json \
         --trabajo DIR_TRABAJO [--salida tests/core/data/red_rgna_2026196.json]
+    python scripts/red_rgna.py … --proyecto [--salida resumen.json]
+
+Con `--proyecto` la misma campaña pasa por el motor del proyecto «network» (`core.api.process_network`): las tres
+estaciones nuevas son receptores con su grabación del día y sus ocupaciones (los tramos de las sesiones), y el motor
+decide qué líneas procesar (cada ocupación contra cada estación y entre ocupaciones simultáneas, de cualquier
+longitud). Imprime y guarda el resumen contra las oficiales y el PPP del día.
 
 DIR_RGNA_20260715 tiene una carpeta por estación con los ZIP horarios tal como los entrega el INEGI; DIR_SP3_CLK, el
 SP3 y el CLK finales de la ESA del día, descomprimidos. Los intermedios de `--trabajo` se borran al terminar.
@@ -56,7 +62,10 @@ def main() -> int:
     parser.add_argument("--referencia", type=Path, required=True)
     parser.add_argument("--trabajo", type=Path, required=True)
     parser.add_argument("--salida", type=Path, default=ROOT / "tests" / "core" / "data" / "red_rgna_2026196.json")
+    parser.add_argument("--proyecto", action="store_true", help="por el motor del proyecto «network»")
     args = parser.parse_args()
+    if args.proyecto:
+        return project_run(args)
     ids = CONTROL + NEW
     stations = {sid: find_station(sid) for sid in ids}
     reference = json.loads(args.referencia.read_text(encoding="utf-8"))
@@ -115,6 +124,74 @@ def main() -> int:
     shutil.rmtree(work, ignore_errors=True)
     print(f"Listo en {time.monotonic() - t0:.0f} s: {len(vectors)} líneas en {args.salida}", flush=True)
     return 0
+
+
+def project_run(args) -> int:
+    import numpy as np
+    from tresvizo_ppk.core import api
+    from tresvizo_ppk.core.geodesy import ecef_delta_to_enu
+    from tresvizo_ppk.model import NetworkFixChoice, NetworkOccupation
+    ids = CONTROL + NEW
+    stations = {sid: find_station(sid) for sid in ids}
+    reference = {k: np.array(v) for k, v in json.loads(args.referencia.read_text(encoding="utf-8")).items()}
+    work = args.trabajo
+    work.mkdir(parents=True, exist_ok=True)
+    print("Preparando las observaciones del día…", flush=True)
+    full = {sid: prepare_observations(sorted((args.datos / sid).glob("*.zip")), work / "dia" / sid) for sid in ids}
+    occupations = []
+    for session, (hour, lines) in SESSIONS.items():
+        start = DAY + timedelta(hours=hour)
+        present = {p for text in lines for p in text.split(">")}
+        for sid in NEW:
+            if sid in present:
+                occupations.append(NetworkOccupation(sid, sid, start, start + timedelta(hours=HOURS),
+                                                     source=f"sesión {session}"))
+    options = ProcessingOptions(ephemeris=Ephemeris.PRECISE, precise_files=sorted(args.precisas.glob("*ORB.SP3")))
+    t0 = time.monotonic()
+    rovers = {sid: full[sid] for sid in NEW}
+    bases = [(stations[s], full[s]) for s in CONTROL]
+    summary = {}
+    result = api.process_network(rovers, occupations, bases, options, work / "proceso",
+                                 progress=lambda f, m: None)
+    elapsed = time.monotonic() - t0
+    for label, fix in (("todas", None), ("sin INEG", [NetworkFixChoice("INEG", "check"),
+                                                      NetworkFixChoice("ISLP"), NetworkFixChoice("UQRO")])):
+        r = api.readjust_network(result, fix=fix) if fix else result
+        net = r.network
+        fixed = [s for s in CONTROL if not fix or s != "INEG"]
+        motion = np.mean([reference[s] - np.array(full_xyz(stations[s])) for s in fixed], axis=0)
+        rows = {}
+        for p in r.points:
+            x = np.array([p.position.x, p.position.y, p.position.z])
+            off = np.array(full_xyz(stations[p.name]))
+            truth = off + (reference[p.name] - off) - motion
+            rows[p.name] = {"menos_oficial_mm": [round(v * 1000, 1) for v in ecef_delta_to_enu(off, x - off)],
+                            "menos_verdad_mm": [round(v * 1000, 1) for v in ecef_delta_to_enu(off, x - truth)],
+                            "sigma_mm": [round(v * 1000, 1) for v in (p.sigma_enu.e, p.sigma_enu.n, p.sigma_enu.u)]}
+        m, c = net.minimal, net.constrained
+        summary[label] = {
+            "lineas": len(r.lines), "fallidas": r.failed_lines,
+            "solucion": {ln.id: (ln.baseline.solution.value, round(ln.baseline.length_m / 1000, 1),
+                                 ln.baseline.engine) for ln in r.lines},
+            "triviales": [v.id for v in net.vectors if v.trivial],
+            "bucles": [(lp.points, round(lp.closure_h_m * 1000, 1), round(lp.closure_v_m * 1000, 1),
+                        lp.status.level) for lp in net.loops],
+            "minimo": {"chi2": round(m.chi2, 2), "limite": round(m.chi2_upper, 2), "gl": m.degrees_of_freedom,
+                       "sigma0": round(m.sigma0, 3), "marcadas": m.flagged},
+            "restringido": None if c is None else {"chi2": round(c.chi2, 2), "limite": round(c.chi2_upper, 2),
+                                                   "gl": c.degrees_of_freedom, "sigma0": round(c.sigma0, 3),
+                                                   "marcadas": c.flagged},
+            "control_inconsistente": net.inconsistent_control, "puntos": rows}
+    summary["segundos"] = round(elapsed, 1)
+    text = json.dumps(summary, ensure_ascii=False, indent=1)
+    print(text)
+    args.salida.write_text(text, encoding="utf-8")
+    shutil.rmtree(work, ignore_errors=True)
+    return 0
+
+
+def full_xyz(station):
+    return [station.position.x, station.position.y, station.position.z]
 
 
 if __name__ == "__main__":
