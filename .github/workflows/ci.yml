@@ -46,7 +46,8 @@ jobs:
       - name: Pruebas
         shell: bash
         run: |
-          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a python -m pytest -q; else python -m pytest -q; fi
+          # Si una prueba se cuelga, a los 4 min se vuelca dónde está cada hilo (para saber cuál y en qué línea).
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a python -m pytest -q -o faulthandler_timeout=240; else python -m pytest -q -o faulthandler_timeout=240; fi
 
   instaladores:
     name: Instalador (${{ matrix.name }})
