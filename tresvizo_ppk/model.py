@@ -614,6 +614,7 @@ class Project:
     folder: Path | None = None
     inputs: dict[str, list[str]] = field(default_factory=dict)   # rutas relativas por papel («rover», «base:CHIH»…)
     hashes: dict[str, str] = field(default_factory=dict)         # ruta relativa → SHA-256
+    sizes: dict[str, int] = field(default_factory=dict)          # ruta relativa → bytes (para volver a encontrarlo)
     options: ProcessingOptions = field(default_factory=ProcessingOptions)
     coordinates: CoordinateChoice = field(default_factory=CoordinateChoice)
     pole_height_m: float = 0.0
