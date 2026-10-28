@@ -13,8 +13,8 @@ from dataclasses import asdict, dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 
-from .model import (HEIGHT_METHODS, AntennaSelection, CoordinateChoice, Ecef, Enu, Ephemeris, ProcessingOptions,
-                    Project, Station)
+from .model import (HEIGHT_METHODS, AntennaSelection, ControlCoordinate, CoordinateChoice, Ecef, Enu, Ephemeris,
+                    ProcessingOptions, Project, ProjectTolerances, Station)
 
 SUFFIX = ".tvppk"
 FORMAT = "tresvizo-field-ppk/proyecto"
@@ -238,6 +238,62 @@ def _parse_localization(d) -> object | None:
     return localizacion.record_from_json(d, origin=str(d.get("origin", "")) if isinstance(d, dict) else "")
 
 
+def _tolerances(t: ProjectTolerances | None) -> dict | None:
+    return None if t is None else asdict(t)
+
+
+def _parse_tolerances(d) -> ProjectTolerances | None:
+    """Las tolerancias guardadas; una cifra que no se entiende queda en la de omisión (y None apaga el criterio)."""
+    if not isinstance(d, dict):
+        return None
+    t = ProjectTolerances()
+    for f in fields(ProjectTolerances):
+        if f.name not in d:
+            continue
+        value = d[f.name]
+        if f.name == "order":
+            t.order = str(value or "")
+        elif f.name == "fail_factor":
+            try:
+                t.fail_factor = float(value)
+            except (TypeError, ValueError):
+                pass
+        elif value is None:
+            setattr(t, f.name, None)
+        else:
+            try:
+                setattr(t, f.name, float(value))
+            except (TypeError, ValueError):
+                pass
+    return t
+
+
+def _parse_control(items) -> list[ControlCoordinate]:
+    out = []
+    for d in items if isinstance(items, list) else []:
+        if not isinstance(d, dict) or not str(d.get("name", "")).strip():
+            continue
+        try:
+            def number(key):
+                return None if d.get(key) is None else float(d[key])
+            out.append(ControlCoordinate(str(d["name"]), number("northing_m"), number("easting_m"),
+                                         number("elevation_m"), str(d.get("description", ""))))
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _parse_choices(d) -> dict[str, int]:
+    out = {}
+    for k, v in (d.items() if isinstance(d, dict) else []):
+        try:
+            if int(v) >= 0:
+                out[str(k)] = int(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
     return {"formato": FORMAT, "version": FORMAT_VERSION, "app_version": app_version,
             "kind": project.kind, "name": project.name, "number": project.number, "place": project.place, "point_name": project.point_name,
@@ -253,7 +309,10 @@ def to_dict(project: Project, folder: Path, app_version: str = "") -> dict:
             "source_project": project.source_project,
             "position": None if project.position is None else _ecef(project.position),
             "sigma_enu": None if project.sigma_enu is None else _enu(project.sigma_enu),
-            "created": _time(project.created), "processed": _time(project.processed)}
+            "created": _time(project.created), "processed": _time(project.processed),
+            "tolerances": _tolerances(project.tolerances),
+            "control_points": [asdict(c) for c in project.control_points],
+            "control_source": project.control_source, "occupation_choices": dict(project.occupation_choices)}
 
 
 def from_dict(data: dict, folder: Path) -> Project:
@@ -290,7 +349,11 @@ def from_dict(data: dict, folder: Path) -> Project:
                        base_kind=str(data.get("base_kind", "rgna")),
                        source_project=str(data.get("source_project", "")),
                        position=_parse_ecef(data["position"]) if data.get("position") else None,
-                       sigma_enu=_parse_enu(data["sigma_enu"]) if data.get("sigma_enu") else None)
+                       sigma_enu=_parse_enu(data["sigma_enu"]) if data.get("sigma_enu") else None,
+                       tolerances=_parse_tolerances(data.get("tolerances")),
+                       control_points=_parse_control(data.get("control_points")),
+                       control_source=str(data.get("control_source", "")),
+                       occupation_choices=_parse_choices(data.get("occupation_choices")))
     except (KeyError, TypeError, ValueError) as exc:
         raise ProjectError("El proyecto está dañado o incompleto; no se pudo leer.") from exc
 

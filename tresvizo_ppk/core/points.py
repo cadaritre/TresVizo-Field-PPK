@@ -18,7 +18,7 @@ import numpy as np
 from ..errors import UserError
 from ..model import (Ecef, Enu, Ephemeris, FieldPoint, ObservationSet, PointsResult, ProcessedPoint,
                      ProcessingOptions, Solution, Station)
-from . import antex, networks, quality, rtklib, tools
+from . import antex, dop, networks, quality, rtklib, tools
 from .baseline import Q_TO_SOLUTION, approx_position, base_antenna, strategies
 from .geodesy import (covariance_ecef_to_enu, ecef_delta_to_enu, ecef_to_geodetic, enu_rotation, gps_to_utc,
                       utc_to_gps)
@@ -109,7 +109,8 @@ def process_points(rover: ObservationSet, base: tuple[Station, ObservationSet], 
     fix_rate = (sum(1 for e in solved if e.q == rtklib.Q_FIX) / len(solved)) if solved else 0.0
     log.append(f"Épocas: {len(epochs)}, fijas {100 * fix_rate:.1f} % de las que tienen solución.")
     step(0.92, "Promediando los puntos…")
-    processed = [_process_point(p, epochs, times, base_xyz, station, rover) for p in points]
+    pdops = dop.pdop_by_epoch(Path(str(pos) + ".stat"))      # para la tolerancia de PDOP del proyecto
+    processed = [_process_point(p, epochs, times, base_xyz, station, rover, pdops) for p in points]
     for p in processed:
         if p.message:
             warnings.append(f"{p.point.name}: {p.message}")
@@ -142,7 +143,7 @@ def _height_for(point: FieldPoint, rover: ObservationSet) -> tuple[float | None,
 
 
 def _process_point(point: FieldPoint, epochs, times, base_xyz, station: Station,
-                   rover: ObservationSet) -> ProcessedPoint:
+                   rover: ObservationSet, pdops: dict | None = None) -> ProcessedPoint:
     a = point.start - timedelta(seconds=TIME_TOLERANCE_S)
     b = point.end + timedelta(seconds=TIME_TOLERANCE_S)
     inside = [e for e, t in zip(epochs, times) if a <= t <= b]
@@ -206,9 +207,13 @@ def _process_point(point: FieldPoint, epochs, times, base_xyz, station: Station,
     expected = max(1, int(round((point.end - point.start).total_seconds() / max(rover.interval_s or 1.0, 0.1))) + 1)
     if len(inside) < 0.8 * expected and expected > 2:
         messages.append(f"la trayectoria solo tiene {len(inside)} de {expected} épocas de la ocupación.")
+    # para las tolerancias del proyecto: el cociente mediano de las fijas promediadas y la PDOP máxima de las usadas
+    ratios = [e.ratio for e in fixed if e.ratio > 0]
     return ProcessedPoint(point=point, solution=solution, position=ground, sigma_enu=sigma, epochs_fixed=len(fixed),
                           epochs_total=len(inside), distance_to_base_m=float(np.linalg.norm(xyz - base_xyz)),
                           delta_from_field_enu=delta, message=" ".join(messages),
                           antenna_position=Ecef(float(xyz[0]), float(xyz[1]), float(xyz[2]), station.position.frame,
                                                 station.position.epoch),
-                          height_used_m=height, epochs_float=len(floats))
+                          height_used_m=height, epochs_float=len(floats),
+                          ratio=statistics.median(ratios) if ratios else None,
+                          pdop_max=dop.max_pdop(pdops or {}, [e.time for e in used]))

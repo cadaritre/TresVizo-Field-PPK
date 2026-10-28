@@ -68,3 +68,16 @@ def test_outside_trajectory_and_partial_coverage():
     assert p.solution == Solution.NONE and p.position is None and "no cae" in p.message
     q = points._process_point(point(5, 25), epochs, times, ARP, BASE, ObservationSet(obs=[], interval_s=1.0))
     assert q.epochs_total == 5 and "solo tiene 5 de 21" in q.message
+
+
+def test_ratio_and_pdop_of_the_occupation_for_the_tolerances():
+    epochs, times = trajectory([2] * 3 + [1] * 10)
+    for k, e in enumerate(epochs):
+        e.ratio = 2.0 + k
+        e.time = datetime(2026, 1, 1, 0, 0, k)
+    pdops = {e.time: 1.5 + 0.1 * k for k, e in enumerate(epochs)}
+    p = points._process_point(point(0, 12), epochs, times, ARP, BASE, ObservationSet(obs=[], interval_s=1.0), pdops)
+    # mediana del cociente de las fijas (5 … 14) y la PDOP mayor de las épocas promediadas (solo las fijas)
+    assert p.ratio == 9.5 and abs(p.pdop_max - 2.7) < 1e-12
+    q = points._process_point(point(0, 12), epochs, times, ARP, BASE, ObservationSet(obs=[], interval_s=1.0))
+    assert q.pdop_max is None

@@ -115,3 +115,27 @@ def test_atomic_save_keeps_previous_on_failure(tmp_path, monkeypatch):
         proj.save(Project(name='b', point_name='nuevo'), path)
     assert path.read_bytes() == before
     assert [f.name for f in tmp_path.iterdir()] == ['a.tvppk']
+
+
+def test_quality_settings_roundtrip(tmp_path):
+    from tresvizo_ppk.model import ControlCoordinate, ProjectTolerances
+    p, rover, base, sp3 = make(tmp_path)
+    proj.set_inputs(p, {'rover': [rover], 'base:CHIH': [base]}, tmp_path)
+    p.tolerances = ProjectTolerances(order='', max_sigma_h_m=0.015, max_pdop=None, min_duration_s=900.0)
+    p.control_points = [ControlCoordinate('C1', 2419000.123, 780000.456, None, 'mojonera'),
+                        ControlCoordinate('BN', None, None, 1885.1)]
+    p.control_source = 'datos/control.csv'
+    p.occupation_choices = {'P07': 2, 'P09': 0}
+    path = proj.save(p, tmp_path/'obra.tvppk')
+    q = proj.load(path)
+    assert q.tolerances == p.tolerances and q.tolerances.max_pdop is None
+    assert q.control_points == p.control_points and q.control_source == 'datos/control.csv'
+    assert q.occupation_choices == {'P07': 2, 'P09': 0}
+    # sin tolerancias guardadas (proyecto de antes) quedan las de omisión; lo que no se entiende se ignora
+    data = json.loads(path.read_text(encoding='utf-8'))
+    data.pop('tolerances')
+    data['control_points'].append({'name': 'X', 'northing_m': 'no'})
+    data['occupation_choices']['P10'] = 'dos'
+    path.write_text(json.dumps(data), encoding='utf-8')
+    q = proj.load(path)
+    assert q.tolerances is None and len(q.control_points) == 2 and 'P10' not in q.occupation_choices

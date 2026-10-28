@@ -10,7 +10,7 @@ import numpy as np
 
 from ..errors import Cancelled, UserError
 from ..model import (Ecef, Enu, Ephemeris, ObservationSet, ProcessingOptions, StaticResult, Station)
-from . import adjust, antex, networks, precise, quality, tools
+from . import adjust, antex, dop, networks, precise, quality, rtklib, tools
 from .baseline import process_baseline
 from .geodesy import covariance_ecef_to_enu
 from .observations import trim
@@ -83,6 +83,8 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
             log.append(f"  {sid}: sin solución ({error}).")
             continue
         used.append((station, base_obs))
+        if solution.pdop_max is None and solution.engine == "RTKLIB":
+            solution.pdop_max = _baseline_pdop(solution)      # para la tolerancia de PDOP del proyecto
         baselines.append(solution)
         log.extend(f"  {note}" for note in solution.antenna_notes)
         log.append(f"  {sid}: {solution.solution.value}, {solution.length_m:.3f} m, cociente "
@@ -175,6 +177,17 @@ def process_static(rover: ObservationSet, bases: list[tuple[Station, Observation
                         sigma_enu=sigma, log=log, warnings=_unique(warnings), base_quality=base_quality,
                         ephemeris=options.ephemeris, precise_files=precise_names,
                         rtklib_version=tools.RTKLIB_VERSION)
+
+
+def _baseline_pdop(solution) -> float | None:
+    """La mayor PDOP de las épocas con solución de la línea base, de su `.pos` y su `.stat` (None sin ellos)."""
+    if not solution.pos_file or not Path(solution.pos_file).is_file():
+        return None
+    pdops = dop.pdop_by_epoch(solution.stat_file)
+    if not pdops:
+        return None
+    times = [e.time for e in rtklib.parse_pos(Path(solution.pos_file)) if e.q in (rtklib.Q_FIX, rtklib.Q_FLOAT)]
+    return dop.max_pdop(pdops, times)
 
 
 def _station_cov(station: Station) -> np.ndarray:
