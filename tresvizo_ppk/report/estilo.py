@@ -89,6 +89,13 @@ def fonts() -> Fonts:
     return _fonts
 
 
+def has_glyph(char: str, bold: bool = False) -> bool:
+    """La letra del informe trae el carácter (Arial y Segoe UI no traen ✓ ni ✕; DejaVu sí)."""
+    f = fonts()
+    face = pdfmetrics.getFont(f.bold if bold else f.regular).face
+    return all(ord(c) in face.charToGlyph for c in char)
+
+
 def styles() -> dict[str, ParagraphStyle]:
     f = fonts()
     body = ParagraphStyle("Cuerpo", fontName=f.regular, fontSize=9.5, leading=14, textColor=colors.HexColor(TEXT),

@@ -9,6 +9,7 @@ from pathlib import Path
 from ..crs import api as crs
 from ..model import CoordinateChoice, Ecef, Enu, PointsResult, ProcessedPoint, Project, Solution, UserProfile
 from . import calculos, estilo, graficas, normas, secciones
+from . import calidad as qa
 from .documento import Report, text
 from .estilo import num, signed
 from .rtklib_salida import read_pos
@@ -65,7 +66,9 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     choice = project.coordinates
     options = project.options
     r = Report(TITLE, project, user)
-    points = result.points
+    # el control de calidad del proyecto: un resultado por nombre (la media de sus ocupaciones o la elegida)
+    quality = qa.points_quality(result, project)
+    points = [pq.point for pq in quality.points]
     counts = Counter(p.solution for p in points)
 
     base_c, base_problem = secciones.transform_or_none(result.base.position, choice)
@@ -86,7 +89,8 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     # 1. Resumen ------------------------------------------------------------------------------------------------------
     r.h1("Resumen")
     total = len(points)
-    summary = [("Puntos", str(total)), ("Fijos", str(counts[Solution.FIXED])),
+    summary = [("Puntos", str(total) if total == len(result.points) else
+                f"{total} ({len(result.points)} ocupaciones)"), ("Fijos", str(counts[Solution.FIXED])),
                ("Flotantes", str(counts[Solution.FLOAT])),
                ("Autónomos", str(counts[Solution.SINGLE])), ("Sin solución", str(counts[Solution.NONE])),
                ("Épocas fijas de la trayectoria", f"{num(100 * result.fix_rate, 1)} %"),
@@ -95,6 +99,7 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     if orders:
         summary.append(("Orden de exactitud (NT EEP art. 8)", "; ".join(
             f"{name}: {n} punto{'s' if n != 1 else ''}" for name, n in sorted(orders.items(), key=_order_key))))
+    summary += qa.summary_fields(quality)
     r.fields(summary, columns=2, label_width=120)
     if counts[Solution.FIXED] == total and total:
         kind, title = "success", "Todos los puntos fijos"
@@ -105,6 +110,7 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     lines = [f"{p.point.name}: {secciones.POINT_SOLUTION_NAMES[p.solution].lower()}"
              + (f" — {p.message}" if p.message else "") for p in points if p.solution != Solution.FIXED]
     r.callout(kind, title, lines or ["Cada punto se promedió con épocas fijas."])
+    qa.summary_callout(r, quality)
     if result.base.approximate:
         r.callout("warning", "Base con coordenada aproximada", [secciones.approximate_base_text(result.base)])
     r.para("En posproceso todo se asume plomeado: cada punto es la antena menos la altura vertical del bastón; la "
@@ -199,6 +205,7 @@ def points_report(result: PointsResult, project: Project, user: UserProfile, out
     r.para(text(normas.HORIZONTAL_NOTE + " EPV h: 1.9600·σ de la altura elipsoidal. "
                 + normas.accuracy_note(next((a for a in accs if a is not None and a.epv_orthometric_m is not None),
                                             None))), "small")
+    qa.section(r, quality, "points")
 
     # 5. Trayectoria --------------------------------------------------------------------------------------------------
     r.h1("Trayectoria")

@@ -8,6 +8,7 @@ from reportlab.platypus import Paragraph
 
 from ..crs import api as crs
 from ..model import Ecef, Enu, Project, Solution, StaticResult, UserProfile
+from . import calidad as qa
 from . import calculos, estilo, normas, secciones
 from .documento import Report, text
 from .estilo import num, signed
@@ -132,10 +133,13 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
     if acc is not None:
         summary.append(("Orden de exactitud", f"{normas.order_text(acc)} (CEP95 {num(acc.cep95_m, 3)} m, "
                                               "NT EEP art. 8)"))
+    quality = qa.static_quality(result, project)
+    summary += qa.summary_fields(quality)[:1] + [("Estado", qa.level_text(quality.points[0].status))]
     r.fields(summary, columns=2, label_width=70)
     r.space(4)
     r.callout(kind, f"Resultado: {status}", reasons or ["Todas las líneas base resueltas y el ajuste dentro de "
                                                          "tolerancia."])
+    qa.summary_callout(r, quality, "Vértice y líneas base dentro de las tolerancias del proyecto")
     longs = [long_float_text(b) for b in result.baselines if is_long_float(b)]
     if longs:
         r.callout("info", "Líneas largas con solución flotante", longs)
@@ -261,6 +265,7 @@ def static_report(result: StaticResult, project: Project, user: UserProfile, out
         _covariance(r, adj.covariance_ecef, "Matriz de covarianza de la coordenada ajustada (ECEF, m²)")
 
     # 6. Calidad de los datos -----------------------------------------------------------------------------------------
+    qa.section(r, quality, "static")
     r.h1("Calidad de los datos")
     secciones.quality_section(r, result.rover_quality)
 
