@@ -43,8 +43,9 @@ from .. import calidad
 from ..crs import api as crs
 from ..crs import localizacion
 from ..errors import UserError
-from ..model import (CoordinateChoice, Ecef, Enu, ObservationSet, PointsResult, ProcessedPoint, QualityReport,
-                     QualityStatus, Solution, StaticResult, Station, TransformedCoordinate)
+from ..model import (CoordinateChoice, Ecef, Enu, NetworkFinalPoint, NetworkStaticResult, ObservationSet, PointsResult,
+                     ProcessedPoint, QualityReport, QualityStatus, Solution, StaticResult, Station,
+                     TransformedCoordinate)
 from ..nombres import station_label
 from ..version import __version__
 from . import columnas, dxf, landxml
@@ -976,6 +977,171 @@ def export_static(result: StaticResult, choice: CoordinateChoice, formato: str, 
         return _write_dxf(out, data, row.c)
     else:
         data = _landxml([row], choice, project or result.point_name, now)
+    return atomic_write(out, data)
+
+
+# --- Estático de varios puntos (red) ------------------------------------------------------------------------------------
+
+NETWORK_COLUMNS: list[tuple[str, str, str]] = [
+    ("staticSolution", "Static solution", "Solución del estático"),
+    ("staticBases", "Static baselines", "Líneas base del estático"),
+    ("staticAdjustment", "Static adjustment", "Ajuste del estático"),
+    ("ppkSoftware", "Processed with", "Posprocesado con"),
+]
+NETWORK_CUSTOM_COLUMNS = list(NETWORK_COLUMNS) + list(columnas.QUALITY_COLUMNS)
+
+
+def _network_lines(result: NetworkStaticResult, name: str):
+    net = result.network
+    used = {v.id for v in net.vectors if v.use and (not v.trivial or net.options.include_trivial)}
+    return [ln for ln in result.lines if ln.id in used and name in (ln.from_id, ln.to_id)]
+
+
+def _network_adjustment_text(result: NetworkStaticResult, point: NetworkFinalPoint) -> str:
+    net = result.network
+    a = net.constrained if point.adjustment == "constrained" and net.constrained else net.minimal
+    kind = "restringido" if a is net.constrained else "mínimamente restringido"
+    return (f"ajuste de red {kind} ({a.datum}), {a.degrees_of_freedom} grados de libertad, σ0 {a.sigma0:.2f}, "
+            f"prueba χ² {'pasa' if a.passed else 'no pasa'}")
+
+
+def _network_row(result: NetworkStaticResult, point: NetworkFinalPoint, choice: CoordinateChoice) -> _Row:
+    c = crs.transform(point.position, choice)
+    try:
+        sigma = crs.transform_sigma(point.position, point.sigma_enu, choice, point.covariance_ecef)
+    except UserError:
+        sigma = None
+    lines = _network_lines(result, point.name)
+    solution = Solution.FIXED if lines and all(ln.baseline.solution == Solution.FIXED for ln in lines) else \
+        Solution.FLOAT if lines else Solution.SINGLE
+    occupations = [o for o in result.occupations if o.name == point.name]
+    values = {key: "" for key, _, _ in columnas.COLUMNS}
+    e, n = _plane(c)
+    satellites = sorted({sat for ln in lines for sat in ln.baseline.satellites})
+    heights = [o.antenna_height_m for o in occupations if o.antenna_height_m is not None]
+    starts = [ln.baseline.start for ln in lines]
+    ends = [ln.baseline.end for ln in lines]
+    values.update({
+        "name": neutralized(point.name), "code": neutralized(point.code),
+        "description": neutralized(point.description), "easting": e, "northing": n,
+        "elevation": _elevation(c, choice), "longitude": number(c.receiver_longitude_deg, 8),
+        "latitude": number(c.receiver_latitude_deg, 8), "ellipsoidalHeight": number(c.ellipsoidal_height_m, 3),
+        "origin": "Global", "solutionStatus": SOLUTION_STATUS[solution], "correctionType": "Static",
+        "samples": str(max((ln.baseline.epochs_used for ln in lines), default=0)),
+        "csName": neutralized(c.label), "csCode": c.crs_code, "geoid": _geoid_column(choice, c),
+        "geoidUndulation": number(c.undulation_m, 3), "frame": point.position.frame, "app": APP,
+        "satellites": str(len(satellites)) if satellites else "",
+    })
+    if len(set(heights)) == 1:
+        values.update(totalAntennaHeight=number(heights[0], 3), antennaHeight=number(heights[0], 3),
+                      antennaHeightUnits="m", antennaEllipsoidalHeight=number(c.ellipsoidal_height_m + heights[0], 3))
+    for key, prefix in (("gpsSatellites", "G"), ("glonassSatellites", "R"), ("galileoSatellites", "E"),
+                        ("beidouSatellites", "C"), ("qzssSatellites", "J")):
+        if satellites:
+            values[key] = str(sum(1 for sat in satellites if sat.startswith(prefix)))
+    if sigma is not None:
+        values.update(eastingRMS=number(sigma.e, 3), northingRMS=number(sigma.n, 3), elevationRMS=number(sigma.u, 3),
+                      lateralRMS=number(math.hypot(sigma.e, sigma.n), 3))
+    if starts:
+        start, end = min(starts), max(ends)
+        values.update(averagingStart=_app_time(start), averagingEnd=_app_time(end),
+                      averagingDuration=number((end - start).total_seconds(), 1),
+                      observationEpoch=number(_decimal_year(start + (end - start) / 2), 4))
+    values.update({
+        "staticSolution": SOLUTION_STATUS[solution],
+        "staticBases": neutralized("; ".join(f"{ln.id} {ln.baseline.length_m / 1000:.3f} km "
+                                             f"{SOLUTION_STATUS[ln.baseline.solution]}" for ln in lines)),
+        "staticAdjustment": neutralized(_network_adjustment_text(result, point)),
+        "ppkSoftware": APP,
+    })
+    stamp = ""
+    if starts:
+        m = min(starts).astimezone(timezone.utc)
+        stamp = f"{m:%Y-%m-%dT%H:%M:%S}.{m.microsecond // 100000}+00:00"
+    row = _Row(point.name, point.code, point.description, values, c, _elevation_value(c, choice), stamp)
+    row.sigma = sigma
+    row.solution = solution
+    return row
+
+
+def network_quality(result: NetworkStaticResult, choice: CoordinateChoice) -> QualityReport:
+    return result.quality or calidad.evaluate_network(result, choice=choice)
+
+
+def _network_features(rows: list[_Row], result: NetworkStaticResult, choice: CoordinateChoice):
+    features = []
+    for row, point in zip(rows, result.points):
+        c = row.c
+        props: dict = {"nombre": point.name, "altura_en_geometria": "elipsoidal_del_suelo",
+                       "solucion": SOLUTION_STATUS[row.solution], "ocupaciones": point.occupations,
+                       "lineas_base": [f"{ln.id}: {ln.baseline.length_m / 1000:.3f} km, "
+                                       f"{SOLUTION_STATUS[ln.baseline.solution]}"
+                                       for ln in _network_lines(result, point.name)],
+                       "ajuste": _network_adjustment_text(result, point),
+                       "elipse_95_m": [_round(point.ellipse95[0], 4), _round(point.ellipse95[1], 4),
+                                       _round(point.ellipse95[2], 1)]}
+        if row.code:
+            props["codigo"] = row.code
+        if row.description:
+            props["descripcion"] = row.description
+        _coordinate_properties(c, props)
+        if row.sigma is not None:
+            props["precision_h_m"] = _round(math.hypot(row.sigma.e, row.sigma.n), 3)
+            props["precision_v_m"] = _round(row.sigma.u, 3)
+        coords = [c.receiver_longitude_deg, c.receiver_latitude_deg, _round(c.ellipsoidal_height_m, 3)]
+        features.append((point.name, _status_properties(row, props), coords))
+    sample = rows[0].c
+    net = result.network
+    fixed = [f.point_id for f in result.fix if f.mode != "check"] or [s.id for s in result.bases]
+    meta = {"app": APP, "exportado": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "sistema_de_las_propiedades": f"{sample.crs_code} {sample.label}",
+            "marco": result.points[0].position.frame, "epoca_marco": result.points[0].position.epoch,
+            "estaciones": [station_label(s) for s in result.bases], "fijas": fixed,
+            "ajuste": (f"red de {len(result.points)} puntos, {len(net.loops)} bucles, "
+                       f"{'restringido' if net.constrained else 'mínimamente restringido'}"),
+            "cota": "la geometría lleva la altura elipsoidal del punto en el suelo; la cota del sistema va en cota_m",
+            "geoide": _geoid_metadata(choice, sample), "plomeado": PLUMB, "puntos": len(rows)}
+    if sample.attribution:
+        meta["licencia_geoide"] = list(sample.attribution)
+    _localization_metadata(meta, choice, sample, result.points[0].position.frame)
+    return _sorted(meta), features
+
+
+def export_network(result: NetworkStaticResult, choice: CoordinateChoice, formato: str, out: str | Path, *,
+                   csv_options: CsvOptions | None = None, dxf_options: dxf.DxfOptions | None = None,
+                   project: str = "", now: datetime | None = None) -> Path:
+    """Los puntos nuevos ajustados de la red en `out`, con los mismos formatos que el estático y el PPK (el CSV de
+    TresVizo Field, CSV simple o a medida, GeoJSON, KML, DXF y LandXML) y su estado del control de calidad."""
+    out = _target(out, formato)
+    if not result.points:
+        raise UserError("La red no tiene puntos ajustados que exportar.")
+    choice = _fixed_choice(result.points[0].position, choice)
+    rows = [_network_row(result, p, choice) for p in result.points]
+    if formato != "field_csv":
+        statuses = {q.name: q for q in network_quality(result, choice).points}
+        for row in rows:
+            q = statuses.get(row.name)
+            _set_status(row, q.status if q else None, q.note if q else "")
+    if formato == "field_csv":
+        keys = [k for k, _, _ in columnas.COLUMNS] + [k for k, _, _ in NETWORK_COLUMNS]
+        header = [en for _, en, _ in columnas.COLUMNS] + [en for _, en, _ in NETWORK_COLUMNS]
+        data = write_rows(header, [[row.values[k] for k in keys] for row in rows])
+    elif formato == "csv":
+        data = (_custom_csv(rows, NETWORK_CUSTOM_COLUMNS, csv_options) if csv_options is not None else
+                _simple_csv(rows, choice))
+    elif formato in ("geojson", "kml"):
+        metadata, features = _network_features(rows, result, choice)
+        data = (_geojson(metadata, features) if formato == "geojson" else
+                _kml(project or f"Red de {len(rows)} puntos", metadata, features))
+    elif formato == "dxf":
+        net = result.network
+        origin = [f"posproceso: estatico de varios puntos, {len(result.lines)} lineas base, "
+                  f"{len(net.loops)} bucles",
+                  f"ajuste: {_network_adjustment_text(result, result.points[0])}"]
+        data = _dxf(rows, choice, origin, [], dxf_options or dxf.DxfOptions())
+        return _write_dxf(out, data, rows[0].c)
+    else:
+        data = _landxml(rows, choice, project or f"Red de {len(rows)} puntos", now)
     return atomic_write(out, data)
 
 
