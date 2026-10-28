@@ -382,6 +382,13 @@ class ProjectTolerances:
     max_control_h_m: float | None = 0.050      # contra la coordenada de control
     max_control_v_m: float | None = 0.100
     fail_factor: float = 2.0
+    # Añadido por la red (`core/red.py`): tolerancia del cierre de un bucle de líneas base, en mm + ppm de la longitud
+    # del bucle (la suma de sus líneas), en planta y en cota. Las de omisión, las del orden de 5 cm: L y 2L (como entre
+    # ocupaciones) más 1 y 2 ppm. La NT EEP no fija cifra de cierre. None en la parte fija: no se evalúa.
+    max_loop_h_m: float | None = 0.050
+    max_loop_h_ppm: float = 1.0
+    max_loop_v_m: float | None = 0.100
+    max_loop_v_ppm: float = 2.0
 
 
 @dataclass
@@ -470,6 +477,169 @@ class QualityReport:
     control_missing: list[str] = field(default_factory=list)   # control sin punto medido del mismo nombre
     control_source: str = ""
     notes: list[str] = field(default_factory=list)
+
+
+# --- Red: estático de varios puntos y ajuste de red (`core/red.py`) ---------------------------------------------------
+#
+# Como TBC e Infinity: líneas base entre los puntos de la red (vértices nuevos y estaciones de control), primero un
+# ajuste mínimamente restringido (prueba las mediciones sin que las fijas las deformen) y luego uno restringido a las
+# fijas; cierres de bucle entre sesiones independientes y líneas triviales de cada sesión simultánea.
+
+VECTOR_ROLES = ("auto", "independent", "trivial")
+NETWORK_TESTS = ("tau", "w")                   # τ de Pope (como TBC) o w de Baarda
+SCALE_MODES = ("auto", "never", "always", "value")
+MINIMAL_DATUMS = ("point", "inner")
+
+
+@dataclass
+class NetworkVector:
+    """Una línea base de la red: el vector de `from_id` a `to_id` (to − from, ECEF, en el marco de las fijas) con su
+    covarianza completa. Las líneas de una misma `session` se midieron a la vez (receptores simultáneos); sin sesión,
+    se deduce del horario."""
+    id: str
+    from_id: str
+    to_id: str
+    vector_ecef: Ecef
+    covariance_ecef: Matrix3                   # m²
+    session: str = ""
+    start: datetime | None = None
+    end: datetime | None = None
+    solution: Solution | None = None
+    engine: str = ""                           # «RTKLIB» o «TresVizo»
+    use: bool = True                           # False: el usuario la deja fuera
+    role: str = "auto"                         # uno de VECTOR_ROLES: «auto» lo decide el criterio de líneas triviales
+    # Lo pone `core/red.py`:
+    trivial: bool = False                      # dependiente de las demás de su sesión: fuera del ajuste y los bucles
+    note: str = ""                             # por qué es trivial o quedó fuera
+
+
+@dataclass
+class NetworkConstraint:
+    """Un punto de control: fijo duro (`sigma_enu` None) o ponderado con su σ, en planta, en cota o en las dos."""
+    point_id: str
+    position: Ecef
+    sigma_enu: Enu | None = None
+    horizontal: bool = True
+    vertical: bool = True
+    use: bool = True                           # False: no restringe el ajuste restringido (sigue como comprobación)
+
+
+@dataclass
+class NetworkOptions:
+    test: str = "tau"                          # uno de NETWORK_TESTS
+    alpha: float = 0.05                        # prueba χ² (de una cola) y τ (riesgo global)
+    w_critical: float = 3.29                   # w de Baarda: α0 = 0.1 %, β = 20 %
+    scale_covariances: str = "auto"            # SCALE_MODES: «auto» ×σ0² del mínimamente restringido si no pasa la χ²
+    scale_value: float = 1.0                   # «value»: el factor que escribió el usuario (de la varianza)
+    minimal_datum: str = "point"               # MINIMAL_DATUMS: un punto fijo o restricciones internas
+    minimal_point: str = ""                    # «point»: el punto fijo (vacío: la primera fija de cada parte de la red)
+    include_trivial: bool = False              # meter también las triviales (las σ salen optimistas)
+    relative_pairs: str = "connected"          # «connected» (unidos por una línea) o «all»
+    session_overlap: float = 0.5               # traslape (fracción de la más corta) para ser de la misma sesión
+
+
+@dataclass
+class NetworkPoint:
+    """Un punto ajustado. `kind`: «free» (nuevo), «datum» (el fijo del mínimamente restringido), «control» (con
+    coordenada conocida que en el mínimamente restringido no restringe), «fixed» (fijo duro) o «weighted»."""
+    id: str
+    position: Ecef
+    covariance_ecef: Matrix3
+    sigma_enu: Enu
+    kind: str = "free"
+    ellipse95: tuple[float, float, float] = (0.0, 0.0, 0.0)   # semieje mayor y menor (m), azimut del mayor (°)
+    sigma_u95_m: float = 0.0
+    # En un punto de control: ajustada − su coordenada (en el mínimamente restringido, cuánto la contradicen las
+    # líneas), con su σ (la del ajuste más la de la coordenada, si la tiene)
+    shift_enu: Enu | None = None
+    shift_sigma_enu: Enu | None = None
+
+
+@dataclass
+class NetworkResidual:
+    """Residuo (observado − ajustado) de una línea, en ENU de su punto de inicio, o de una fija ponderada
+    (`is_constraint`, `vector_id` es el punto)."""
+    vector_id: str
+    residual_enu: Enu
+    standardized_enu: Enu                      # w o τ por componente
+    redundancy_enu: Enu                        # números de redundancia por componente
+    max_standardized: float = 0.0
+    flagged: bool = False
+    is_constraint: bool = False
+
+
+@dataclass
+class RelativeEllipse:
+    from_id: str
+    to_id: str
+    distance_m: float
+    semi_major_95_m: float
+    semi_minor_95_m: float
+    azimuth_deg: float                         # del semieje mayor, desde el norte
+    sigma_u95_m: float
+    ppm_95: float                              # semieje mayor / distancia
+
+
+@dataclass
+class LoopClosure:
+    """Un bucle de líneas independientes: la suma de sus vectores (con su sentido) debería ser cero."""
+    vectors: list[str]
+    directions: list[int]                      # +1 en el sentido de la línea, −1 al revés
+    points: list[str]
+    sessions: list[str]
+    length_m: float
+    misclosure_enu: Enu
+    closure_h_m: float
+    closure_v_m: float
+    closure_3d_m: float
+    ppm_h: float
+    ppm_3d: float
+    tolerance_h_m: float | None = None
+    tolerance_v_m: float | None = None
+    chi2: float = 0.0                          # cierreᵀ Σ⁻¹ cierre con las covarianzas a priori (3 gl)
+    chi2_limit: float = 0.0
+    status: QualityStatus = field(default_factory=QualityStatus)
+
+
+@dataclass
+class NetworkAdjustment:
+    kind: str                                  # «minimal» o «constrained»
+    datum: str                                 # «UQRO fijo», «restricciones internas», «INEG, ISLP fijos»
+    points: list[NetworkPoint] = field(default_factory=list)
+    residuals: list[NetworkResidual] = field(default_factory=list)   # de mayor a menor estadístico
+    relative: list[RelativeEllipse] = field(default_factory=list)
+    observations: int = 0                      # componentes observadas (3 por línea, más las de las ponderadas)
+    unknowns: int = 0
+    constraints: int = 0                       # ecuaciones de restricción dura
+    degrees_of_freedom: int = 0
+    chi2: float = 0.0                          # con las covarianzas escaladas, si se escalaron
+    chi2_lower: float = 0.0
+    chi2_upper: float = 0.0
+    passed: bool = True
+    sigma0: float = 0.0
+    test: str = "tau"
+    critical_value: float = 0.0
+    scale_factor: float = 1.0                  # de la varianza, aplicado a las covarianzas de las líneas
+    chi2_unscaled: float = 0.0
+    sigma0_unscaled: float = 0.0
+    flagged: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class NetworkResult:
+    vectors: list[NetworkVector]               # todas, con `trivial` y `note` puestas
+    constraints: list[NetworkConstraint]
+    options: NetworkOptions
+    sessions: dict[str, list[str]] = field(default_factory=dict)    # sesión → ids de sus líneas
+    minimal: NetworkAdjustment | None = None
+    constrained: NetworkAdjustment | None = None   # None sin fijas en uso
+    loops: list[LoopClosure] = field(default_factory=list)
+    unchecked: list[str] = field(default_factory=list)   # líneas independientes que ningún bucle comprueba
+    frame: str = OFFICIAL_FRAME
+    epoch: float = OFFICIAL_EPOCH
+    log: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
 
 # --- Localización de proyecto (calibración local) --------------------------------------------------------------------
