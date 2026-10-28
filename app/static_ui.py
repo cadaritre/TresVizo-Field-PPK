@@ -14,6 +14,7 @@ from app import calidad_ui, tasks
 from tresvizo_ppk.nombres import display_name
 from app.charts import BarChart, PlanChart, enu_of, enu_sigma
 from app.export_ui import CUSTOM_CSV_LABEL, POINT_FORMATS, ExportActions, csv_options
+from app.session_ui import SessionActions
 from app.components import DropZone, FileList, LabeledEntry, Tooltip, card, later, wrap_label
 from app.formatting import coordinate_clipboard, coordinate_rows, dms, horizontal, plural, solution_key, solution_text
 from app.settings import format_length
@@ -32,7 +33,7 @@ def baseline_station_text(station) -> str:
     return station.id if not name or name == station.id else f'{station.id}\n{name}'
 
 
-class StaticPage(ExportActions, WizardPage):
+class StaticPage(SessionActions, ExportActions, WizardPage):
     TITLE = 'Georreferenciar punto'
     ICON = 'map-pin'
     JOB = StaticJob
@@ -388,6 +389,7 @@ class StaticPage(ExportActions, WizardPage):
     def after_process(self, output):
         result = output['result']
         self.project.position, self.project.sigma_enu = result.position, result.sigma_enu
+        self.session_after_process(output)
         super().after_process(output)
 
     def make_report(self, report, output, project, user, out):
@@ -582,6 +584,7 @@ class StaticPage(ExportActions, WizardPage):
                      title='Residuos por línea base', value_text=lambda v: format_length(v, prefs))
         if quality is not None and (quality.control or quality.control_missing):
             calidad_ui.control_card(body, self.app, quality, prefs).pack(fill='x', pady=(16, 0))
+        self.session_card(body, output)
         q = result.rover_quality
         frame, inner = card(body, 'Calidad de los datos del rover')
         frame.pack(fill='x', pady=(16, 0))

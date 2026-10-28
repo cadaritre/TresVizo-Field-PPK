@@ -56,12 +56,28 @@ def _wait(progress, cancel, steps, message, delay):
 
 
 def quality(epochs=6180):
-    return DataQuality(epochs=epochs, expected_epochs=epochs+20,
-                       gaps=[(START+timedelta(minutes=41), START+timedelta(minutes=41, seconds=20))],
-                       satellites=[f'G{n:02d}' for n in (2, 5, 7, 11, 13, 15, 18, 20, 29, 30)] +
-                       [f'E{n:02d}' for n in (3, 5, 9, 15, 24, 34)] + [f'C{n:02d}' for n in (19, 20, 29, 30, 35)],
+    satellites = ([f'G{n:02d}' for n in (2, 5, 7, 11, 13, 15, 18, 20, 29, 30)] +
+                  [f'E{n:02d}' for n in (3, 5, 9, 15, 24, 34)] + [f'C{n:02d}' for n in (19, 20, 29, 30, 35)])
+    end = START+timedelta(hours=1, minutes=43)
+    gap = (START+timedelta(minutes=41), START+timedelta(minutes=41, seconds=20))
+    tracks = {}
+    for k, sat in enumerate(satellites):
+        rise = START+timedelta(minutes=(k % 4)*9)          # unos salen tarde y otros se ponen antes
+        sets = end-timedelta(minutes=(k % 3)*12)
+        tracks[sat] = [(rise, gap[0]-timedelta(seconds=1)), (gap[1]+timedelta(seconds=1), sets)]
+    slip_times = {'G13': [START+timedelta(minutes=12), START+timedelta(minutes=77)],
+                  'E24': [START+timedelta(minutes=55)]}
+    return DataQuality(epochs=epochs, expected_epochs=epochs+20, gaps=[gap], satellites=satellites,
                        signals={'GPS': ['L1C', 'L2W', 'L5Q'], 'Galileo': ['L1C', 'L5Q', 'L7Q'], 'BeiDou': ['L2I', 'L7I']},
-                       cycle_slips={'G13': 2, 'E24': 1}, multipath_m={'L1C': 0.31, 'L2W': 0.42})
+                       cycle_slips={'G13': 2, 'E24': 1}, multipath_m={'L1C': 0.31, 'L2W': 0.42}, tracks=tracks,
+                       slip_times=slip_times, interval_s=1.0)
+
+
+def session_shift(options) -> float:
+    """El doble mueve la solución unos milímetros al este por cada satélite o sistema fuera y si se recorta el tiempo,
+    para que la comparación del editor de sesión tenga diferencias."""
+    window = getattr(options, 'time_window', None)
+    return 0.002*len(getattr(options, 'excluded_sats', []) or [])+(0.003 if window is not None else 0.0)
 
 
 class FakeCore:
@@ -140,10 +156,11 @@ class FakeCore:
 
     def process_static(self, rover, bases, options, workdir, progress=None, cancel=None, point_name=''):
         self.calls.append(('static', [s.id for s, _ in bases], options.elevation_mask_deg))
+        self.last_options = options
         _wait(progress, cancel, 10, 'Resolviendo ambigüedades…', self.delay)
         if self.fail:
             raise UserError(self.fail)
-        point = self.rover_point
+        point = offset(self.rover_point, session_shift(options), 0.0)
         baselines = []
         for index, (station, obs) in enumerate(bases):
             v = Ecef(point.x-station.position.x, point.y-station.position.y, point.z-station.position.z)
@@ -166,7 +183,8 @@ class FakeCore:
         return StaticResult(point_name=point_name or rover.marker, rover=rover, rover_quality=quality(), bases=[s for s, _ in bases],
                             baselines=baselines, adjustment=adjustment, position=point,
                             sigma_enu=Enu(0.004, 0.005, 0.011), log=['RTKLIB-EX 2.5.1 (doble de prueba)'],
-                            warnings=[] if len(bases) > 1 else ['Una sola estación: sin comprobación entre líneas base.'])
+                            warnings=[] if len(bases) > 1 else ['Una sola estación: sin comprobación entre líneas base.'],
+                            base_quality={s.id: quality() for s, _ in bases})
 
     def read_field_csv(self, path):
         if not Path(path).is_file():
@@ -183,13 +201,16 @@ class FakeCore:
     def process_points(self, rover, base, points, options, workdir, progress=None, cancel=None):
         station, _ = base
         self.calls.append(('points', station.id, len(points)))
+        self.last_options = options
+        shift = session_shift(options)
         _wait(progress, cancel, 10, 'Trayectoria cinemática…', self.delay)
         if self.fail:
             raise UserError(self.fail)
         processed = []
         for i, p in enumerate(points):
             solution = Solution.FIXED if i % 7 not in (3, 6) else Solution.FLOAT if i % 7 == 3 else Solution.NONE
-            position = None if solution is Solution.NONE else offset(p.field_position, 0.004*(i % 3), -0.006, -0.01)
+            position = None if solution is Solution.NONE else offset(p.field_position, 0.004*(i % 3)+shift, -0.006,
+                                                                     -0.01)
             processed.append(ProcessedPoint(
                 point=p, solution=solution, position=position,
                 sigma_enu=None if position is None else Enu(0.006+0.01*(solution is Solution.FLOAT), 0.007, 0.015),
@@ -199,6 +220,7 @@ class FakeCore:
                 message='' if solution is Solution.FIXED else 'Promedio de épocas flotantes.' if position else
                 'Sin épocas con solución en la ocupación (hueco de datos).'))
         return PointsResult(base=station, rover=rover, rover_quality=quality(), points=processed, fix_rate=0.874,
+                            base_quality=quality(),
                             warnings=['Hueco de 20 s a las 15:43:00 UTC.'])
 
 

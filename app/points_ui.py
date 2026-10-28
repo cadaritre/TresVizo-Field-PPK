@@ -21,13 +21,14 @@ from app.wizard_ui import (NETWORK_GUIDE, RINEX_TYPES, choice_text, AntennaPanel
                            ecef_text, network_catalog, station_label)
 from app.static_ui import RECORDING_TYPES
 from app.export_ui import CUSTOM_CSV_LABEL, POINT_FORMATS, ExportActions, csv_options
+from app.session_ui import SessionActions
 from tresvizo_ppk.export.columnas import PPK_COLUMNS, QUALITY_COLUMNS
 from app import calidad_ui
 
 EXPORTS = POINT_FORMATS
 
 
-class PointsPage(ExportActions, WizardPage):
+class PointsPage(SessionActions, ExportActions, WizardPage):
     TITLE = 'PPK de puntos'
     ICON = 'route'
     JOB = PointsJob
@@ -572,6 +573,10 @@ class PointsPage(ExportActions, WizardPage):
             return
         super().session_window(callback)
 
+    def after_process(self, output):
+        self.session_after_process(output)
+        super().after_process(output)
+
     def make_report(self, report, output, project, user, out):
         return report.points_report(output['result'], project, user, out)
 
@@ -782,6 +787,7 @@ class PointsPage(ExportActions, WizardPage):
                 fill='x', pady=(16, 0))
         if quality is not None and (quality.control or quality.control_missing):
             calidad_ui.control_card(body, self.app, quality, prefs).pack(fill='x', pady=(16, 0))
+        self.session_card(body, output)
         warnings = list(result.warnings)+list(q.warnings)+output['coordinate_warnings']
         if warnings:
             frame, inner = card(body, 'Avisos')
