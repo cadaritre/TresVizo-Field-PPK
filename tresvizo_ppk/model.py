@@ -559,7 +559,7 @@ class NetworkOptions:
     minimal_point: str = ""                    # «point»: el punto fijo (vacío: la primera fija de cada parte de la red)
     include_trivial: bool = False              # meter también las triviales (las σ salen optimistas)
     relative_pairs: str = "connected"          # «connected» (unidos por una línea) o «all»
-    session_overlap: float = 0.5               # traslape (fracción de la más corta) para ser de la misma sesión
+    session_overlap: float = 0.5               # traslape (fracción de la más larga) para ser de la misma sesión
 
 
 @dataclass
