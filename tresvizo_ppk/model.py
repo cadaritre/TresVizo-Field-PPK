@@ -400,7 +400,7 @@ class QualityCheck:
     """Un criterio evaluado: «sigma_h», «sigma_v», «fixed», «ratio», «pdop», «duration», «repeat_h», «repeat_v»,
     «control_h», «control_v», «solution», «adjustment» o «baseline»."""
     criterion: str
-    level: str                                 # uno de QUALITY_LEVELS
+    level: str                                 # uno de QUALITY_LEVELS, o «na» si no hubo dato (no cuenta)
     value: float | None = None
     limit: float | None = None
     text: str = ""                             # «σV 0.034 > 0.020»
