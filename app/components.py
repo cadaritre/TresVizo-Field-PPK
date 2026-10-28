@@ -27,6 +27,17 @@ def later(widget, ms, callback):
     return root.after_idle(run) if ms == 'idle' else root.after(ms, run)
 
 
+def attach_dialog(dialog, master):
+    """`transient` solo si la ventana madre se ve. Con Tk 8.6 en macOS (el que llevan los instaladores), una ventana
+    transitoria de una madre oculta o minimizada, con un lienzo desplazable dentro, deja `update` girando sin fin
+    (la hoja «Localización» colgaba así la CI de macOS); con la madre a la vista no pasa."""
+    try:
+        if master.winfo_viewable():
+            dialog.transient(master)
+    except tk.TclError:
+        pass
+
+
 def cancel_later(widget, pending):
     if pending is None:
         return

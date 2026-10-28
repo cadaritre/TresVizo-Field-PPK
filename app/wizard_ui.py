@@ -16,7 +16,7 @@ from tresvizo_ppk.version import __version__
 
 from app import tasks
 from app.components import (Banner, Collapsible, DropZone, FileList, IssueList, ProgressPanel, ScrollFrame,
-                            StepHeader, Tooltip, card, wrap_label)
+                            StepHeader, Tooltip, attach_dialog, card, wrap_label)
 from app.crs_ui import CoordinateChooser
 from app.wizard import CONSTELLATIONS, BaseEntry, classify as classify_file, errors, guess_marker
 
@@ -242,7 +242,7 @@ class CoordinateDialog(tk.Toplevel):
         super().__init__(app)
         self.result = None
         self.title(f'Corregir coordenada de {station.id}')
-        self.transient(app)
+        attach_dialog(self, app)
         self.resizable(False, False)
         body = ttk.Frame(self, padding=20)
         body.pack(fill='both', expand=True)

@@ -19,7 +19,7 @@ from tresvizo_ppk.model import (CoordinateChoice, Localization, LocalizationCont
                                 LocalizationPair)
 
 from app import tasks
-from app.components import Banner, Collapsible, ScrollFrame, scrolled
+from app.components import Banner, Collapsible, ScrollFrame, attach_dialog, scrolled
 
 TITLE = 'Localización'
 COLUMNS = (('h', 'H', 30, 'center'), ('v', 'V', 30, 'center'), ('name', 'Par', 70, 'w'),
@@ -112,7 +112,7 @@ class LocalizationDialog(tk.Toplevel):
         self.app, self.loc = app, _loc(app)
         self.result = None
         self.title(TITLE)
-        self.transient(app)
+        attach_dialog(self, app)
         self.base_choice = replace(choice, localization=None, localization_history=[])
         self.current = choice.localization
         self.history = list(choice.localization_history)
@@ -588,7 +588,7 @@ class LocalizationDialog(tk.Toplevel):
         names = [f'{p.name} · {len(p.in_use.pairs)} pares' for p in projects]
         dialog = tk.Toplevel(self)
         dialog.title('Elige el proyecto')
-        dialog.transient(self)
+        attach_dialog(dialog, self)
         box = tk.Listbox(dialog, height=min(10, len(names)), width=50)
         for n in names:
             box.insert('end', n)

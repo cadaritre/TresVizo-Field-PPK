@@ -20,7 +20,7 @@ from tresvizo_ppk.errors import UserError
 from tresvizo_ppk.model import DataQuality, Ecef, Enu, Solution, TimeWindow
 
 from app.charts import enu_of, enu_sigma
-from app.components import ScrollFrame, ThinScrollbar, Tooltip, card, text_width, wrap_label
+from app.components import ScrollFrame, ThinScrollbar, Tooltip, attach_dialog, card, text_width, wrap_label
 from app.formatting import plural, solution_text
 from app.settings import format_length
 
@@ -505,7 +505,7 @@ class SessionEditor(tk.Toplevel):
         super().__init__(app)
         self.page, self.app = page, app
         self.title(TITLE)
-        self.transient(app)
+        attach_dialog(self, app)
         result = page.output['result']
         options = page.job.options
         self.receivers = [('Rover', result.rover_quality)]

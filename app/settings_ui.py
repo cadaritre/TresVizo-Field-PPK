@@ -11,7 +11,7 @@ from PIL import Image, ImageTk
 
 from tresvizo_ppk.version import __version__
 
-from app.components import ScrollFrame, card, scrolled, wrap_label
+from app.components import ScrollFrame, attach_dialog, card, scrolled, wrap_label
 from app.paths import APP_NAME, ROOT
 from app.settings import UNITS, SettingsError
 from app.themes import BUILTINS, palette
@@ -396,7 +396,7 @@ class AboutPage(ttk.Frame):
         window = tk.Toplevel(self.app)
         window.title('Licencias y avisos')
         window.geometry('820x640')
-        window.transient(self.app)
+        attach_dialog(window, self.app)
         text = tk.Text(window, wrap='word', padx=16, pady=12, font=self.app.theme.fonts.mono())
         frame = ttk.Frame(window)
         frame.pack(fill='both', expand=True)

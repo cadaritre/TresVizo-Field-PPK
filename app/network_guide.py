@@ -5,6 +5,8 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import ttk
 
+from app.components import attach_dialog
+
 
 class GuideDialog(tk.Toplevel):
     """Qué pedir en la página de la red para cubrir la sesión (lo calcula el motor), con su enlace."""
@@ -14,7 +16,7 @@ class GuideDialog(tk.Toplevel):
         self.app, self.url, self.text = app, network.url, text
         self.download, self.on_files, self.worker = download, on_files, None
         self.title(f'RINEX de {station.id}')
-        self.transient(app)
+        attach_dialog(self, app)
         body = ttk.Frame(self, padding=20)
         body.pack(fill='both', expand=True)
         ttk.Label(body, text=f'{station.id} · {network.name}', style='Section.TLabel').pack(anchor='w')

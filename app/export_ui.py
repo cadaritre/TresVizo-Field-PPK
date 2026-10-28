@@ -20,6 +20,7 @@ from tresvizo_ppk.export import columnas
 from tresvizo_ppk.export.dxf import DxfOptions
 
 from app import tasks
+from app.components import attach_dialog
 
 # Los formatos de puntos del menú «Exportar»: (formato, texto del menú, extensión, nombre del tipo de archivo).
 POINT_FORMATS = [
@@ -117,7 +118,7 @@ class CsvOptionsDialog(tk.Toplevel):
         super().__init__(app)
         self.app, self.extras, self.result = app, list(extras), None
         self.title(TEXT['title'])
-        self.transient(app)
+        attach_dialog(self, app)
         self.resizable(False, True)
         width = int(300*app.ui_scale*app.theme.text_scale())
         body = ttk.Frame(self, padding=20)
@@ -351,7 +352,7 @@ class DxfOptionsDialog(tk.Toplevel):
         super().__init__(app)
         self.app, self.result = app, None
         self.title(DXF_TEXT['title'])
-        self.transient(app)
+        attach_dialog(self, app)
         self.resizable(False, False)
         width = int(320*app.ui_scale*app.theme.text_scale())
         body = ttk.Frame(self, padding=20)

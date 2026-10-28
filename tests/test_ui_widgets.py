@@ -621,3 +621,20 @@ def test_reopening_an_own_base_project_is_not_a_change(app, tmp_path):
         time.sleep(0.01)
     assert not page.dirty and page.job.own_source == 'rinex' and page.job.own_receiver == 'MeridianV'
     assert page.job.station().receiver == 'MeridianV' and not app.shown
+
+
+def test_dialog_is_transient_only_over_a_visible_window(app):
+    """Con Tk 8.6 en macOS (el de los instaladores), una ventana transitoria de una madre oculta con un lienzo
+    desplazable dejaba `update` girando sin fin: solo se hace transitoria si la madre se ve."""
+    from app.components import attach_dialog
+    hidden = tk.Toplevel(app)
+    attach_dialog(hidden, app)                     # la ventana principal de las pruebas está oculta
+    assert not str(hidden.wm_transient())
+    hidden.destroy()
+    app.deiconify()
+    app.update()
+    shown = tk.Toplevel(app)
+    attach_dialog(shown, app)
+    assert str(shown.wm_transient()) == str(app)
+    shown.destroy()
+    app.withdraw()

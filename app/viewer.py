@@ -9,7 +9,7 @@ from tkinter import filedialog, ttk
 from PIL import ImageTk
 
 from app import tasks
-from app.components import later, scrolled
+from app.components import attach_dialog, later, scrolled
 
 
 def render_page(path: Path, page: int, width_px: int):
@@ -40,7 +40,7 @@ class DocumentViewer(tk.Toplevel):
         height = min(int(820*app.ui_scale), self.winfo_screenheight()-90)
         self.geometry(f'{width}x{height}')
         self.minsize(560, 420)
-        self.transient(app)
+        attach_dialog(self, app)
         bar = ttk.Frame(self, padding=(12, 10))
         bar.pack(fill='x')
         save = ttk.Button(bar, text='Guardar PDF…', style='Primary.TButton', command=self.save)
